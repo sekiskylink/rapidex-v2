@@ -415,3 +415,18 @@
 ### Milestone scope guard
 - Login/refresh token UI flow was not implemented in this milestone.
 - Authenticated AppShell (Drawer/AppBar/Footer) was not implemented in this milestone.
+
+### Milestone 6 Bug Fix — Settings `authMode` Type Alignment (2026-02-28)
+- Updated desktop settings type definitions to use a central `AuthMode` union source:
+  - `AUTH_MODES = ['password', 'api_token'] as const`
+  - `type AuthMode = (typeof AUTH_MODES)[number]`
+- Hardened `src/settings/store.ts` normalization boundary to treat Wails binding payloads as untrusted input:
+  - normalize from `unknown`
+  - validate `authMode` against `AUTH_MODES`
+  - default invalid/missing `authMode` to `password`
+  - normalize API token and timeout values safely
+- Removed the direct assumption that Wails `main.Settings` is already `AppSettings`, eliminating the `string` vs `AuthMode` mismatch at compile-time.
+
+Bug-fix verification:
+- `cd desktop/frontend && npm run build`: PASS
+- `cd desktop/frontend && npm test -- --run`: PASS

@@ -1,4 +1,5 @@
-export type AuthMode = 'password' | 'api_token'
+export const AUTH_MODES = ['password', 'api_token'] as const
+export type AuthMode = (typeof AUTH_MODES)[number]
 
 export interface AppSettings {
   apiBaseUrl: string

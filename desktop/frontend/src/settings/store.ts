@@ -1,4 +1,11 @@
-import { defaultSettings, type AppSettings, type SaveSettingsPatch, type SettingsStore } from './types'
+import {
+  AUTH_MODES,
+  defaultSettings,
+  type AppSettings,
+  type AuthMode,
+  type SaveSettingsPatch,
+  type SettingsStore,
+} from './types'
 import { LoadSettings, ResetSettings, SaveSettings } from '../../wailsjs/go/main/App'
 
 const hasWailsBindings = () =>
@@ -7,15 +14,37 @@ const hasWailsBindings = () =>
   typeof window.go.main !== 'undefined' &&
   typeof window.go.main.App !== 'undefined'
 
-function normalizeSettings(input: AppSettings): AppSettings {
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isAuthMode(value: unknown): value is AuthMode {
+  return typeof value === 'string' && AUTH_MODES.some((mode) => mode === value)
+}
+
+function readString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function readPositiveInteger(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : fallback
+}
+
+function normalizeSettings(input: unknown): AppSettings {
+  const record = isObjectRecord(input) ? input : {}
+  const authMode = isAuthMode(record.authMode) ? record.authMode : 'password'
+  const apiToken = readString(record.apiToken).trim()
+
   return {
-    apiBaseUrl: (input.apiBaseUrl ?? '').trim(),
-    authMode: input.authMode === 'api_token' ? 'api_token' : 'password',
-    apiToken: input.authMode === 'api_token' ? input.apiToken?.trim() || undefined : undefined,
-    requestTimeoutSeconds:
-      typeof input.requestTimeoutSeconds === 'number' && input.requestTimeoutSeconds > 0
-        ? Math.floor(input.requestTimeoutSeconds)
-        : defaultSettings.requestTimeoutSeconds,
+    apiBaseUrl: readString(record.apiBaseUrl).trim(),
+    authMode,
+    apiToken: authMode === 'api_token' && apiToken ? apiToken : undefined,
+    requestTimeoutSeconds: readPositiveInteger(
+      record.requestTimeoutSeconds,
+      defaultSettings.requestTimeoutSeconds,
+    ),
   }
 }
 
