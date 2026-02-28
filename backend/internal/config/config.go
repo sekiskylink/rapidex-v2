@@ -117,7 +117,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.shutdown_timeout_seconds", 10)
 	v.SetDefault("database.max_open_conns", 10)
 	v.SetDefault("database.max_idle_conns", 5)
-	v.SetDefault("database.auto_migrate", false)
+	v.SetDefault("database.auto_migrate", true)
 	v.SetDefault("auth.access_token_ttl_seconds", 900)
 	v.SetDefault("auth.refresh_token_ttl_seconds", 604800)
 	v.SetDefault("auth.password_hash_cost", 12)
@@ -134,7 +134,7 @@ func defaultConfig() Config {
 	cfg.Server.ShutdownTimeoutSeconds = 10
 	cfg.Database.MaxOpenConns = 10
 	cfg.Database.MaxIdleConns = 5
-	cfg.Database.AutoMigrate = false
+	cfg.Database.AutoMigrate = true
 	cfg.Auth.AccessTokenTTLSeconds = 900
 	cfg.Auth.RefreshTokenTTLSeconds = 604800
 	cfg.Auth.PasswordHashCost = 12
