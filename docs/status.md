@@ -354,3 +354,64 @@
 
 ### Milestone scope guard
 - Desktop setup/login UI work was not started (still reserved for Milestones 6/7).
+
+## Milestone 6 — Desktop Setup Screen + Routing + Route Tests (Complete)
+
+### What changed
+- Added desktop local settings persistence through Wails Go bindings in `desktop/app.go`:
+  - `LoadSettings()`
+  - `SaveSettings(partial)`
+  - `ResetSettings()`
+- Settings are now stored as JSON under OS user config dir:
+  - `<os_user_config_dir>/basepro-desktop/settings.json`
+  - directory created with best-effort `0700` permissions
+  - file writes use best-effort `0600` permissions and temp-file rename
+- Added frontend typed settings abstractions:
+  - `src/settings/types.ts`
+  - `src/settings/store.ts`
+- Added frontend HTTP wrapper with timeout-aware health check:
+  - `src/api/client.ts`
+  - `healthCheck()` calls `GET {apiBaseUrl}/api/v1/health`
+- Replaced route tree with Milestone 6 unauthenticated routing:
+  - `/setup`
+  - `/login` (placeholder: “Login not implemented yet”)
+  - `/` gate route
+  - NotFound component configured at root
+- Implemented route gating behavior:
+  - if `apiBaseUrl` is empty, navigating to `/` or `/login` redirects to `/setup`
+- Implemented Setup page UI (`/setup`) with MUI centered card:
+  - API Base URL input
+  - Auth Mode selector (Username/Password vs API Token)
+  - conditional API Token input
+  - Request Timeout input
+  - `Test Connection` and `Save & Continue` actions
+- Added/updated route tests (`src/routes.test.tsx`) covering:
+  - `/login` and `/` redirect to `/setup` when API base URL is missing
+  - NotFound rendering for unknown routes
+  - setup save flow navigates to `/login`
+  - setup health check uses mocked `fetch` endpoint
+- Added test setup shim for `Response` to keep TanStack Router redirect handling deterministic in tests.
+
+### How to run desktop tests
+- `make desktop-test`
+- or `cd desktop/frontend && npm test`
+
+### How to run full milestone verification
+- Backend tests: `make backend-test`
+- Desktop route tests: `make desktop-test`
+- Desktop production build: `make desktop-build`
+
+### Verification summary
+- Backend tests (`make backend-test`): PASS
+- Desktop route tests (`make desktop-test`): PASS (5 tests)
+- Desktop build (`make desktop-build`): PASS
+
+### Current desktop routes
+- `/` (gate route)
+- `/setup`
+- `/login` (placeholder only)
+- NotFound for unknown paths
+
+### Milestone scope guard
+- Login/refresh token UI flow was not implemented in this milestone.
+- Authenticated AppShell (Drawer/AppBar/Footer) was not implemented in this milestone.

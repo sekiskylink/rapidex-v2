@@ -1,66 +1,106 @@
 import React from 'react'
-import { Card, CardContent, Container, Typography } from '@mui/material'
 import {
   createMemoryHistory,
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
+  useNavigate,
+  useRouter,
 } from '@tanstack/react-router'
 import App from './App'
+import { LoginPage } from './pages/LoginPage'
+import { NotFoundPage } from './pages/NotFoundPage'
+import { SetupPage } from './pages/SetupPage'
+import { settingsStore } from './settings/store'
+import type { SettingsStore } from './settings/types'
 
-function HomeRoute() {
-  return (
-    <Container
-      maxWidth="sm"
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Card sx={{ width: '100%' }}>
-        <CardContent>
-          <Typography variant="h5" component="h1" gutterBottom>
-            Skeleton App Ready
-          </Typography>
-          <Typography color="text.secondary">
-            Wails + React + MUI + TanStack Router
-          </Typography>
-        </CardContent>
-      </Card>
-    </Container>
-  )
+interface RouterContext {
+  settingsStore: SettingsStore
 }
 
-function NotFoundRoute() {
-  return (
-    <Container sx={{ py: 8, textAlign: 'center' }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Not Found
-      </Typography>
-      <Typography color="text.secondary">The page you requested does not exist.</Typography>
-    </Container>
-  )
-}
-
-const rootRoute = createRootRoute({
+const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: App,
-  notFoundComponent: NotFoundRoute,
+  notFoundComponent: NotFoundPage,
 })
+
+function IndexGatePage() {
+  const router = useRouter()
+  const navigate = useNavigate()
+
+  React.useEffect(() => {
+    let active = true
+    router.options.context.settingsStore.loadSettings().then((settings) => {
+      if (!active) {
+        return
+      }
+      navigate({ to: settings.apiBaseUrl.trim() ? '/login' : '/setup', replace: true })
+    })
+    return () => {
+      active = false
+    }
+  }, [navigate, router.options.context.settingsStore])
+
+  return null
+}
+
+function LoginGatePage() {
+  const router = useRouter()
+  const navigate = useNavigate()
+  const [ready, setReady] = React.useState(false)
+
+  React.useEffect(() => {
+    let active = true
+    router.options.context.settingsStore.loadSettings().then((settings) => {
+      if (!active) {
+        return
+      }
+      if (!settings.apiBaseUrl.trim()) {
+        navigate({ to: '/setup', replace: true })
+        return
+      }
+      setReady(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [navigate, router.options.context.settingsStore])
+
+  if (!ready) {
+    return null
+  }
+  return <LoginPage />
+}
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: HomeRoute,
+  component: IndexGatePage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute])
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/setup',
+  component: SetupPage,
+})
 
-export function createAppRouter(initialEntries: string[] = ['/']) {
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  component: LoginGatePage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, setupRoute, loginRoute])
+
+export function createAppRouter(
+  initialEntries: string[] = ['/'],
+  routerSettingsStore: SettingsStore = settingsStore,
+) {
   return createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries }),
+    context: {
+      settingsStore: routerSettingsStore,
+    },
   })
 }
 
