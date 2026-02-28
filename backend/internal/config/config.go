@@ -35,6 +35,9 @@ type Config struct {
 		APITokenTTLSeconds     int    `mapstructure:"api_token_ttl_seconds"`
 		APITokenAllowBearer    bool   `mapstructure:"api_token_allow_bearer"`
 	} `mapstructure:"auth"`
+	Seed struct {
+		EnableDevBootstrap bool `mapstructure:"enable_dev_bootstrap"`
+	} `mapstructure:"seed"`
 }
 
 type Options struct {
@@ -122,6 +125,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.api_token_header_name", "X-API-Token")
 	v.SetDefault("auth.api_token_ttl_seconds", 2592000)
 	v.SetDefault("auth.api_token_allow_bearer", false)
+	v.SetDefault("seed.enable_dev_bootstrap", false)
 }
 
 func defaultConfig() Config {
@@ -138,6 +142,7 @@ func defaultConfig() Config {
 	cfg.Auth.APITokenHeaderName = "X-API-Token"
 	cfg.Auth.APITokenTTLSeconds = 2592000
 	cfg.Auth.APITokenAllowBearer = false
+	cfg.Seed.EnableDevBootstrap = false
 	return cfg
 }
 

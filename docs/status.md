@@ -274,3 +274,83 @@
 ### Milestone scope guard
 - RBAC user role/permission enforcement was not implemented (reserved for Milestone 5).
 - Desktop login/auth UI work was not started (reserved for Milestones 6/7).
+
+## Milestone 5 — RBAC (Roles + Permissions + Module Scope) + Enforcement (Complete)
+
+### What changed
+- Implemented `backend/internal/rbac` with SQLX repository + service for role/permission resolution:
+  - `GetUserRoles(userID)`
+  - `GetUserPermissions(userID)`
+  - `HasPermission(userID, perm, moduleScope)`
+  - `PermissionsForUser(userID)`
+- Added minimal in-process RBAC cache in service with explicit invalidation (`InvalidateUser`) on role assignment.
+- Adopted **Option A** for module scope:
+  - canonical permission key in `permissions.name` (e.g. `users.read`)
+  - optional scope in `permissions.module_scope`
+  - enforcement supports `RequirePermission("perm")` and `RequirePermission("perm", WithModule("scope"))`
+
+### Principal and middleware changes
+- Unified principal model for both auth types:
+  - `principal.type = user | api_token`
+  - user fields: user ID, username, roles, resolved permission grants
+  - api token fields: token ID, permission grants (including optional module scope)
+- Added/updated middleware helpers:
+  - `RequireAuth()`
+  - `RequireJWTUser()`
+  - `RequirePermission(rbacService, "perm", optional WithModule(...))`
+  - `ResolveJWTPrincipal(...)` so protected routes accept either JWT or API token principals.
+- Added typed forbidden code:
+  - `AUTH_FORBIDDEN` with response shape `{ "error": { "code": "AUTH_FORBIDDEN", "message": "Forbidden" } }`
+
+### Endpoint enforcement applied
+- Users management:
+  - `GET /api/v1/users` -> `users.read`
+  - `POST /api/v1/users` -> `users.write`
+  - `PATCH /api/v1/users/:id` -> `users.write`
+  - `POST /api/v1/users/:id/reset-password` -> `users.write`
+- Audit:
+  - `GET /api/v1/audit` -> `audit.read`
+- API token admin:
+  - `GET /api/v1/admin/api-tokens` -> `api_tokens.read`
+  - `POST /api/v1/admin/api-tokens` -> `api_tokens.write`
+  - `POST /api/v1/admin/api-tokens/:id/revoke` -> `api_tokens.write`
+- Removed the Milestone 4 hardcoded admin check (`userID == 1`) from runtime authorization path.
+
+### RBAC seed/bootstrap (dev/test only)
+- Added config-controlled bootstrap flag:
+  - `seed.enable_dev_bootstrap` (default: `false`)
+- When enabled (or when `--seed-dev-admin` is passed), startup now:
+  - ensures base roles: `Admin`, `Manager`, `Staff`, `Viewer`
+  - ensures base permissions:
+    - `users.read`, `users.write`
+    - `audit.read`
+    - `settings.read`, `settings.write`
+    - `api_tokens.read`, `api_tokens.write`
+  - ensures role-permission mapping:
+    - `Admin`: all above permissions
+    - `Manager`: `users.read`, `audit.read`, `settings.read`
+    - `Staff`: `settings.read`
+    - `Viewer`: `users.read`, `audit.read`, `settings.read`
+  - ensures dev admin user exists and assigns `Admin` role.
+
+### Additional backend handlers/services
+- Added users service + handler (`backend/internal/users`) for list/create/update/reset-password paths.
+- Extended audit package with list/query support and added audit handler (`GET /api/v1/audit` with pagination/filter params).
+
+### How to test
+- Backend tests:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Frontend route/smoke tests:
+  - `make desktop-test`
+
+### Verification summary
+- Backend tests (`go test ./...` in `backend/`): PASS
+- Frontend route tests (`make desktop-test`): PASS
+- Mandatory Milestone 5 coverage included:
+  - JWT permission enforcement (forbidden vs allowed)
+  - role -> permission resolution
+  - API token permission enforcement for audit access
+  - correct unauthorized/forbidden error codes and shapes
+
+### Milestone scope guard
+- Desktop setup/login UI work was not started (still reserved for Milestones 6/7).

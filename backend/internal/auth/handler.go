@@ -91,13 +91,12 @@ func (h *Handler) Me(c *gin.Context) {
 }
 
 func (h *Handler) ListAPITokens(c *gin.Context) {
-	claims, ok := claimsFromContext(c)
-	if !ok {
-		apperror.Write(c, apperror.Unauthorized("Missing authorization token"))
+	if _, ok := principalFromContext(c); !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
 		return
 	}
 
-	tokens, err := h.service.ListAPITokens(c.Request.Context(), claims)
+	tokens, err := h.service.ListAPITokens(c.Request.Context())
 	if err != nil {
 		apperror.Write(c, err)
 		return
@@ -120,9 +119,9 @@ func (h *Handler) ListAPITokens(c *gin.Context) {
 }
 
 func (h *Handler) CreateAPIToken(c *gin.Context) {
-	claims, ok := claimsFromContext(c)
+	principal, ok := principalFromContext(c)
 	if !ok {
-		apperror.Write(c, apperror.Unauthorized("Missing authorization token"))
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
 		return
 	}
 
@@ -132,7 +131,7 @@ func (h *Handler) CreateAPIToken(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.CreateAPIToken(c.Request.Context(), claims, APITokenCreateInput{
+	result, err := h.service.CreateAPIToken(c.Request.Context(), actorUserID(principal), APITokenCreateInput{
 		Name:             req.Name,
 		ExpiresInSeconds: req.ExpiresInSeconds,
 		Permissions:      req.Permissions,
@@ -147,9 +146,9 @@ func (h *Handler) CreateAPIToken(c *gin.Context) {
 }
 
 func (h *Handler) RevokeAPIToken(c *gin.Context) {
-	claims, ok := claimsFromContext(c)
+	principal, ok := principalFromContext(c)
 	if !ok {
-		apperror.Write(c, apperror.Unauthorized("Missing authorization token"))
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
 		return
 	}
 
@@ -159,7 +158,7 @@ func (h *Handler) RevokeAPIToken(c *gin.Context) {
 		return
 	}
 
-	token, err := h.service.RevokeAPIToken(c.Request.Context(), claims, id, c.ClientIP(), c.Request.UserAgent())
+	token, err := h.service.RevokeAPIToken(c.Request.Context(), actorUserID(principal), id, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
 		apperror.Write(c, err)
 		return
@@ -183,4 +182,20 @@ func claimsFromContext(c *gin.Context) (Claims, bool) {
 	}
 	claims, ok := value.(Claims)
 	return claims, ok
+}
+
+func principalFromContext(c *gin.Context) (Principal, bool) {
+	value, ok := c.Get(PrincipalContextKey)
+	if !ok {
+		return Principal{}, false
+	}
+	principal, ok := value.(Principal)
+	return principal, ok
+}
+
+func actorUserID(principal Principal) *int64 {
+	if principal.Type != "user" {
+		return nil
+	}
+	return &principal.UserID
 }

@@ -9,6 +9,7 @@ import (
 
 const (
 	CodeAuthUnauthorized = "AUTH_UNAUTHORIZED"
+	CodeAuthForbidden    = "AUTH_FORBIDDEN"
 	CodeAuthExpired      = "AUTH_EXPIRED"
 	CodeAuthRefreshReuse = "AUTH_REFRESH_REUSED"
 	CodeAuthRefreshBad   = "AUTH_REFRESH_INVALID"
@@ -46,6 +47,10 @@ func Write(c *gin.Context, err error) {
 
 func Unauthorized(message string) *AppError {
 	return &AppError{HTTPStatus: http.StatusUnauthorized, Code: CodeAuthUnauthorized, Message: message}
+}
+
+func Forbidden(message string) *AppError {
+	return &AppError{HTTPStatus: http.StatusForbidden, Code: CodeAuthForbidden, Message: message}
 }
 
 func Expired(message string) *AppError {

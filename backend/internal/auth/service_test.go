@@ -19,7 +19,7 @@ type fakeRepo struct {
 
 	apiTokensByID   map[int64]*APIToken
 	apiTokensByHash map[string]*APIToken
-	apiTokenPerms   map[int64][]string
+	apiTokenPerms   map[int64][]APITokenPermission
 	nextAPITokenID  int64
 }
 
@@ -32,7 +32,7 @@ func newFakeRepo(user *User) *fakeRepo {
 		nextTokenID:     1,
 		apiTokensByID:   map[int64]*APIToken{},
 		apiTokensByHash: map[string]*APIToken{},
-		apiTokenPerms:   map[int64][]string{},
+		apiTokenPerms:   map[int64][]APITokenPermission{},
 		nextAPITokenID:  1,
 	}
 	if user != nil {
@@ -107,7 +107,11 @@ func (r *fakeRepo) CreateAPIToken(_ context.Context, token APIToken, permissions
 	copy := token
 	r.apiTokensByID[token.ID] = &copy
 	r.apiTokensByHash[token.TokenHash] = &copy
-	r.apiTokenPerms[token.ID] = append([]string{}, permissions...)
+	perms := make([]APITokenPermission, 0, len(permissions))
+	for _, permission := range permissions {
+		perms = append(perms, APITokenPermission{APITokenID: token.ID, Permission: permission})
+	}
+	r.apiTokenPerms[token.ID] = perms
 	return &copy, nil
 }
 
@@ -137,8 +141,8 @@ func (r *fakeRepo) GetAPITokenByHash(_ context.Context, hash string) (*APIToken,
 	return &copy, nil
 }
 
-func (r *fakeRepo) GetAPITokenPermissions(_ context.Context, tokenID int64) ([]string, error) {
-	return append([]string{}, r.apiTokenPerms[tokenID]...), nil
+func (r *fakeRepo) GetAPITokenPermissions(_ context.Context, tokenID int64) ([]APITokenPermission, error) {
+	return append([]APITokenPermission{}, r.apiTokenPerms[tokenID]...), nil
 }
 
 func (r *fakeRepo) RevokeAPIToken(_ context.Context, tokenID int64, now time.Time) error {
@@ -183,6 +187,10 @@ type fakeAuditRepo struct {
 func (r *fakeAuditRepo) Insert(_ context.Context, event audit.Event) error {
 	r.events = append(r.events, event)
 	return nil
+}
+
+func (r *fakeAuditRepo) List(_ context.Context, _ audit.ListFilter) ([]audit.Record, error) {
+	return nil, nil
 }
 
 func newTestService(repo *fakeRepo, auditRepo *fakeAuditRepo) *Service {
@@ -350,7 +358,8 @@ func TestCreateAPITokenStoresHashAndPrefix(t *testing.T) {
 	service := newTestService(repo, auditRepo)
 
 	expires := int64(3600)
-	result, err := service.CreateAPIToken(context.Background(), Claims{UserID: 1, Username: "admin"}, APITokenCreateInput{
+	adminID := int64(1)
+	result, err := service.CreateAPIToken(context.Background(), &adminID, APITokenCreateInput{
 		Name:             "ci-token",
 		ExpiresInSeconds: &expires,
 		Permissions:      []string{"audit.read"},
@@ -378,7 +387,7 @@ func TestCreateAPITokenStoresHashAndPrefix(t *testing.T) {
 	}
 
 	perms, _ := repo.GetAPITokenPermissions(context.Background(), result.ID)
-	if len(perms) != 1 || perms[0] != "audit.read" {
+	if len(perms) != 1 || perms[0].Permission != "audit.read" {
 		t.Fatalf("expected stored permission audit.read, got %+v", perms)
 	}
 }
@@ -388,12 +397,13 @@ func TestAPITokenCreateAndRevokeProduceAuditLogs(t *testing.T) {
 	auditRepo := &fakeAuditRepo{}
 	service := newTestService(repo, auditRepo)
 
-	result, err := service.CreateAPIToken(context.Background(), Claims{UserID: 1, Username: "admin"}, APITokenCreateInput{Name: "ops"}, "127.0.0.1", "agent")
+	adminID := int64(1)
+	result, err := service.CreateAPIToken(context.Background(), &adminID, APITokenCreateInput{Name: "ops"}, "127.0.0.1", "agent")
 	if err != nil {
 		t.Fatalf("create api token: %v", err)
 	}
 
-	if _, err := service.RevokeAPIToken(context.Background(), Claims{UserID: 1, Username: "admin"}, result.ID, "127.0.0.1", "agent"); err != nil {
+	if _, err := service.RevokeAPIToken(context.Background(), &adminID, result.ID, "127.0.0.1", "agent"); err != nil {
 		t.Fatalf("revoke api token: %v", err)
 	}
 

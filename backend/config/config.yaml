@@ -17,3 +17,6 @@ auth:
   api_token_header_name: "X-API-Token"
   api_token_ttl_seconds: 2592000
   api_token_allow_bearer: false
+
+seed:
+  enable_dev_bootstrap: false

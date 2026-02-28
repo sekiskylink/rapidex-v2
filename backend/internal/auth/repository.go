@@ -25,7 +25,7 @@ type Repository interface {
 	ListAPITokens(ctx context.Context) ([]APIToken, error)
 	GetAPITokenByID(ctx context.Context, tokenID int64) (*APIToken, error)
 	GetAPITokenByHash(ctx context.Context, hash string) (*APIToken, error)
-	GetAPITokenPermissions(ctx context.Context, tokenID int64) ([]string, error)
+	GetAPITokenPermissions(ctx context.Context, tokenID int64) ([]APITokenPermission, error)
 	RevokeAPIToken(ctx context.Context, tokenID int64, now time.Time) error
 	UpdateAPITokenLastUsed(ctx context.Context, tokenID int64, now time.Time) error
 
@@ -210,10 +210,12 @@ func (r *SQLRepository) GetAPITokenByHash(ctx context.Context, hash string) (*AP
 	return &token, nil
 }
 
-func (r *SQLRepository) GetAPITokenPermissions(ctx context.Context, tokenID int64) ([]string, error) {
-	var permissions []string
+func (r *SQLRepository) GetAPITokenPermissions(ctx context.Context, tokenID int64) ([]APITokenPermission, error) {
+	var permissions []APITokenPermission
 	if err := r.db.SelectContext(ctx, &permissions, `
-		SELECT permission FROM api_token_permissions WHERE api_token_id = $1
+		SELECT api_token_id, permission, module_scope
+		FROM api_token_permissions
+		WHERE api_token_id = $1
 	`, tokenID); err != nil {
 		return nil, fmt.Errorf("get api token permissions: %w", err)
 	}

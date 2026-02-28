@@ -45,6 +45,11 @@ type APITokenPermission struct {
 	ModuleScope *string `db:"module_scope"`
 }
 
+type PermissionGrant struct {
+	Permission  string  `json:"permission"`
+	ModuleScope *string `json:"moduleScope,omitempty"`
+}
+
 type APITokenCreateInput struct {
 	Name             string
 	CreatedByUserID  *int64
@@ -76,10 +81,12 @@ type Claims struct {
 }
 
 type Principal struct {
-	Type        string
-	UserID      int64
-	Username    string
-	APITokenID  int64
-	Permissions []string
-	IsAdmin     bool
+	Type             string
+	ID               string
+	UserID           int64
+	Username         string
+	APITokenID       int64
+	Roles            []string
+	Permissions      []string
+	PermissionGrants []PermissionGrant
 }

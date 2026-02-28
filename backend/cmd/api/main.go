@@ -16,6 +16,8 @@ import (
 	"basepro/backend/internal/config"
 	"basepro/backend/internal/db"
 	"basepro/backend/internal/migrateutil"
+	"basepro/backend/internal/rbac"
+	"basepro/backend/internal/users"
 )
 
 const version = "0.1.0"
@@ -62,9 +64,11 @@ func run() error {
 	}
 
 	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSigningKey, time.Duration(cfg.Auth.AccessTokenTTLSeconds)*time.Second)
+	auditService := audit.NewService(audit.NewSQLRepository(database))
+	rbacService := rbac.NewService(rbac.NewSQLRepository(database))
 	authService := auth.NewService(
 		auth.NewSQLRepository(database),
-		audit.NewService(audit.NewSQLRepository(database)),
+		auditService,
 		jwtManager,
 		time.Duration(cfg.Auth.AccessTokenTTLSeconds)*time.Second,
 		time.Duration(cfg.Auth.RefreshTokenTTLSeconds)*time.Second,
@@ -73,8 +77,16 @@ func run() error {
 		cfg.Auth.APITokenEnabled,
 		cfg.Auth.PasswordHashCost,
 	)
+	usersService := users.NewService(users.NewSQLRepository(database), rbacService, auditService, cfg.Auth.PasswordHashCost)
 
-	if flags.seedDevAdmin {
+	seedRBAC := cfg.Seed.EnableDevBootstrap || flags.seedDevAdmin
+	if seedRBAC {
+		if err := rbacService.EnsureBaseRBAC(ctx); err != nil {
+			return fmt.Errorf("seed base rbac: %w", err)
+		}
+	}
+
+	if seedRBAC {
 		username := os.Getenv("BASEPRO_DEV_ADMIN_USERNAME")
 		if username == "" {
 			username = "admin"
@@ -87,6 +99,9 @@ func run() error {
 		if seedErr != nil {
 			return fmt.Errorf("seed dev admin: %w", seedErr)
 		}
+		if err := rbacService.AssignRoleToUser(ctx, user.ID, "Admin"); err != nil {
+			return fmt.Errorf("assign admin role: %w", err)
+		}
 		log.Printf("dev admin available: username=%s id=%d", user.Username, user.ID)
 	}
 
@@ -98,6 +113,9 @@ func run() error {
 			AuthHandler:         auth.NewHandler(authService),
 			AuthService:         authService,
 			JWTManager:          jwtManager,
+			RBACService:         rbacService,
+			AuditHandler:        audit.NewHandler(auditService),
+			UsersHandler:        users.NewHandler(usersService),
 			APITokenHeaderName:  cfg.Auth.APITokenHeaderName,
 			APITokenAllowBearer: cfg.Auth.APITokenAllowBearer,
 		}),

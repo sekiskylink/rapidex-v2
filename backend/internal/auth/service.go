@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -201,28 +202,18 @@ func (s *Service) Logout(ctx context.Context, refreshToken, authHeader, ip, user
 }
 
 func (s *Service) Me(claims Claims) map[string]any {
-	roles := []string{}
-	if claims.UserID == 1 {
-		roles = []string{"admin"}
-	}
 	return map[string]any{
 		"id":       claims.UserID,
 		"username": claims.Username,
-		"roles":    roles,
+		"roles":    []string{},
 	}
 }
 
-func (s *Service) ListAPITokens(ctx context.Context, actor Claims) ([]APIToken, error) {
-	if !s.isAdmin(actor) {
-		return nil, apperror.Unauthorized("Admin access required")
-	}
+func (s *Service) ListAPITokens(ctx context.Context) ([]APIToken, error) {
 	return s.repo.ListAPITokens(ctx)
 }
 
-func (s *Service) CreateAPIToken(ctx context.Context, actor Claims, input APITokenCreateInput, ip, userAgent string) (APITokenCreateResult, error) {
-	if !s.isAdmin(actor) {
-		return APITokenCreateResult{}, apperror.Unauthorized("Admin access required")
-	}
+func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input APITokenCreateInput, ip, userAgent string) (APITokenCreateResult, error) {
 	if !s.apiTokenEnabled {
 		return APITokenCreateResult{}, apperror.Unauthorized("API token auth is disabled")
 	}
@@ -250,7 +241,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actor Claims, input APITok
 		Name:            strings.TrimSpace(input.Name),
 		TokenHash:       HashAPIToken(s.apiTokenSecret, plaintext),
 		Prefix:          APITokenPrefix(plaintext),
-		CreatedByUserID: &actor.UserID,
+		CreatedByUserID: actorUserID,
 		ExpiresAt:       expiresAt,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -261,7 +252,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actor Claims, input APITok
 
 	s.logAudit(ctx, audit.Event{
 		Action:      "api_token.create",
-		ActorUserID: &actor.UserID,
+		ActorUserID: actorUserID,
 		EntityType:  "api_token",
 		EntityID:    strPtr(created.Name),
 		Metadata: map[string]any{
@@ -283,11 +274,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actor Claims, input APITok
 	}, nil
 }
 
-func (s *Service) RevokeAPIToken(ctx context.Context, actor Claims, tokenID int64, ip, userAgent string) (*APIToken, error) {
-	if !s.isAdmin(actor) {
-		return nil, apperror.Unauthorized("Admin access required")
-	}
-
+func (s *Service) RevokeAPIToken(ctx context.Context, actorUserID *int64, tokenID int64, ip, userAgent string) (*APIToken, error) {
 	now := s.now()
 	if err := s.repo.RevokeAPIToken(ctx, tokenID, now); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -302,7 +289,7 @@ func (s *Service) RevokeAPIToken(ctx context.Context, actor Claims, tokenID int6
 
 	s.logAudit(ctx, audit.Event{
 		Action:      "api_token.revoke",
-		ActorUserID: &actor.UserID,
+		ActorUserID: actorUserID,
 		EntityType:  "api_token",
 		EntityID:    strPtr(token.Name),
 		Metadata: map[string]any{
@@ -340,6 +327,15 @@ func (s *Service) AuthenticateAPIToken(ctx context.Context, plaintext, ip, userA
 	if err != nil {
 		return Principal{}, err
 	}
+	grants := make([]PermissionGrant, 0, len(permissions))
+	names := make([]string, 0, len(permissions))
+	for _, perm := range permissions {
+		grants = append(grants, PermissionGrant{
+			Permission:  perm.Permission,
+			ModuleScope: perm.ModuleScope,
+		})
+		names = append(names, perm.Permission)
+	}
 
 	go func(tokenID int64, at time.Time) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -348,9 +344,11 @@ func (s *Service) AuthenticateAPIToken(ctx context.Context, plaintext, ip, userA
 	}(token.ID, now)
 
 	return Principal{
-		Type:        "api_token",
-		APITokenID:  token.ID,
-		Permissions: permissions,
+		Type:             "api_token",
+		ID:               strconv.FormatInt(token.ID, 10),
+		APITokenID:       token.ID,
+		Permissions:      names,
+		PermissionGrants: grants,
 	}, nil
 }
 
@@ -409,10 +407,6 @@ func (s *Service) logAudit(ctx context.Context, event audit.Event) {
 		return
 	}
 	_ = s.auditService.Log(ctx, event)
-}
-
-func (s *Service) isAdmin(actor Claims) bool {
-	return actor.UserID == 1
 }
 
 func strPtr(value string) *string {

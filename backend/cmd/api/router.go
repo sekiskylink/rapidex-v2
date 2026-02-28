@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"basepro/backend/internal/audit"
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/middleware"
+	"basepro/backend/internal/rbac"
+	"basepro/backend/internal/users"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
@@ -17,6 +20,9 @@ type AppDeps struct {
 	AuthHandler         *auth.Handler
 	AuthService         *auth.Service
 	JWTManager          *auth.JWTManager
+	RBACService         *rbac.Service
+	AuditHandler        *audit.Handler
+	UsersHandler        *users.Handler
 	APITokenHeaderName  string
 	APITokenAllowBearer bool
 }
@@ -58,13 +64,28 @@ func newRouter(deps AppDeps) *gin.Engine {
 		authGroup.POST("/login", deps.AuthHandler.Login)
 		authGroup.POST("/refresh", deps.AuthHandler.Refresh)
 		authGroup.POST("/logout", deps.AuthHandler.Logout)
-		authGroup.GET("/me", middleware.JWTAuth(deps.JWTManager), deps.AuthHandler.Me)
+		authGroup.GET("/me", middleware.JWTAuth(deps.JWTManager), middleware.RequireJWTUser(), deps.AuthHandler.Me)
 
 		admin := api.Group("/admin/api-tokens")
-		admin.Use(middleware.JWTAuth(deps.JWTManager), middleware.RequireAdminUser(), middleware.RequirePermission("api_tokens.manage"))
-		admin.GET("", deps.AuthHandler.ListAPITokens)
-		admin.POST("", deps.AuthHandler.CreateAPIToken)
-		admin.POST("/:id/revoke", deps.AuthHandler.RevokeAPIToken)
+		admin.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
+		admin.GET("", middleware.RequirePermission(deps.RBACService, "api_tokens.read"), deps.AuthHandler.ListAPITokens)
+		admin.POST("", middleware.RequirePermission(deps.RBACService, "api_tokens.write"), deps.AuthHandler.CreateAPIToken)
+		admin.POST("/:id/revoke", middleware.RequirePermission(deps.RBACService, "api_tokens.write"), deps.AuthHandler.RevokeAPIToken)
+	}
+
+	if deps.UsersHandler != nil {
+		usersGroup := api.Group("/users")
+		usersGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
+		usersGroup.GET("", middleware.RequirePermission(deps.RBACService, "users.read"), deps.UsersHandler.List)
+		usersGroup.POST("", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Create)
+		usersGroup.PATCH("/:id", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Patch)
+		usersGroup.POST("/:id/reset-password", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.ResetPassword)
+	}
+
+	if deps.AuditHandler != nil {
+		auditGroup := api.Group("/audit")
+		auditGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
+		auditGroup.GET("", middleware.RequirePermission(deps.RBACService, "audit.read"), deps.AuditHandler.List)
 	}
 
 	return r

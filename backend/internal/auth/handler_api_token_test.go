@@ -19,7 +19,7 @@ func TestCreateAPITokenEndpointReturnsPlaintextOnceAndStoresHash(t *testing.T) {
 
 	r := gin.New()
 	r.POST("/api/v1/admin/api-tokens", func(c *gin.Context) {
-		c.Set(ClaimsContextKey, Claims{UserID: 1, Username: "admin"})
+		c.Set(PrincipalContextKey, Principal{Type: "user", UserID: 1, Username: "admin"})
 		handler.CreateAPIToken(c)
 	})
 
@@ -64,7 +64,7 @@ func TestCreateAPITokenEndpointReturnsPlaintextOnceAndStoresHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("permissions lookup failed: %v", err)
 	}
-	if len(permissions) != 1 || permissions[0] != "audit.read" {
+	if len(permissions) != 1 || permissions[0].Permission != "audit.read" {
 		t.Fatalf("expected permissions [audit.read], got %v", permissions)
 	}
 }
