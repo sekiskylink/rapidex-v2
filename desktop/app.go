@@ -18,6 +18,7 @@ type Settings struct {
 	APIBaseURL            string  `json:"apiBaseUrl"`
 	AuthMode              string  `json:"authMode"`
 	APIToken              *string `json:"apiToken,omitempty"`
+	RefreshToken          *string `json:"refreshToken,omitempty"`
 	RequestTimeoutSeconds int     `json:"requestTimeoutSeconds"`
 }
 
@@ -25,6 +26,7 @@ type SettingsPatch struct {
 	APIBaseURL            *string `json:"apiBaseUrl,omitempty"`
 	AuthMode              *string `json:"authMode,omitempty"`
 	APIToken              *string `json:"apiToken,omitempty"`
+	RefreshToken          *string `json:"refreshToken,omitempty"`
 	RequestTimeoutSeconds *int    `json:"requestTimeoutSeconds,omitempty"`
 }
 
@@ -62,6 +64,14 @@ func (a *App) SaveSettings(patch SettingsPatch) (Settings, error) {
 			next.APIToken = nil
 		} else {
 			next.APIToken = &token
+		}
+	}
+	if patch.RefreshToken != nil {
+		token := strings.TrimSpace(*patch.RefreshToken)
+		if token == "" {
+			next.RefreshToken = nil
+		} else {
+			next.RefreshToken = &token
 		}
 	}
 	if patch.RequestTimeoutSeconds != nil {
@@ -111,6 +121,14 @@ func normalizeSettings(in Settings) Settings {
 			out.APIToken = nil
 		} else {
 			out.APIToken = &token
+		}
+	}
+	if out.RefreshToken != nil {
+		token := strings.TrimSpace(*out.RefreshToken)
+		if token == "" {
+			out.RefreshToken = nil
+		} else {
+			out.RefreshToken = &token
 		}
 	}
 	return out

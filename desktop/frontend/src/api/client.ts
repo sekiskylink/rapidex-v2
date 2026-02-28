@@ -1,38 +1,239 @@
+import {
+  getAccessToken,
+  getAccessTokenExpiresAt,
+  getPersistedRefreshToken,
+  handleNetworkUnreachable,
+  handleSessionExpiry,
+  setSession,
+} from '../auth/session'
+import type { LoginRequest, LoginResponse, MeResponse, RefreshRequest, RefreshResponse } from '../auth/types'
 import type { AppSettings } from '../settings/types'
 
 interface ApiClientDeps {
   getSettings: () => Promise<AppSettings>
 }
 
+interface ApiErrorPayload {
+  error?: {
+    code?: string
+    message?: string
+  }
+}
+
+class ApiError extends Error {
+  status: number
+  code?: string
+
+  constructor(status: number, message: string, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
+let refreshPromise: Promise<boolean> | null = null
+
+function normalizeBaseUrl(baseUrl: string) {
+  return baseUrl.trim().replace(/\/$/, '')
+}
+
+function isSessionInvalidCode(code?: string) {
+  return code === 'AUTH_REFRESH_INVALID' || code === 'AUTH_REFRESH_REUSED' || code === 'AUTH_EXPIRED'
+}
+
+function isNetworkError(error: unknown) {
+  return error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError')
+}
+
+async function parseApiError(response: Response) {
+  let code: string | undefined
+  let message = `Request failed: HTTP ${response.status}`
+
+  try {
+    const payload = (await response.json()) as ApiErrorPayload
+    if (payload.error?.message) {
+      message = payload.error.message
+    }
+    code = payload.error?.code
+  } catch {
+    // Keep fallback message when body is not JSON.
+  }
+
+  return new ApiError(response.status, message, code)
+}
+
 export function createApiClient(deps: ApiClientDeps) {
+  async function fetchWithTimeout(url: string, init: RequestInit = {}) {
+    const settings = await deps.getSettings()
+    const controller = new AbortController()
+    const timeoutMs = Math.max(1, settings.requestTimeoutSeconds) * 1000
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      })
+    } catch (error) {
+      if (isNetworkError(error)) {
+        handleNetworkUnreachable()
+      }
+      throw error
+    } finally {
+      window.clearTimeout(timeout)
+    }
+  }
+
+  async function runRefresh(settings: AppSettings) {
+    const refreshToken = await getPersistedRefreshToken()
+    if (!refreshToken) {
+      await handleSessionExpiry()
+      return false
+    }
+
+    let response: Response
+    try {
+      response = await fetchWithTimeout(`${normalizeBaseUrl(settings.apiBaseUrl)}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken } satisfies RefreshRequest),
+      })
+    } catch (error) {
+      if (isNetworkError(error)) {
+        return false
+      }
+      throw error
+    }
+
+    if (!response.ok) {
+      const apiError = await parseApiError(response)
+      if (apiError.status === 401 && isSessionInvalidCode(apiError.code)) {
+        await handleSessionExpiry()
+        return false
+      }
+      throw apiError
+    }
+
+    const refresh = (await response.json()) as RefreshResponse
+    await setSession({
+      accessToken: refresh.accessToken,
+      refreshToken: refresh.refreshToken,
+      expiresAt: Date.now() + refresh.expiresIn * 1000,
+    })
+    return true
+  }
+
+  async function refreshSession(settings: AppSettings) {
+    if (!refreshPromise) {
+      refreshPromise = runRefresh(settings).finally(() => {
+        refreshPromise = null
+      })
+    }
+    return refreshPromise
+  }
+
+  async function authorizedRequest<T>(path: string, init: RequestInit = {}, allowRetry = true): Promise<T> {
+    const settings = await deps.getSettings()
+    const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+    if (!baseUrl) {
+      throw new Error('API base URL is required')
+    }
+
+    if (refreshPromise) {
+      await refreshPromise
+    }
+
+    const accessToken = getAccessToken()
+    const expiresAt = getAccessTokenExpiresAt() ?? 0
+    if (accessToken && expiresAt > 0 && expiresAt <= Date.now()) {
+      await refreshSession(settings)
+    }
+
+    const token = getAccessToken()
+    const headers = new Headers(init.headers)
+    if (!headers.has('Content-Type') && init.body) {
+      headers.set('Content-Type', 'application/json')
+    }
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+
+    let response: Response
+    try {
+      response = await fetchWithTimeout(`${baseUrl}${path}`, {
+        ...init,
+        headers,
+      })
+    } catch (error) {
+      throw error
+    }
+
+    if (response.status === 401 && allowRetry) {
+      const refreshed = await refreshSession(settings)
+      if (refreshed) {
+        return authorizedRequest<T>(path, init, false)
+      }
+      throw new ApiError(401, 'Session expired', 'AUTH_EXPIRED')
+    }
+
+    if (!response.ok) {
+      throw await parseApiError(response)
+    }
+
+    if (response.status === 204) {
+      return undefined as T
+    }
+
+    return (await response.json()) as T
+  }
+
   return {
     async healthCheck() {
       const settings = await deps.getSettings()
-      const baseUrl = settings.apiBaseUrl.trim()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
       if (!baseUrl) {
         throw new Error('API base URL is required')
       }
 
-      const controller = new AbortController()
-      const timeoutMs = Math.max(1, settings.requestTimeoutSeconds) * 1000
-      const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
-
-      try {
-        const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/v1/health`, {
-          method: 'GET',
-          signal: controller.signal,
-        })
-        if (!response.ok) {
-          throw new Error(`Health check failed: HTTP ${response.status}`)
-        }
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          throw new Error('Health check timed out')
-        }
-        throw error
-      } finally {
-        window.clearTimeout(timeout)
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/health`, {
+        method: 'GET',
+      })
+      if (!response.ok) {
+        throw new Error(`Health check failed: HTTP ${response.status}`)
       }
+    },
+
+    async login(payload: LoginRequest) {
+      const settings = await deps.getSettings()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+      if (!baseUrl) {
+        throw new Error('API base URL is required')
+      }
+
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw await parseApiError(response)
+      }
+
+      return (await response.json()) as LoginResponse
+    },
+
+    async me() {
+      return authorizedRequest<MeResponse>('/api/v1/auth/me', {
+        method: 'GET',
+      })
+    },
+
+    request<T>(path: string, init: RequestInit = {}) {
+      return authorizedRequest<T>(path, init)
     },
   }
 }
+
+export { ApiError }

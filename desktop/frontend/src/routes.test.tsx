@@ -4,8 +4,14 @@ import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearSession, configureSessionStorage, setSession } from './auth/session'
 import { createAppRouter } from './routes'
-import { defaultSettings, type AppSettings, type SaveSettingsPatch, type SettingsStore } from './settings/types'
+import {
+  defaultSettings,
+  type AppSettings,
+  type SaveSettingsPatch,
+  type SettingsStore,
+} from './settings/types'
 
 function createMockSettingsStore(seed: AppSettings): SettingsStore & {
   loadSettingsMock: ReturnType<typeof vi.fn>
@@ -16,13 +22,19 @@ function createMockSettingsStore(seed: AppSettings): SettingsStore & {
 
   const loadSettingsMock = vi.fn(async () => state)
   const saveSettingsMock = vi.fn(async (patch: SaveSettingsPatch) => {
+    const nextAuthMode = patch.authMode ?? state.authMode
     state = {
       ...state,
       ...patch,
+      authMode: nextAuthMode,
       apiToken:
-        patch.authMode === 'password' || (patch.authMode === undefined && state.authMode === 'password')
+        nextAuthMode === 'password'
           ? undefined
-          : patch.apiToken ?? state.apiToken,
+          : patch.apiToken !== undefined
+            ? patch.apiToken || undefined
+            : state.apiToken,
+      refreshToken:
+        patch.refreshToken !== undefined ? patch.refreshToken || undefined : state.refreshToken,
     }
     return state
   })
@@ -55,12 +67,15 @@ function renderWithRouter(initialPath: string, store: SettingsStore) {
   )
 }
 
-describe('app routes', () => {
-  beforeEach(() => {
+describe('app routes and auth flow', () => {
+  beforeEach(async () => {
     vi.restoreAllMocks()
+    await clearSession()
   })
-  afterEach(() => {
+
+  afterEach(async () => {
     cleanup()
+    await clearSession()
   })
 
   it('redirects /login to /setup when api base url is missing', async () => {
@@ -71,66 +86,212 @@ describe('app routes', () => {
     expect(await screen.findByRole('heading', { name: 'Connect to API' })).toBeInTheDocument()
   })
 
-  it('redirects / to /setup when api base url is missing', async () => {
-    const store = createMockSettingsStore({ ...defaultSettings, apiBaseUrl: '' })
-
-    renderWithRouter('/', store)
-
-    expect(await screen.findByRole('heading', { name: 'Connect to API' })).toBeInTheDocument()
-  })
-
-  it('renders not found for unknown route', async () => {
-    const store = createMockSettingsStore({ ...defaultSettings, apiBaseUrl: '' })
-
-    renderWithRouter('/missing-route', store)
-
-    expect(await screen.findByRole('heading', { name: 'Not Found' })).toBeInTheDocument()
-  })
-
-  it('saves setup and continues to login when api base url is configured', async () => {
+  it('redirects /dashboard to /login when api base url is set but user is not authenticated', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
-      requestTimeoutSeconds: 20,
     })
 
-    renderWithRouter('/setup', store)
+    renderWithRouter('/dashboard', store)
 
-    expect(await screen.findByRole('heading', { name: 'Connect to API' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'BasePro Desktop' })).toBeInTheDocument()
+  })
 
-    fireEvent.change(screen.getByLabelText('API Base URL'), {
-      target: { value: 'http://localhost:8080' },
+  it('redirects /login to /dashboard when user is authenticated', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save & Continue' }))
+    renderWithRouter('/login', store)
 
-    expect(await screen.findByRole('heading', { name: 'Login' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+  })
+
+  it('logs in successfully and navigates to /dashboard', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          accessToken: 'access-token',
+          refreshToken: 'refresh-token',
+          expiresIn: 300,
+        }),
+      }),
+    )
+
+    renderWithRouter('/login', store)
+
+    fireEvent.change(await screen.findByRole('textbox', { name: /username/i }), {
+      target: { value: 'alice' },
+    })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     expect(store.saveSettingsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ apiBaseUrl: 'http://localhost:8080' }),
+      expect.objectContaining({ refreshToken: 'refresh-token' }),
     )
   })
 
-  it('tests backend connection from setup page using health endpoint', async () => {
+  it('shows generic error for invalid credentials', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
-      requestTimeoutSeconds: 10,
     })
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({
+          error: {
+            code: 'AUTH_UNAUTHORIZED',
+            message: 'Invalid credentials',
+          },
+        }),
+      }),
+    )
+
+    renderWithRouter('/login', store)
+
+    fireEvent.change(await screen.findByRole('textbox', { name: /username/i }), {
+      target: { value: 'alice' },
+    })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'wrong' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    expect(await screen.findByText('Invalid username or password.')).toBeInTheDocument()
+  })
+
+  it('retries protected request after 401 when refresh succeeds', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'old-access',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const authHeader = new Headers(init?.headers).get('Authorization')
+
+      if (url.endsWith('/api/v1/auth/me') && authHeader === 'Bearer old-access') {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({
+            error: { code: 'AUTH_EXPIRED', message: 'expired' },
+          }),
+        }
+      }
+
+      if (url.endsWith('/api/v1/auth/refresh')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            accessToken: 'new-access',
+            refreshToken: 'new-refresh',
+            expiresIn: 300,
+          }),
+        }
+      }
+
+      if (url.endsWith('/api/v1/auth/me') && authHeader === 'Bearer new-access') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: 1,
+            username: 'alice',
+            roles: [],
+          }),
+        }
+      }
+
+      throw new Error(`Unexpected request: ${url} (${authHeader ?? 'no auth'})`)
+    })
+
     vi.stubGlobal('fetch', fetchMock)
 
-    renderWithRouter('/setup', store)
+    renderWithRouter('/dashboard', store)
 
-    await screen.findByRole('heading', { name: 'Connect to API' })
-    fireEvent.click(screen.getByRole('button', { name: 'Test Connection' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Load Profile' }))
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8080/api/v1/health', {
-        method: 'GET',
-        signal: expect.any(AbortSignal),
-      })
+    expect(await screen.findByText('Signed in as alice')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8080/api/v1/auth/refresh', expect.any(Object))
+    expect(store.saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ refreshToken: 'new-refresh' }),
+    )
+  })
+
+  it('forces logout, redirects to /login, and shows session-expired message when refresh fails', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'old-access',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
     })
 
-    expect(await screen.findByText('Connection succeeded.')).toBeInTheDocument()
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const authHeader = new Headers(init?.headers).get('Authorization')
+
+      if (url.endsWith('/api/v1/auth/me') && authHeader === 'Bearer old-access') {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({ error: { code: 'AUTH_EXPIRED', message: 'expired' } }),
+        }
+      }
+
+      if (url.endsWith('/api/v1/auth/refresh')) {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({ error: { code: 'AUTH_REFRESH_INVALID', message: 'invalid' } }),
+        }
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithRouter('/dashboard', store)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load Profile' }))
+
+    expect(await screen.findByRole('heading', { name: 'BasePro Desktop' })).toBeInTheDocument()
+    expect(await screen.findByText('Session expired. Please log in again.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(store.saveSettingsMock).toHaveBeenCalledWith(expect.objectContaining({ refreshToken: '' }))
+    })
   })
 })

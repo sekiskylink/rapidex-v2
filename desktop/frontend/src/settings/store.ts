@@ -36,11 +36,13 @@ function normalizeSettings(input: unknown): AppSettings {
   const record = isObjectRecord(input) ? input : {}
   const authMode = isAuthMode(record.authMode) ? record.authMode : 'password'
   const apiToken = readString(record.apiToken).trim()
+  const refreshToken = readString(record.refreshToken).trim()
 
   return {
     apiBaseUrl: readString(record.apiBaseUrl).trim(),
     authMode,
     apiToken: authMode === 'api_token' && apiToken ? apiToken : undefined,
+    refreshToken: refreshToken || undefined,
     requestTimeoutSeconds: readPositiveInteger(
       record.requestTimeoutSeconds,
       defaultSettings.requestTimeoutSeconds,

@@ -475,3 +475,104 @@ database:
 ### Verification summary
 - Backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...` => PASS
 - Frontend route tests: `make desktop-test` => PASS
+
+### Backend Auto-Migrate Update — Embedded Migrations (No `database.migrations_path`)
+- Removed `database.migrations_path` from backend runtime config and CLI overrides.
+- Startup auto-migrate now infers migration source from Go-embedded SQL files (`go:embed`) via `golang-migrate` `iofs` source driver.
+- Added embedded migrations package: `backend/migrations/embed.go`.
+- `internal/migrate` runner now executes `Up()` from embedded migrations, so no filesystem migration path is required at runtime.
+- Existing startup behavior remains:
+  - `database.auto_migrate=false` (default): startup skips migrations.
+  - `database.auto_migrate=true`: startup acquires advisory lock and runs migrations before serving.
+
+Verification for this update:
+- `cd backend && GOCACHE=/tmp/go-build go test ./...` => PASS
+- `make desktop-test` => PASS
+
+## Milestone 7 — Desktop Login + Refresh + Session Expiry UX (Complete)
+
+### What changed
+- Added desktop auth contracts in `desktop/frontend/src/auth/types.ts`:
+  - `LoginRequest`, `LoginResponse`
+  - `RefreshRequest`, `RefreshResponse`
+  - `MeResponse`
+- Added auth session store in `desktop/frontend/src/auth/session.ts` with required helpers:
+  - `setSession({ accessToken, refreshToken, expiresAt })`
+  - `clearSession()`
+  - `isAuthenticated()`
+- Implemented token storage model:
+  - access token kept in memory only (session store state)
+  - refresh token persisted via existing desktop settings storage (`settings.json`) and Wails binding patch.
+- Extended desktop settings persistence schema with `refreshToken` in:
+  - `desktop/app.go`
+  - `desktop/frontend/src/settings/types.ts`
+  - `desktop/frontend/src/settings/store.ts`
+- Reworked API client (`desktop/frontend/src/api/client.ts`) to support authenticated requests:
+  - attaches `Authorization: Bearer <accessToken>`
+  - handles 401 by performing refresh once and retrying original request once
+  - includes single-flight refresh lock so parallel requests wait on one refresh operation
+  - on refresh failure with `AUTH_REFRESH_INVALID` / `AUTH_REFRESH_REUSED` / `AUTH_EXPIRED`, clears session and triggers forced re-login flow
+  - emits separate network-unreachable event path
+- Added global session UX wiring in `desktop/frontend/src/App.tsx`:
+  - MUI Snackbar/Alert notifications
+  - forced logout message: `Session expired. Please log in again.`
+  - separate message for network unreachable
+  - redirect to `/login` on forced logout
+- Updated routing/guards (`desktop/frontend/src/routes.tsx`) for Milestone 7:
+  - unauthenticated routes: `/setup`, `/login`
+  - authenticated route: `/dashboard` (placeholder)
+  - guards:
+    - missing `apiBaseUrl` => redirect to `/setup`
+    - unauthenticated access to `/dashboard` => redirect to `/login`
+    - authenticated access to `/login` => redirect to `/dashboard`
+  - NotFound route remains configured
+- Added desktop pages:
+  - Login UI implementation in `desktop/frontend/src/pages/LoginPage.tsx` (title/subtitle, username/password, loading state, generic invalid-credentials error, change API settings action)
+  - Authenticated placeholder dashboard in `desktop/frontend/src/pages/DashboardPage.tsx`
+- Added global notification store scaffold in `desktop/frontend/src/notifications/store.ts`.
+
+### Refresh token storage location
+- Refresh token is persisted through existing desktop settings storage:
+  - file path: `<os_user_config_dir>/basepro-desktop/settings.json`
+  - JSON key: `refreshToken`
+  - write path remains temp-file + atomic rename with best-effort restrictive permissions.
+
+### Auto-refresh behavior
+- Access token is attached to authenticated API requests.
+- If access token is expired or a request returns HTTP 401:
+  - client performs one refresh request (`POST /api/v1/auth/refresh`) using persisted refresh token
+  - while refresh is in-flight, other requests wait on the same promise (single-flight lock)
+  - on success, stores new tokens and retries original request exactly once.
+
+### Session-expired behavior
+- If refresh fails with `AUTH_REFRESH_INVALID`, `AUTH_REFRESH_REUSED`, or `AUTH_EXPIRED`:
+  - session is cleared (memory access token + persisted refresh token removed)
+  - app redirects user to `/login`
+  - global snackbar shows: `Session expired. Please log in again.`
+- Network-unreachable errors show a separate non-auth snackbar message.
+
+### Frontend tests added/updated
+- `desktop/frontend/src/routes.test.tsx` now covers:
+  - `/login` -> `/setup` when `apiBaseUrl` missing
+  - `/dashboard` -> `/login` when not authenticated
+  - `/login` -> `/dashboard` when authenticated
+  - login success -> `/dashboard`
+  - login failure -> generic invalid credentials error
+  - 401 -> refresh success -> retried request success
+  - refresh failure -> forced logout + redirect to `/login` + session-expired snackbar
+
+### How to test
+- Backend tests: `make backend-test`
+- Desktop route/auth tests: `make desktop-test`
+- Frontend build: `cd desktop/frontend && npm run build`
+- Desktop build: `make desktop-build`
+
+### Verification summary
+- `make backend-test`: PASS
+- `make desktop-test`: PASS (7 tests)
+- `cd desktop/frontend && npm run build`: PASS
+- `make desktop-build`: PASS
+
+### Milestone scope guard
+- AppShell (Drawer/AppBar/Footer) was not implemented in this milestone.
+- Users and Audit pages were not implemented in this milestone.

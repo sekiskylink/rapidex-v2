@@ -5,6 +5,7 @@ export interface AppSettings {
   apiBaseUrl: string
   authMode: AuthMode
   apiToken?: string
+  refreshToken?: string
   requestTimeoutSeconds: number
 }
 
@@ -12,6 +13,7 @@ export interface SaveSettingsPatch {
   apiBaseUrl?: string
   authMode?: AuthMode
   apiToken?: string
+  refreshToken?: string
   requestTimeoutSeconds?: number
 }
 
