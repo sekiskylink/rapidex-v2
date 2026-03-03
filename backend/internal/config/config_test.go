@@ -115,3 +115,28 @@ func waitForConfig(t *testing.T, check func(Config) bool) bool {
 		}
 	}
 }
+
+func TestValidateLoggingConfig(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+
+	cfg.Logging.Level = "debug"
+	cfg.Logging.Format = "json"
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected valid logging config: %v", err)
+	}
+
+	cfg.Logging.Level = "verbose"
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid logging.level to fail validation")
+	}
+
+	cfg = defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Logging.Format = "pretty"
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid logging.format to fail validation")
+	}
+}

@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
+	"basepro/backend/internal/logging"
 	gomigrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 )
@@ -16,7 +17,6 @@ const defaultAdvisoryLockID int64 = 987654321
 type Config struct {
 	AutoMigrate bool
 	LockTimeout time.Duration
-	Path        string
 }
 
 type Locker interface {
@@ -25,7 +25,7 @@ type Locker interface {
 }
 
 type UpRunner interface {
-	Up(databaseDSN, migrationsPath string) error
+	Up(databaseDSN string) error
 }
 
 type Runner struct {
@@ -44,20 +44,17 @@ func NewRunner() *Runner {
 
 func (r *Runner) Run(ctx context.Context, cfg Config, db *sqlx.DB, databaseDSN string) error {
 	if !cfg.AutoMigrate {
-		log.Printf("startup migrations skipped: database.auto_migrate=false")
+		logging.L().Info("startup_migrations_skipped")
 		return nil
 	}
 	if cfg.LockTimeout <= 0 {
 		return errors.New("auto-migrate lock timeout must be > 0")
 	}
-	if cfg.Path == "" {
-		return errors.New("migrations path must not be empty")
-	}
 
 	lockCtx, cancel := context.WithTimeout(ctx, cfg.LockTimeout)
 	defer cancel()
 
-	log.Printf("startup migrations: acquiring advisory lock")
+	logging.L().Info("startup_migrations_lock_acquire")
 	if err := r.locker.Acquire(lockCtx, db, r.lockID); err != nil {
 		return fmt.Errorf("acquire migration advisory lock: %w", err)
 	}
@@ -65,19 +62,19 @@ func (r *Runner) Run(ctx context.Context, cfg Config, db *sqlx.DB, databaseDSN s
 		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer releaseCancel()
 		if err := r.locker.Release(releaseCtx, db, r.lockID); err != nil {
-			log.Printf("startup migrations: advisory lock release failed: %v", err)
+			logging.L().Warn("startup_migrations_lock_release_failed", slog.String("error", err.Error()))
 		}
 	}()
 
-	log.Printf("startup migrations: running up migrations (path=%s)", cfg.Path)
-	if err := r.up.Up(databaseDSN, cfg.Path); err != nil {
+	logging.L().Info("startup_migrations_running")
+	if err := r.up.Up(databaseDSN); err != nil {
 		if errors.Is(err, gomigrate.ErrNoChange) {
-			log.Printf("startup migrations: no change")
+			logging.L().Info("startup_migrations_no_change")
 			return nil
 		}
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	log.Printf("startup migrations: complete")
+	logging.L().Info("startup_migrations_complete")
 	return nil
 }

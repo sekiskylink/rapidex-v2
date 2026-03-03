@@ -32,6 +32,8 @@ type AppDeps struct {
 
 func newRouter(deps AppDeps) *gin.Engine {
 	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(middleware.AccessLog())
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS(deps.CORSAllowedOrigins))
 	if deps.AuthService != nil {

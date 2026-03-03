@@ -37,6 +37,7 @@ func (f *fakeRBACRepo) EnsureUserRole(context.Context, int64, int64) error      
 func (f *fakeRBACRepo) GetRoleByName(context.Context, string) (rbac.Role, error) {
 	return rbac.Role{}, nil
 }
+func (f *fakeRBACRepo) ReplaceUserRoles(context.Context, int64, []int64) error { return nil }
 
 func TestJWTUserWithoutPermissionGetsForbidden(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -61,7 +62,7 @@ func TestJWTUserWithoutPermissionGetsForbidden(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", w.Code)
 	}
-	var body map[string]map[string]string
+	var body map[string]map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -95,6 +96,38 @@ func TestJWTUserWithPermissionGetsAccess(t *testing.T) {
 	}
 }
 
+func TestJWTUserWithoutUsersWritePermissionGetsForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(25, "john", time.Now().UTC())
+
+	rbacService := rbac.NewService(&fakeRBACRepo{
+		rolesByUser: map[int64][]rbac.Role{25: []rbac.Role{{ID: 2, Name: "Manager"}}},
+		permsByUser: map[int64][]rbac.Permission{25: []rbac.Permission{{ID: 2, Name: "users.read"}}},
+	})
+
+	r := gin.New()
+	r.POST("/users", JWTAuth(jwt), RequirePermission(rbacService, "users.write"), func(c *gin.Context) {
+		c.JSON(http.StatusCreated, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", w.Code)
+	}
+	var body map[string]map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["error"]["code"] != "AUTH_FORBIDDEN" {
+		t.Fatalf("expected AUTH_FORBIDDEN, got %q", body["error"]["code"])
+	}
+}
+
 func TestRequireAuthReturnsUnauthorizedShape(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -109,11 +142,43 @@ func TestRequireAuthReturnsUnauthorizedShape(t *testing.T) {
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", w.Code)
 	}
-	var body map[string]map[string]string
+	var body map[string]map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if body["error"]["code"] != "AUTH_UNAUTHORIZED" {
 		t.Fatalf("expected AUTH_UNAUTHORIZED, got %q", body["error"]["code"])
+	}
+}
+
+func TestJWTUserWithoutAuditPermissionGetsForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(24, "eve", time.Now().UTC())
+
+	rbacService := rbac.NewService(&fakeRBACRepo{
+		rolesByUser: map[int64][]rbac.Role{24: []rbac.Role{{ID: 3, Name: "Staff"}}},
+		permsByUser: map[int64][]rbac.Permission{24: []rbac.Permission{{ID: 3, Name: "settings.read"}}},
+	})
+
+	r := gin.New()
+	r.GET("/audit", JWTAuth(jwt), RequirePermission(rbacService, "audit.read"), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/audit", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", w.Code)
+	}
+	var body map[string]map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["error"]["code"] != "AUTH_FORBIDDEN" {
+		t.Fatalf("expected AUTH_FORBIDDEN, got %q", body["error"]["code"])
 	}
 }

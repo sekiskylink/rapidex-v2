@@ -3,16 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"basepro/backend/internal/config"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/migrateutil"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("usage: migrate [up|down|create]")
+		logging.L().Error("migrate_usage_error", slog.String("message", "usage: migrate [up|down|create]"))
+		os.Exit(1)
 	}
 
 	command := os.Args[1]
@@ -24,7 +26,8 @@ func main() {
 	case "create":
 		runCreate()
 	default:
-		log.Fatalf("unknown command %q", command)
+		logging.L().Error("migrate_unknown_command", slog.String("command", command))
+		os.Exit(1)
 	}
 }
 
@@ -32,24 +35,28 @@ func runUpDown(isUp bool) {
 	fs := flag.NewFlagSet("migrate", flag.ExitOnError)
 	configFile := fs.String("config", "", "path to config file")
 	if err := fs.Parse(os.Args[2:]); err != nil {
-		log.Fatal(err)
+		logging.L().Error("migrate_parse_flags_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	if _, err := config.Load(config.Options{ConfigFile: *configFile}); err != nil {
-		log.Fatalf("load config: %v", err)
+		logging.L().Error("migrate_load_config_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	cfg := config.Get()
 	if isUp {
 		if err := migrateutil.Up(cfg.Database.DSN, "./migrations"); err != nil {
-			log.Fatalf("migrate up failed: %v", err)
+			logging.L().Error("migrate_up_failed", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 		fmt.Println("migrations applied")
 		return
 	}
 
 	if err := migrateutil.DownOne(cfg.Database.DSN, "./migrations"); err != nil {
-		log.Fatalf("migrate down failed: %v", err)
+		logging.L().Error("migrate_down_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	fmt.Println("one migration rolled back")
 }
@@ -58,12 +65,14 @@ func runCreate() {
 	fs := flag.NewFlagSet("create", flag.ExitOnError)
 	name := fs.String("name", "", "migration name")
 	if err := fs.Parse(os.Args[2:]); err != nil {
-		log.Fatal(err)
+		logging.L().Error("migrate_parse_flags_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	up, down, err := migrateutil.CreatePair("./migrations", *name)
 	if err != nil {
-		log.Fatalf("create migration files: %v", err)
+		logging.L().Error("migrate_create_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	fmt.Printf("created %s\n", up)

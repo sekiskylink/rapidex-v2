@@ -82,7 +82,7 @@ func TestAPITokenMiddlewareValidTokenGrantsAccess(t *testing.T) {
 	repo.tokens[hash] = &auth.APIToken{ID: 9, Name: "ops", TokenHash: hash, Prefix: auth.APITokenPrefix(plain), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	repo.permissions[9] = []auth.APITokenPermission{{APITokenID: 9, Permission: "audit.read"}}
 
-	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), time.Minute, time.Hour, time.Hour, secret, true, 4)
+	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
 
 	r := gin.New()
 	r.GET("/protected", APITokenAuth(service, "X-API-Token", false), RequirePermission(nil, "audit.read"), func(c *gin.Context) {
@@ -108,7 +108,7 @@ func TestAPITokenMiddlewareRevokedTokenRejected(t *testing.T) {
 	now := time.Now().UTC()
 	repo.tokens[hash] = &auth.APIToken{ID: 10, Name: "revoked", TokenHash: hash, Prefix: auth.APITokenPrefix(plain), RevokedAt: &now, CreatedAt: now, UpdatedAt: now}
 
-	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), time.Minute, time.Hour, time.Hour, secret, true, 4)
+	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
 
 	r := gin.New()
 	r.GET("/protected", APITokenAuth(service, "X-API-Token", false), RequirePermission(nil, "audit.read"), func(c *gin.Context) {
@@ -124,7 +124,7 @@ func TestAPITokenMiddlewareRevokedTokenRejected(t *testing.T) {
 		t.Fatalf("expected 401, got %d", w.Code)
 	}
 
-	var body map[string]map[string]string
+	var body map[string]map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestAPITokenMiddlewareExpiredTokenRejected(t *testing.T) {
 	expired := time.Now().UTC().Add(-time.Minute)
 	repo.tokens[hash] = &auth.APIToken{ID: 11, Name: "expired", TokenHash: hash, Prefix: auth.APITokenPrefix(plain), ExpiresAt: &expired, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 
-	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), time.Minute, time.Hour, time.Hour, secret, true, 4)
+	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
 
 	r := gin.New()
 	r.GET("/protected", APITokenAuth(service, "X-API-Token", false), RequirePermission(nil, "audit.read"), func(c *gin.Context) {
@@ -168,7 +168,7 @@ func TestAPITokenWithoutAuditReadCannotAccessAudit(t *testing.T) {
 	repo.tokens[hash] = &auth.APIToken{ID: 12, Name: "svc", TokenHash: hash, Prefix: auth.APITokenPrefix(plain), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	repo.permissions[12] = []auth.APITokenPermission{{APITokenID: 12, Permission: "users.read"}}
 
-	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), time.Minute, time.Hour, time.Hour, secret, true, 4)
+	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
 
 	r := gin.New()
 	r.GET("/audit", APITokenAuth(service, "X-API-Token", false), RequirePermission(nil, "audit.read"), func(c *gin.Context) {
@@ -183,7 +183,7 @@ func TestAPITokenWithoutAuditReadCannotAccessAudit(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", w.Code)
 	}
-	var body map[string]map[string]string
+	var body map[string]map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestAPITokenWithAuditReadCanAccessAudit(t *testing.T) {
 	repo.tokens[hash] = &auth.APIToken{ID: 13, Name: "svc", TokenHash: hash, Prefix: auth.APITokenPrefix(plain), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	repo.permissions[13] = []auth.APITokenPermission{{APITokenID: 13, Permission: "audit.read"}}
 
-	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), time.Minute, time.Hour, time.Hour, secret, true, 4)
+	service := auth.NewService(repo, nil, auth.NewJWTManager("jwt", time.Minute), nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
 
 	r := gin.New()
 	r.GET("/audit", APITokenAuth(service, "X-API-Token", false), RequirePermission(nil, "audit.read"), func(c *gin.Context) {

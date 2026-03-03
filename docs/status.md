@@ -902,3 +902,40 @@ Verification for this update:
 
 ### Known follow-ups
 - Frontend build currently emits existing third-party bundling warnings (`"use client"` directives and chunk-size warnings) but build completes successfully.
+
+## Milestone 12 Part A — Observability & Error Handling (Complete)
+
+### What changed
+- Added a centralized backend structured logger (`backend/internal/logging`) built on `slog` and replaced backend `log.Printf` usage in API startup/config reload/migration paths.
+- Added backend config keys for logging:
+  - `logging.level` (`debug|info|warn|error`)
+  - `logging.format` (`json|console`)
+- Wired logging config updates through existing Viper hot reload using a config change callback, so runtime logger settings are updated when validated config changes.
+- Added request-correlation middleware:
+  - `backend/internal/middleware/requestid.go`
+  - every request now has `X-Request-Id` (preserved if provided, generated if missing)
+  - request ID is stored in Gin + request context for downstream logging.
+- Added access logging middleware:
+  - `backend/internal/middleware/accesslog.go`
+  - logs `method`, `path`, `status`, `duration_ms`, `request_id` per request.
+- Updated router middleware chain to include request ID and access logging for all routes.
+- Upgraded centralized error handling (`backend/internal/apperror/errors.go`) to enforce consistent shape:
+  - `{ "error": { "code", "message", "details" } }`
+  - typed auth errors preserve existing error codes and now include `details: {}`
+  - validation errors return `VALIDATION_ERROR` with populated details
+  - internal errors return safe message + `INTERNAL_ERROR` with empty details.
+- Added structured error log entries in `apperror.Write(...)` that include `request_id`, `code`, and status while avoiding secret-bearing payload/header logging.
+
+### How to run tests
+- Backend tests:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Desktop tests:
+  - `make desktop-test`
+
+### Verification summary
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`: PASS
+- `make desktop-test`: PASS
+- Added/updated test coverage for Milestone 12 Part A:
+  - request ID generation/preservation + response header behavior
+  - access log fields including request correlation
+  - centralized error JSON shape for auth, validation, and internal errors.

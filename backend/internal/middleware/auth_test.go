@@ -28,7 +28,7 @@ func TestJWTAuthMissingToken(t *testing.T) {
 		t.Fatalf("expected 401, got %d", w.Code)
 	}
 
-	var body map[string]map[string]string
+	var body map[string]map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestJWTAuthExpiredToken(t *testing.T) {
 		t.Fatalf("expected 401, got %d", w.Code)
 	}
 
-	var body map[string]map[string]string
+	var body map[string]map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

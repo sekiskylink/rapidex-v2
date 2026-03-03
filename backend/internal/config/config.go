@@ -3,18 +3,24 @@ package config
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 
+	"basepro/backend/internal/logging"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
 // Config is the typed runtime configuration snapshot used across the backend.
 type Config struct {
+	Logging struct {
+		Level  string `mapstructure:"level"`
+		Format string `mapstructure:"format"`
+	} `mapstructure:"logging"`
 	Server struct {
 		Port                   string   `mapstructure:"port"`
 		ShutdownTimeoutSeconds int      `mapstructure:"shutdown_timeout_seconds"`
@@ -49,6 +55,8 @@ type Options struct {
 }
 
 var activeConfig atomic.Value
+var configChangeCallbacks []func(Config)
+var callbackMu sync.Mutex
 
 func init() {
 	activeConfig.Store(defaultConfig())
@@ -96,17 +104,19 @@ func Load(opts Options) (*viper.Viper, error) {
 		return nil, err
 	}
 	activeConfig.Store(cfg)
+	notifyConfigChange(cfg)
 
 	if opts.Watch {
 		v.OnConfigChange(func(event fsnotify.Event) {
 			newCfg, decodeErr := decodeAndValidate(v)
 			if decodeErr != nil {
-				log.Printf("config reload rejected (%s): %v", event.Name, decodeErr)
+				logging.L().Warn("config_reload_rejected", slog.String("file", event.Name), slog.String("error", decodeErr.Error()))
 				return
 			}
 
 			activeConfig.Store(newCfg)
-			log.Printf("config reload applied (%s)", event.Name)
+			notifyConfigChange(newCfg)
+			logging.L().Info("config_reload_applied", slog.String("file", event.Name))
 		})
 		v.WatchConfig()
 	}
@@ -115,6 +125,8 @@ func Load(opts Options) (*viper.Viper, error) {
 }
 
 func setDefaults(v *viper.Viper) {
+	v.SetDefault("logging.level", "info")
+	v.SetDefault("logging.format", "console")
 	v.SetDefault("server.port", ":8080")
 	v.SetDefault("server.shutdown_timeout_seconds", 10)
 	v.SetDefault("server.cors_allowed_origins", []string{
@@ -139,6 +151,8 @@ func setDefaults(v *viper.Viper) {
 
 func defaultConfig() Config {
 	cfg := Config{}
+	cfg.Logging.Level = "info"
+	cfg.Logging.Format = "console"
 	cfg.Server.Port = ":8080"
 	cfg.Server.ShutdownTimeoutSeconds = 10
 	cfg.Server.CORSAllowedOrigins = []string{
@@ -174,6 +188,16 @@ func decodeAndValidate(v *viper.Viper) (Config, error) {
 }
 
 func validate(cfg Config) error {
+	switch strings.ToLower(strings.TrimSpace(cfg.Logging.Level)) {
+	case "debug", "info", "warn", "error":
+	default:
+		return errors.New("logging.level must be one of: debug, info, warn, error")
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Logging.Format)) {
+	case "json", "console":
+	default:
+		return errors.New("logging.format must be one of: json, console")
+	}
 	if cfg.Server.Port == "" {
 		return errors.New("server.port must not be empty")
 	}
@@ -216,6 +240,26 @@ func validate(cfg Config) error {
 		return errors.New("auth.api_token_ttl_seconds must be > 0")
 	}
 	return nil
+}
+
+// RegisterOnChange registers a callback that receives each validated config
+// snapshot, including the initial load.
+func RegisterOnChange(callback func(Config)) {
+	if callback == nil {
+		return
+	}
+	callbackMu.Lock()
+	defer callbackMu.Unlock()
+	configChangeCallbacks = append(configChangeCallbacks, callback)
+}
+
+func notifyConfigChange(cfg Config) {
+	callbackMu.Lock()
+	callbacks := append([]func(Config){}, configChangeCallbacks...)
+	callbackMu.Unlock()
+	for _, callback := range callbacks {
+		callback(cfg)
+	}
 }
 
 // SafeWriteFile writes to a temp file and atomically renames it over the target.

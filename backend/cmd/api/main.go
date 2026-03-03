@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +15,7 @@ import (
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/config"
 	"basepro/backend/internal/db"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/migrate"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/users"
@@ -28,7 +29,8 @@ var (
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		logging.L().Error("api_start_failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 }
 
@@ -51,13 +53,24 @@ func run() error {
 	}
 
 	cfg := config.Get()
+	logging.ApplyConfig(logging.Config{
+		Level:  cfg.Logging.Level,
+		Format: cfg.Logging.Format,
+	})
+	config.RegisterOnChange(func(next config.Config) {
+		logging.ApplyConfig(logging.Config{
+			Level:  next.Logging.Level,
+			Format: next.Logging.Format,
+		})
+	})
+
 	database, err := db.Open(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if closeErr := database.Close(); closeErr != nil {
-			log.Printf("database close error: %v", closeErr)
+			logging.L().Warn("database_close_failed", slog.String("error", closeErr.Error()))
 		}
 	}()
 
@@ -109,7 +122,7 @@ func run() error {
 		if err := rbacService.AssignRoleToUser(ctx, user.ID, "Admin"); err != nil {
 			return fmt.Errorf("assign admin role: %w", err)
 		}
-		log.Printf("dev admin available: username=%s id=%d", user.Username, user.ID)
+		logging.L().Info("dev_admin_seeded", slog.String("username", user.Username), slog.Int64("user_id", user.ID))
 	}
 
 	srv := &http.Server{
@@ -138,6 +151,8 @@ func run() error {
 type cliFlags struct {
 	fs               *flag.FlagSet
 	configFile       string
+	loggingLevel     string
+	loggingFormat    string
 	serverPort       string
 	shutdownTimeout  int
 	databaseDSN      string
@@ -159,6 +174,8 @@ type cliFlags struct {
 func newFlags() *cliFlags {
 	f := &cliFlags{fs: flag.NewFlagSet(os.Args[0], flag.ContinueOnError)}
 	f.fs.StringVar(&f.configFile, "config", "", "path to config file")
+	f.fs.StringVar(&f.loggingLevel, "logging-level", "", "logging level (debug|info|warn|error)")
+	f.fs.StringVar(&f.loggingFormat, "logging-format", "", "logging format (json|console)")
 	f.fs.StringVar(&f.serverPort, "server-port", "", "server listen address")
 	f.fs.IntVar(&f.shutdownTimeout, "shutdown-timeout", 0, "shutdown timeout in seconds")
 	f.fs.StringVar(&f.databaseDSN, "database-dsn", "", "database DSN")
@@ -182,6 +199,10 @@ func (f *cliFlags) overrides() map[string]any {
 	overrides := make(map[string]any)
 	f.fs.Visit(func(fl *flag.Flag) {
 		switch fl.Name {
+		case "logging-level":
+			overrides["logging.level"] = f.loggingLevel
+		case "logging-format":
+			overrides["logging.format"] = f.loggingFormat
 		case "server-port":
 			overrides["server.port"] = f.serverPort
 		case "shutdown-timeout":
