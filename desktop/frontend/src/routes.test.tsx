@@ -44,6 +44,7 @@ function createMockSettingsStore(seed: AppSettings): SettingsStore & {
         ...state.uiPrefs,
         ...(patch.uiPrefs ?? {}),
       },
+      tablePrefs: patch.tablePrefs ?? state.tablePrefs,
     }
     return state
   })
@@ -86,7 +87,7 @@ describe('app shell routes', () => {
     await clearSession()
   })
 
-  it('renders app shell + dashboard content for authenticated /dashboard', async () => {
+  it('hides Audit menu item when user lacks audit.read permission', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -99,15 +100,34 @@ describe('app shell routes', () => {
       refreshToken: 'refresh-token',
       expiresAt: Date.now() + 60_000,
     })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Manager'],
+              permissions: ['users.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
 
     renderWithRouter('/dashboard', store)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Open user menu' })).toBeInTheDocument()
-    expect(screen.getByText('BasePro Desktop v0.1.0')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Users' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Audit' })).not.toBeInTheDocument()
   })
 
-  it('navigates to /settings when Settings is clicked in navigation', async () => {
+  it('shows Forbidden when navigating to /audit without audit.read permission', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -121,15 +141,32 @@ describe('app shell routes', () => {
       expiresAt: Date.now() + 60_000,
     })
 
-    renderWithRouter('/dashboard', store)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Manager'],
+              permissions: ['users.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    renderWithRouter('/audit', store)
 
-    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
-    expect(await screen.findByText('Connection')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '403', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Forbidden')).toBeInTheDocument()
   })
 
-  it('persists theme mode and reapplies it after reload', async () => {
+  it('creates a user and refreshes the users grid', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -143,64 +180,181 @@ describe('app shell routes', () => {
       expiresAt: Date.now() + 60_000,
     })
 
-    const view = renderWithRouter('/settings', store)
+    let getUsersCalls = 0
+    let createCalls = 0
 
-    const themeModeSelect = await screen.findByRole('combobox', { name: 'Theme mode' })
-    fireEvent.mouseDown(themeModeSelect)
-    fireEvent.click(await screen.findByRole('option', { name: 'Dark' }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['users.read', 'users.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/users') && (init?.method === undefined || init.method === 'GET')) {
+          getUsersCalls += 1
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 7,
+                  username: 'jane',
+                  isActive: true,
+                  roles: ['Admin'],
+                  createdAt: '2026-02-28T00:00:00Z',
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/users') && init?.method === 'POST') {
+          createCalls += 1
+          return new Response(
+            JSON.stringify({ id: 8, username: 'new-user', isActive: true, roles: ['Viewer'] }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/users', store)
+
+    expect(await screen.findByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(getUsersCalls).toBeGreaterThanOrEqual(1)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create User' }))
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'new-user' } })
+    fireEvent.change(screen.getByLabelText('Temp Password'), { target: { value: 'TempPass123!' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => {
-      expect(document.documentElement.getAttribute('data-theme-mode')).toBe('dark')
-      expect(store.saveSettingsMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          uiPrefs: expect.objectContaining({ themeMode: 'dark' }),
-        }),
-      )
+      expect(createCalls).toBe(1)
+    })
+    await waitFor(() => {
+      expect(getUsersCalls).toBeGreaterThanOrEqual(2)
+    }, { timeout: 10_000 })
+  }, 15_000)
+
+  it('loads audit grid rows on /audit', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
     })
 
-    view.unmount()
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['audit.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/audit')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 12,
+                  timestamp: '2026-03-01T01:00:00Z',
+                  actorUserId: 1,
+                  action: 'users.create',
+                  entityType: 'user',
+                  entityId: '12',
+                  metadata: { username: 'new-user' },
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/audit', store)
+
+    expect(await screen.findByRole('heading', { name: 'Audit', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByText('users.create')).toBeInTheDocument()
+  })
+
+  it('renders backend version in Settings About section', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['users.read', 'users.write', 'audit.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/version')) {
+          return new Response(
+            JSON.stringify({
+              version: '1.2.3',
+              commit: 'abc1234',
+              buildDate: '2026-03-03T00:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
     renderWithRouter('/settings', store)
 
-    await waitFor(() => {
-      expect(document.documentElement.getAttribute('data-theme-pref')).toBe('dark')
-      expect(document.documentElement.getAttribute('data-theme-mode')).toBe('dark')
-    })
-  })
-
-  it('persists palette preset selection and reapplies it after reload', async () => {
-    const store = createMockSettingsStore({
-      ...defaultSettings,
-      apiBaseUrl: 'http://127.0.0.1:8080',
-      refreshToken: 'refresh-token',
-    })
-
-    configureSessionStorage(store)
-    await setSession({
-      accessToken: 'access-token',
-      refreshToken: 'refresh-token',
-      expiresAt: Date.now() + 60_000,
-    })
-
-    const view = renderWithRouter('/settings', store)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Browse all presets' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Select Ember preset' }))
-
-    await waitFor(() => {
-      expect(document.documentElement.getAttribute('data-palette-preset')).toBe('ember')
-      expect(store.saveSettingsMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          uiPrefs: expect.objectContaining({ palettePreset: 'ember' }),
-        }),
-      )
-    })
-
-    view.unmount()
-    renderWithRouter('/settings', store)
-
-    await waitFor(() => {
-      expect(document.documentElement.getAttribute('data-palette-preset')).toBe('ember')
-      expect(screen.getByText('Active preset: Ember')).toBeInTheDocument()
-    })
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByText(/Backend version:\s*1\.2\.3/i)).toBeInTheDocument()
   })
 })

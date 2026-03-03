@@ -49,3 +49,34 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Fatalf("unmet sqlmock expectations: %v", err)
 	}
 }
+
+func TestVersionEndpointReturnsBuildMetadata(t *testing.T) {
+	r := newRouter(AppDeps{
+		Version:   "1.2.3",
+		Commit:    "a1b2c3d",
+		BuildDate: "2026-03-03T00:00:00Z",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+
+	if body["version"] != "1.2.3" {
+		t.Fatalf("expected version to be 1.2.3, got %q", body["version"])
+	}
+	if body["commit"] != "a1b2c3d" {
+		t.Fatalf("expected commit to be a1b2c3d, got %q", body["commit"])
+	}
+	if body["buildDate"] != "2026-03-03T00:00:00Z" {
+		t.Fatalf("expected buildDate to be 2026-03-03T00:00:00Z, got %q", body["buildDate"])
+	}
+}

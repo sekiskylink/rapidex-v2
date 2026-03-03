@@ -20,7 +20,11 @@ import (
 	"basepro/backend/internal/users"
 )
 
-const version = "0.1.0"
+var (
+	Version   = "dev"
+	Commit    = "none"
+	BuildDate = "unknown"
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -72,6 +76,7 @@ func run() error {
 		auth.NewSQLRepository(database),
 		auditService,
 		jwtManager,
+		rbacService,
 		time.Duration(cfg.Auth.AccessTokenTTLSeconds)*time.Second,
 		time.Duration(cfg.Auth.RefreshTokenTTLSeconds)*time.Second,
 		time.Duration(cfg.Auth.APITokenTTLSeconds)*time.Second,
@@ -111,7 +116,9 @@ func run() error {
 		Addr: cfg.Server.Port,
 		Handler: newRouter(AppDeps{
 			DB:                  database,
-			Version:             version,
+			Version:             Version,
+			Commit:              Commit,
+			BuildDate:           BuildDate,
 			CORSAllowedOrigins:  cfg.Server.CORSAllowedOrigins,
 			AuthHandler:         auth.NewHandler(authService),
 			AuthService:         authService,

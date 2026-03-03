@@ -13,6 +13,12 @@ interface ApiClientDeps {
   getSettings: () => Promise<AppSettings>
 }
 
+interface VersionResponse {
+  version: string
+  commit: string
+  buildDate: string
+}
+
 interface ApiErrorPayload {
   error?: {
     code?: string
@@ -229,6 +235,22 @@ export function createApiClient(deps: ApiClientDeps) {
       return authorizedRequest<MeResponse>('/api/v1/auth/me', {
         method: 'GET',
       })
+    },
+
+    async version() {
+      const settings = await deps.getSettings()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+      if (!baseUrl) {
+        throw new Error('API base URL is required')
+      }
+
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/version`, {
+        method: 'GET',
+      })
+      if (!response.ok) {
+        throw new Error(`Version check failed: HTTP ${response.status}`)
+      }
+      return (await response.json()) as VersionResponse
     },
 
     request<T>(path: string, init: RequestInit = {}) {

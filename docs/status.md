@@ -634,3 +634,271 @@ Verification for this update:
 
 ### Milestone scope guard
 - Users and Audit pages were not implemented (only disabled placeholders in shell nav).
+
+## Milestone 9 — DataGrid Foundation (Advanced Features + Server Integration) (Complete)
+
+### What changed
+- Added reusable shared wrapper: `desktop/frontend/src/components/datagrid/AppDataGrid.tsx`.
+- Confirmed MUI X Data Grid package is in use (`@mui/x-data-grid`) and implemented wrapper in a way that can accept Pro/Premium props later (including pinned columns passthrough).
+- Wrapper capabilities implemented:
+  - server-side pagination (`paginationMode="server"`)
+  - server-side sorting (`sortingMode="server"`)
+  - server-side filtering (`filterMode="server"`)
+  - page size options (`10, 25, 50, 100`)
+  - density selector via toolbar
+  - column visibility model
+  - column reordering persistence
+  - pinned columns persistence + passthrough (active where supported)
+  - CSV export via toolbar
+- Added shared frontend pagination helpers:
+  - `desktop/frontend/src/api/pagination.ts`
+  - `desktop/frontend/src/api/useApiClient.ts`
+- Added authenticated skeleton pages using wrapper:
+  - `desktop/frontend/src/pages/UsersPage.tsx`
+  - `desktop/frontend/src/pages/AuditPage.tsx`
+- Wired routes for `/users` and `/audit` and enabled shell navigation entries for both pages.
+
+### Persistent table preferences
+- Extended desktop local settings schema (same Wails settings storage mechanism) to persist per-table preferences by `storageKey`:
+  - `pageSize`
+  - `columnVisibility`
+  - `columnOrder`
+  - `density`
+  - `pinnedColumns`
+- Added schema versioning in table preferences (`version: 1`) to support future schema evolution.
+- Storage location remains the existing desktop settings file:
+  - `<os_user_config_dir>/basepro-desktop/settings.json`
+  - persisted under top-level key: `tablePrefs`.
+- Updated both frontend and Wails model bindings for the extended settings shape.
+
+### Server query contract (Milestone 9 contract)
+- Adopted consistent query format for list endpoints:
+  - `GET /api/v1/<resource>?page=1&pageSize=25&sort=<field>:<asc|desc>&filter=<field>:<value>`
+- Implemented for:
+  - `GET /api/v1/users`
+  - `GET /api/v1/audit`
+- Implemented consistent paginated response shape:
+  - `{ "items": [...], "totalCount": number, "page": number, "pageSize": number }`
+
+### Backend updates
+- Updated users list backend to support:
+  - pagination (`page`, `pageSize`)
+  - sorting (`sort`)
+  - filtering (`filter`, username)
+  - response includes `totalCount`, `page`, `pageSize`
+- Updated audit list backend to support:
+  - pagination (`page`, `pageSize`)
+  - sorting (`sort`)
+  - filtering (`filter`, action)
+  - response includes `totalCount`, `page`, `pageSize`
+- Added backend pagination tests:
+  - `backend/internal/users/users_test.go`
+  - `backend/internal/audit/audit_test.go`
+
+### Frontend tests added
+- DataGrid wrapper tests:
+  - calls `fetchData` on page change
+  - calls `fetchData` on sort change
+  - calls `fetchData` on filter change
+- Persistence tests:
+  - page size persists and reloads from settings store
+  - column visibility persists and reloads from settings store
+- Users page route test:
+  - `/users` loads and renders rows from mocked API response
+
+### How to test
+- Backend tests:
+  - `make backend-test`
+- Frontend route/smoke + DataGrid tests:
+  - `make desktop-test`
+- Frontend build:
+  - `cd desktop/frontend && npm run build`
+
+### Verification summary
+- `make backend-test`: PASS
+- `make desktop-test`: PASS (7 tests)
+- `cd desktop/frontend && npm run build`: PASS
+
+### Milestone scope guard
+- No business-specific modules (HR/payroll/etc.) were implemented.
+- Milestone 10 work was not started.
+
+## Milestone 10 — Users + Audit (End-to-End) + Permission-Gated Navigation (Complete)
+
+### What changed
+- Completed backend users endpoints with permission enforcement and validation:
+  - `GET /api/v1/users` (`users.read`)
+  - `POST /api/v1/users` (`users.write`)
+  - `PATCH /api/v1/users/:id` (`users.write`)
+  - `POST /api/v1/users/:id/reset-password` (`users.write`)
+- Added/finished users backend behaviors:
+  - input validation now uses typed validation errors (`VALIDATION_ERROR`)
+  - patch now supports optional `username`, `isActive`, and `roles`
+  - role updates are replacement-based (set semantics) instead of additive-only
+  - password hashes remain server-only and are never returned in responses
+- Added RBAC role replacement support:
+  - `rbac.Repository.ReplaceUserRoles(...)`
+  - `rbac.Service.SetUserRoles(...)`
+- Ensured user-management audit writes are emitted:
+  - `users.create`
+  - `users.update`
+  - `users.reset_password`
+  - `users.set_active`
+- Completed backend audit listing endpoint filters and contract:
+  - `GET /api/v1/audit` (`audit.read`)
+  - pagination/sort/filter response: `{ items, totalCount, page, pageSize }`
+  - supports `action`, `actor_user_id`/`actorUserId`, and date range (`date_from`/`date_to` and camelCase aliases)
+- Completed principal/capability behavior:
+  - `/api/v1/auth/me` now returns `id`, `username`, `roles`, and `permissions`
+  - desktop auth state stores principal permissions and exposes permission checks
+
+### Permission and principal decisions
+- `users.*` endpoints are JWT-user-only:
+  - router now applies `RequireJWTUser` on `/api/v1/users` group in addition to `RequirePermission`.
+  - API-token principals cannot administer users.
+- `audit.read` endpoint supports either JWT or API-token principals:
+  - `RequirePermission` is enforced for both principal types.
+
+### Desktop completion
+- Added permission-aware auth state:
+  - session principal (`id`, `username`, `roles`, `permissions`) and subscription-based updates
+  - login flow now loads `/api/v1/auth/me` immediately after token issuance
+- Added permission-gated navigation and route guards:
+  - Users nav shown only when `users.read` or `users.write`
+  - Audit nav shown only when `audit.read`
+  - direct navigation to `/users` or `/audit` without permission renders a new `ForbiddenPage` (`403`)
+- Implemented full `/users` page with `AppDataGrid` and server data:
+  - columns: username, roles, active, created
+  - create user dialog
+  - toggle active action
+  - reset password dialog
+  - edit roles dialog (multi-select)
+  - write actions are disabled when `users.write` is missing
+  - success/error toasts for all actions
+- Implemented full `/audit` page with `AppDataGrid` and server data:
+  - columns: timestamp, actor, action, entity_type, entity_id, metadata (compact)
+  - filters: action dropdown, actor user id, date range
+
+### Permission strings used
+- `users.read`
+- `users.write`
+- `audit.read`
+
+### Dev seeding for roles/permissions
+- Backend dev bootstrap still seeds baseline RBAC and optional dev admin:
+  - enable via existing config `seed.enable_dev_bootstrap` or CLI `--seed-dev-admin`
+  - default baseline includes roles `Admin`, `Manager`, `Staff`, `Viewer`
+  - baseline permissions include `users.read`, `users.write`, `audit.read`, and existing settings/api-token permissions
+- Example startup for local dev:
+  - `make migrate-up`
+  - `cd backend && go run ./cmd/api --seed-dev-admin`
+
+### Tests added/updated
+- Backend:
+  - permission enforcement tests for missing `users.write` and missing `audit.read`
+    - `backend/internal/middleware/authorization_test.go`
+  - pagination contract tests for users and audit list responses
+    - `backend/internal/users/users_test.go`
+    - `backend/internal/audit/audit_test.go`
+  - audit write test for user creation (`users.create`)
+    - `backend/internal/users/users_test.go`
+- Desktop:
+  - navigation gating test (Audit menu hidden without `audit.read`)
+  - route guard test (`/audit` shows Forbidden without permission)
+  - users action test (create user triggers API + grid refresh)
+  - audit grid load test (rows rendered from mocked API)
+  - file: `desktop/frontend/src/routes.test.tsx`
+
+### How to test
+- Backend tests:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Frontend tests:
+  - `make desktop-test`
+- Frontend build:
+  - `cd desktop/frontend && npm run build`
+
+### Verification summary
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`: PASS
+- `make desktop-test`: PASS (6 tests)
+- `cd desktop/frontend && npm run build`: PASS
+
+### Milestone scope guard
+- No HR/payroll/business-domain modules were started.
+- Milestone remained skeleton-focused (users + audit + permission-gated shell behavior).
+
+## Milestone 11 — Packaging + Versioning + CI Baseline (Complete)
+
+### What changed
+- Added backend build metadata variables in `cmd/api/main.go`:
+  - `Version` (default `dev`)
+  - `Commit` (default `none`)
+  - `BuildDate` (default `unknown`)
+- Updated `/api/v1/version` to return:
+  - `version`
+  - `commit`
+  - `buildDate`
+- Extended router dependency wiring to pass version metadata from build/runtime into HTTP responses.
+- Added backend test coverage for version endpoint metadata contract.
+- Updated desktop Settings > About section to show:
+  - desktop version (from Vite define)
+  - backend version from `/api/v1/version`
+  - backend commit/build date when available
+  - `Not Connected` fallback when backend is unreachable.
+- Added desktop API client helper for unauthenticated `/api/v1/version` fetch.
+- Added desktop test coverage asserting About section renders mocked backend version.
+- Hardened root `Makefile` and added release/CI targets:
+  - `backend-build` (with ldflags version injection)
+  - `backend-test`
+  - `backend-run`
+  - `desktop-build`
+  - `desktop-dev`
+  - `desktop-test`
+  - `ci` (runs `backend-test`, `desktop-test`, `desktop-build`)
+- Added GitHub Actions workflow: `.github/workflows/ci.yml`
+  - runs on push + pull_request
+  - installs Go and Node
+  - runs backend tests, desktop install/test, and desktop build
+  - fails on any non-zero step.
+
+### How version injection works
+- `Makefile` computes build metadata values:
+  - `VERSION` (default `dev`, overrideable)
+  - `COMMIT` from `git rev-parse --short HEAD`
+  - `BUILD_DATE` in UTC RFC3339-like format
+- `backend-build` injects metadata with:
+  - `-X main.Version=$(VERSION)`
+  - `-X main.Commit=$(COMMIT)`
+  - `-X main.BuildDate=$(BUILD_DATE)`
+- Backend binary output path:
+  - `backend/bin/basepro-api`
+
+### How to build backend with version info
+- Default build metadata:
+  - `make backend-build`
+- Explicit version override:
+  - `make backend-build VERSION=1.0.0`
+
+### How CI works
+- Workflow file: `.github/workflows/ci.yml`
+- Trigger events:
+  - `push`
+  - `pull_request`
+- Steps:
+  - `go test ./...` in `backend/`
+  - `npm install`, `npm test`, and `npm run build` in `desktop/frontend/`
+
+### How to run milestone verification
+- Full local CI baseline:
+  - `make ci`
+- Backend version-injected build:
+  - `make backend-build`
+
+### Verification summary
+- `make backend-build`: PASS
+- `make ci`: PASS
+  - backend tests: PASS
+  - desktop tests: PASS
+  - desktop build: PASS
+
+### Known follow-ups
+- Frontend build currently emits existing third-party bundling warnings (`"use client"` directives and chunk-size warnings) but build completes successfully.

@@ -1,19 +1,32 @@
-.PHONY: backend-run backend-test desktop-dev desktop-build desktop-test deps migrate-up migrate-down migrate-create
+SHELL := /bin/zsh
+.SHELLFLAGS := -eu -o pipefail -c
 
-backend-run:
-	cd backend && GOCACHE=/tmp/go-build go run ./cmd/api
+VERSION ?= dev
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+BACKEND_LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildDate=$(BUILD_DATE)
+
+.PHONY: backend-build backend-test backend-run desktop-build desktop-dev desktop-test ci deps migrate-up migrate-down migrate-create
+
+backend-build:
+	cd backend && mkdir -p bin && GOCACHE=/tmp/go-build go build -ldflags "$(BACKEND_LDFLAGS)" -o bin/basepro-api ./cmd/api
 
 backend-test:
 	cd backend && GOCACHE=/tmp/go-build go test ./...
 
+backend-run:
+	cd backend && GOCACHE=/tmp/go-build go run ./cmd/api
+
+desktop-build:
+	cd desktop/frontend && npm run build
+
 desktop-dev:
 	cd desktop && GOROOT=/usr/local/go PATH=/usr/local/go/bin:$$PATH wails dev -compiler /usr/local/go/bin/go
 
-desktop-build:
-	cd desktop && GOROOT=/usr/local/go PATH=/usr/local/go/bin:$$PATH wails build -compiler /usr/local/go/bin/go -skipbindings
-
 desktop-test:
 	cd desktop/frontend && npm test
+
+ci: backend-test desktop-test desktop-build
 
 migrate-up:
 	cd backend && GOCACHE=/tmp/go-build go run ./cmd/migrate up

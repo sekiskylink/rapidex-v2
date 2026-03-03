@@ -31,6 +31,10 @@ export function SettingsPage() {
   const [testing, setTesting] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   const [settings, setSettings] = React.useState<AppSettings | null>(null)
+  const [backendVersion, setBackendVersion] = React.useState<{ version: string; commit: string; buildDate: string } | null>(
+    null,
+  )
+  const [backendVersionLoading, setBackendVersionLoading] = React.useState(true)
   const [status, setStatus] = React.useState<{ severity: 'success' | 'error'; message: string } | null>(null)
 
   React.useEffect(() => {
@@ -62,6 +66,45 @@ export function SettingsPage() {
     [settings, settingsStore],
   )
 
+  React.useEffect(() => {
+    let active = true
+
+    const loadBackendVersion = async () => {
+      if (!settings?.apiBaseUrl.trim()) {
+        if (!active) {
+          return
+        }
+        setBackendVersion(null)
+        setBackendVersionLoading(false)
+        return
+      }
+
+      setBackendVersionLoading(true)
+      try {
+        const versionInfo = await apiClient.version()
+        if (!active) {
+          return
+        }
+        setBackendVersion(versionInfo)
+      } catch {
+        if (!active) {
+          return
+        }
+        setBackendVersion(null)
+      } finally {
+        if (active) {
+          setBackendVersionLoading(false)
+        }
+      }
+    }
+
+    void loadBackendVersion()
+
+    return () => {
+      active = false
+    }
+  }, [apiClient, settings?.apiBaseUrl])
+
   const onSaveConnection = async () => {
     if (!settings) {
       return
@@ -75,6 +118,7 @@ export function SettingsPage() {
         requestTimeoutSeconds: settings.requestTimeoutSeconds,
       })
       setSettings(saved)
+      setBackendVersionLoading(true)
       setStatus({ severity: 'success', message: 'Connection settings saved.' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save settings.'
@@ -215,8 +259,16 @@ export function SettingsPage() {
             <Typography variant="h6">About</Typography>
             <Divider />
             <Typography>App: BasePro Desktop</Typography>
-            <Typography color="text.secondary">Version: {import.meta.env.VITE_APP_VERSION ?? 'dev-build'}</Typography>
-            <Typography color="text.secondary">Build: Milestone 8 shell baseline</Typography>
+            <Typography color="text.secondary">Desktop version: {import.meta.env.VITE_APP_VERSION ?? '0.0.0-dev'}</Typography>
+            <Typography color="text.secondary">
+              Backend version:{' '}
+              {backendVersionLoading ? 'Checking...' : backendVersion ? backendVersion.version : 'Not Connected'}
+            </Typography>
+            {backendVersion ? (
+              <Typography color="text.secondary">
+                Backend commit/build: {backendVersion.commit} ({backendVersion.buildDate})
+              </Typography>
+            ) : null}
           </Stack>
         </CardContent>
       </Card>

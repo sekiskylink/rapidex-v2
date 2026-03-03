@@ -17,6 +17,8 @@ import (
 type AppDeps struct {
 	DB                  *sqlx.DB
 	Version             string
+	Commit              string
+	BuildDate           string
 	CORSAllowedOrigins  []string
 	AuthHandler         *auth.Handler
 	AuthService         *auth.Service
@@ -58,7 +60,11 @@ func newRouter(deps AppDeps) *gin.Engine {
 	})
 
 	api.GET("/version", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"version": deps.Version})
+		c.JSON(http.StatusOK, gin.H{
+			"version":   deps.Version,
+			"commit":    deps.Commit,
+			"buildDate": deps.BuildDate,
+		})
 	})
 
 	if deps.AuthHandler != nil && deps.JWTManager != nil {
@@ -77,7 +83,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 
 	if deps.UsersHandler != nil {
 		usersGroup := api.Group("/users")
-		usersGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
+		usersGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
 		usersGroup.GET("", middleware.RequirePermission(deps.RBACService, "users.read"), deps.UsersHandler.List)
 		usersGroup.POST("", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Create)
 		usersGroup.PATCH("/:id", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Patch)
