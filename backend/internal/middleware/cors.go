@@ -2,40 +2,63 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-// CORS allows configured origins, including simple wildcard suffixes like
-// "wails://wails.localhost:*" for Wails runtime random ports.
-func CORS(allowedOrigins []string) gin.HandlerFunc {
-	normalized := make([]string, 0, len(allowedOrigins))
-	for _, origin := range allowedOrigins {
+type CORSConfig struct {
+	Enabled          bool
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	AllowCredentials bool
+}
+
+// CORS applies configured CORS policy and supports suffix wildcards (e.g.
+// "wails://wails.localhost:*") when credentials are disabled.
+func CORS(cfg CORSConfig) gin.HandlerFunc {
+	normalizedOrigins := make([]string, 0, len(cfg.AllowedOrigins))
+	for _, origin := range cfg.AllowedOrigins {
 		trimmed := strings.TrimSpace(origin)
 		if trimmed != "" {
-			normalized = append(normalized, trimmed)
+			normalizedOrigins = append(normalizedOrigins, trimmed)
 		}
 	}
+	normalizedMethods := cleanList(cfg.AllowedMethods)
+	normalizedHeaders := cleanList(cfg.AllowedHeaders)
 
 	return func(c *gin.Context) {
+		if !cfg.Enabled {
+			c.Next()
+			return
+		}
+
 		origin := c.GetHeader("Origin")
 		if origin == "" {
 			c.Next()
 			return
 		}
 
-		if allowedOrigin, ok := matchAllowedOrigin(origin, normalized); ok {
+		allowedOrigin, matched := matchAllowedOrigin(origin, normalizedOrigins)
+		if matched {
 			h := c.Writer.Header()
 			h.Set("Access-Control-Allow-Origin", allowedOrigin)
 			h.Set("Vary", "Origin")
-			h.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-			h.Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-API-Token")
-			h.Set("Access-Control-Allow-Credentials", "true")
+			h.Set("Access-Control-Allow-Methods", strings.Join(normalizedMethods, ","))
+			h.Set("Access-Control-Allow-Headers", strings.Join(normalizedHeaders, ","))
+			if cfg.AllowCredentials {
+				h.Set("Access-Control-Allow-Credentials", "true")
+			}
 		}
 
 		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
+			if matched {
+				c.AbortWithStatus(http.StatusNoContent)
+				return
+			}
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
@@ -63,4 +86,15 @@ func matchAllowedOrigin(origin string, allowedOrigins []string) (string, bool) {
 	}
 
 	return "", false
+}
+
+func cleanList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" && !slices.Contains(out, trimmed) {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

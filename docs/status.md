@@ -939,3 +939,51 @@ Verification for this update:
   - request ID generation/preservation + response header behavior
   - access log fields including request correlation
   - centralized error JSON shape for auth, validation, and internal errors.
+
+## Milestone 12 Part B — Security & Operational Baseline (Complete)
+
+### What changed
+- Added backend security config sections and defaults:
+  - `security.rate_limit.enabled`
+  - `security.rate_limit.requests_per_second`
+  - `security.rate_limit.burst`
+  - `security.cors.enabled`
+  - `security.cors.allowed_origins`
+  - `security.cors.allowed_methods`
+  - `security.cors.allowed_headers`
+  - `security.cors.allow_credentials`
+- Implemented authentication endpoint rate limiting middleware with bounded in-memory per-client token buckets and stale-entry cleanup:
+  - applied only to `POST /api/v1/auth/login` and `POST /api/v1/auth/refresh`
+  - rate-limited responses return HTTP `429` with standardized error code `RATE_LIMITED`.
+- Implemented configurable CORS middleware with conditional router application:
+  - CORS disabled by default (no CORS headers emitted)
+  - configurable origins/methods/headers/credentials
+  - preflight handling with explicit policy enforcement.
+- Extended config validation for security baseline rules:
+  - rate limit parameters must be valid when enabled
+  - CORS must have non-empty policy when enabled
+  - wildcard origins are rejected when `allow_credentials=true`
+  - invalid startup config fails load
+  - invalid hot reload is rejected and previous valid snapshot remains active.
+- Preserved secure defaults and existing protections:
+  - `database.auto_migrate` default remains `false`
+  - JWT signing key remains required by config validation
+  - default logging level remains `info` (debug not default).
+- Added health endpoint safety test coverage to ensure response does not leak sensitive terms/fields.
+
+### How to run tests
+- Backend tests:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Desktop tests:
+  - `make desktop-test`
+
+### Verification summary
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`: PASS
+- `make desktop-test`: PASS
+- Added/updated backend test coverage for:
+  - rate limiting enabled/disabled behavior and `429/RATE_LIMITED` response shape
+  - CORS enabled/disabled behavior
+  - wildcard origin + credentials validation failure
+  - invalid startup config failure
+  - invalid hot reload rejection with prior config retention
+  - health endpoint non-sensitive response assertions.

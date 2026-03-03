@@ -16,6 +16,7 @@ import (
 	"basepro/backend/internal/config"
 	"basepro/backend/internal/db"
 	"basepro/backend/internal/logging"
+	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/migrate"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/users"
@@ -128,11 +129,22 @@ func run() error {
 	srv := &http.Server{
 		Addr: cfg.Server.Port,
 		Handler: newRouter(AppDeps{
-			DB:                  database,
-			Version:             Version,
-			Commit:              Commit,
-			BuildDate:           BuildDate,
-			CORSAllowedOrigins:  cfg.Server.CORSAllowedOrigins,
+			DB:        database,
+			Version:   Version,
+			Commit:    Commit,
+			BuildDate: BuildDate,
+			CORSConfig: middleware.CORSConfig{
+				Enabled:          cfg.Security.CORS.Enabled,
+				AllowedOrigins:   cfg.Security.CORS.AllowedOrigins,
+				AllowedMethods:   cfg.Security.CORS.AllowedMethods,
+				AllowedHeaders:   cfg.Security.CORS.AllowedHeaders,
+				AllowCredentials: cfg.Security.CORS.AllowCredentials,
+			},
+			RateLimitConfig: middleware.RateLimitConfig{
+				Enabled:           cfg.Security.RateLimit.Enabled,
+				RequestsPerSecond: cfg.Security.RateLimit.RequestsPerSecond,
+				Burst:             cfg.Security.RateLimit.Burst,
+			},
 			AuthHandler:         auth.NewHandler(authService),
 			AuthService:         authService,
 			JWTManager:          jwtManager,
@@ -168,6 +180,11 @@ type cliFlags struct {
 	apiTokenHeader   string
 	apiTokenTTL      int
 	apiTokenBearer   bool
+	rateLimitEnabled bool
+	rateLimitRPS     float64
+	rateLimitBurst   int
+	corsEnabled      bool
+	corsCredentials  bool
 	seedDevAdmin     bool
 }
 
@@ -191,6 +208,11 @@ func newFlags() *cliFlags {
 	f.fs.StringVar(&f.apiTokenHeader, "auth-api-token-header", "", "API token header name")
 	f.fs.IntVar(&f.apiTokenTTL, "auth-api-token-ttl", 0, "default API token TTL in seconds")
 	f.fs.BoolVar(&f.apiTokenBearer, "auth-api-token-allow-bearer", false, "allow Authorization bearer for API token")
+	f.fs.BoolVar(&f.rateLimitEnabled, "security-rate-limit-enabled", false, "enable auth endpoint rate limiting")
+	f.fs.Float64Var(&f.rateLimitRPS, "security-rate-limit-rps", 0, "rate limit requests per second")
+	f.fs.IntVar(&f.rateLimitBurst, "security-rate-limit-burst", 0, "rate limit burst size")
+	f.fs.BoolVar(&f.corsEnabled, "security-cors-enabled", false, "enable CORS middleware")
+	f.fs.BoolVar(&f.corsCredentials, "security-cors-allow-credentials", false, "allow CORS credentials")
 	f.fs.BoolVar(&f.seedDevAdmin, "seed-dev-admin", false, "seed a dev admin user")
 	return f
 }
@@ -233,6 +255,16 @@ func (f *cliFlags) overrides() map[string]any {
 			overrides["auth.api_token_ttl_seconds"] = f.apiTokenTTL
 		case "auth-api-token-allow-bearer":
 			overrides["auth.api_token_allow_bearer"] = f.apiTokenBearer
+		case "security-rate-limit-enabled":
+			overrides["security.rate_limit.enabled"] = f.rateLimitEnabled
+		case "security-rate-limit-rps":
+			overrides["security.rate_limit.requests_per_second"] = f.rateLimitRPS
+		case "security-rate-limit-burst":
+			overrides["security.rate_limit.burst"] = f.rateLimitBurst
+		case "security-cors-enabled":
+			overrides["security.cors.enabled"] = f.corsEnabled
+		case "security-cors-allow-credentials":
+			overrides["security.cors.allow_credentials"] = f.corsCredentials
 		}
 	})
 	return overrides

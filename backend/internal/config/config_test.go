@@ -140,3 +140,153 @@ func TestValidateLoggingConfig(t *testing.T) {
 		t.Fatal("expected invalid logging.format to fail validation")
 	}
 }
+
+func TestValidateSecurityConfig(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Security.CORS.Enabled = true
+	cfg.Security.CORS.AllowedOrigins = []string{"http://localhost:5173"}
+	cfg.Security.CORS.AllowCredentials = true
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected valid security config, got %v", err)
+	}
+
+	cfg.Security.CORS.AllowedOrigins = []string{"*"}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected wildcard origin with credentials to fail validation")
+	}
+
+	cfg = defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Security.RateLimit.Enabled = true
+	cfg.Security.RateLimit.RequestsPerSecond = 0
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid rate limit config to fail validation")
+	}
+}
+
+func TestLoadInvalidConfigFails(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "invalid-config.yaml")
+	content := []byte(`
+server:
+  port: ""
+database:
+  dsn: ""
+auth:
+  jwt_signing_key: ""
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatalf("write invalid config: %v", err)
+	}
+
+	if _, err := Load(Options{ConfigFile: cfgPath, Watch: false}); err == nil {
+		t.Fatal("expected invalid config load to fail")
+	}
+}
+
+func TestHotReloadRejectsInvalidCorsAndKeepsPrevious(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	initial := []byte(`
+server:
+  port: ":8181"
+  shutdown_timeout_seconds: 10
+database:
+  dsn: "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+  max_open_conns: 10
+  max_idle_conns: 5
+  auto_migrate: false
+auth:
+  access_token_ttl_seconds: 900
+  refresh_token_ttl_seconds: 604800
+  jwt_signing_key: "test-signing-key"
+  password_hash_cost: 12
+  api_token_enabled: true
+  api_token_header_name: "X-API-Token"
+  api_token_ttl_seconds: 2592000
+  api_token_allow_bearer: false
+security:
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:5173"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+    allowed_headers:
+      - "Authorization"
+      - "Content-Type"
+    allow_credentials: true
+`)
+	if err := SafeWriteFile(cfgPath, initial, 0o600); err != nil {
+		t.Fatalf("write initial config: %v", err)
+	}
+	if _, err := Load(Options{ConfigFile: cfgPath, Watch: true}); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if got := Get().Server.Port; got != ":8181" {
+		t.Fatalf("expected initial port :8181, got %q", got)
+	}
+
+	invalidReload := []byte(`
+server:
+  port: ":9191"
+  shutdown_timeout_seconds: 10
+database:
+  dsn: "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+  max_open_conns: 10
+  max_idle_conns: 5
+  auto_migrate: false
+auth:
+  access_token_ttl_seconds: 900
+  refresh_token_ttl_seconds: 604800
+  jwt_signing_key: "test-signing-key"
+  password_hash_cost: 12
+  api_token_enabled: true
+  api_token_header_name: "X-API-Token"
+  api_token_ttl_seconds: 2592000
+  api_token_allow_bearer: false
+security:
+  cors:
+    enabled: true
+    allowed_origins:
+      - "*"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+    allowed_headers:
+      - "Authorization"
+      - "Content-Type"
+    allow_credentials: true
+`)
+	if err := os.WriteFile(cfgPath, invalidReload, 0o600); err != nil {
+		t.Fatalf("write invalid config: %v", err)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	if got := Get().Server.Port; got != ":8181" {
+		t.Fatalf("invalid reload should keep previous config, got %q", got)
+	}
+}
+
+func TestSecureDefaults(t *testing.T) {
+	cfg := defaultConfig()
+	if cfg.Database.AutoMigrate {
+		t.Fatal("expected database.auto_migrate default to false")
+	}
+	if cfg.Logging.Level != "info" {
+		t.Fatalf("expected logging.level default info, got %q", cfg.Logging.Level)
+	}
+	if cfg.Security.RateLimit.Enabled {
+		t.Fatal("expected security.rate_limit.enabled default false")
+	}
+	if cfg.Security.CORS.Enabled {
+		t.Fatal("expected security.cors.enabled default false")
+	}
+}

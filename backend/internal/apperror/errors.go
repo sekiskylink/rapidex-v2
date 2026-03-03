@@ -17,6 +17,7 @@ const (
 	CodeAuthRefreshReuse = "AUTH_REFRESH_REUSED"
 	CodeAuthRefreshBad   = "AUTH_REFRESH_INVALID"
 	CodeValidationFailed = "VALIDATION_ERROR"
+	CodeRateLimited      = "RATE_LIMITED"
 )
 
 type AppError struct {
@@ -96,6 +97,10 @@ func ValidationWithDetails(message string, details map[string]any) *AppError {
 		details = map[string]any{}
 	}
 	return &AppError{HTTPStatus: http.StatusBadRequest, Code: CodeValidationFailed, Message: message, Details: details}
+}
+
+func RateLimited(message string) *AppError {
+	return &AppError{HTTPStatus: http.StatusTooManyRequests, Code: CodeRateLimited, Message: message, Details: map[string]any{}}
 }
 
 func requestIDFromContext(c *gin.Context) string {

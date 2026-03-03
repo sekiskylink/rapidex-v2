@@ -43,6 +43,20 @@ type Config struct {
 		APITokenTTLSeconds     int    `mapstructure:"api_token_ttl_seconds"`
 		APITokenAllowBearer    bool   `mapstructure:"api_token_allow_bearer"`
 	} `mapstructure:"auth"`
+	Security struct {
+		RateLimit struct {
+			Enabled           bool    `mapstructure:"enabled"`
+			RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+			Burst             int     `mapstructure:"burst"`
+		} `mapstructure:"rate_limit"`
+		CORS struct {
+			Enabled          bool     `mapstructure:"enabled"`
+			AllowedOrigins   []string `mapstructure:"allowed_origins"`
+			AllowedMethods   []string `mapstructure:"allowed_methods"`
+			AllowedHeaders   []string `mapstructure:"allowed_headers"`
+			AllowCredentials bool     `mapstructure:"allow_credentials"`
+		} `mapstructure:"cors"`
+	} `mapstructure:"security"`
 	Seed struct {
 		EnableDevBootstrap bool `mapstructure:"enable_dev_bootstrap"`
 	} `mapstructure:"seed"`
@@ -146,6 +160,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.api_token_header_name", "X-API-Token")
 	v.SetDefault("auth.api_token_ttl_seconds", 2592000)
 	v.SetDefault("auth.api_token_allow_bearer", false)
+	v.SetDefault("security.rate_limit.enabled", false)
+	v.SetDefault("security.rate_limit.requests_per_second", 5.0)
+	v.SetDefault("security.rate_limit.burst", 10)
+	v.SetDefault("security.cors.enabled", false)
+	v.SetDefault("security.cors.allowed_origins", []string{})
+	v.SetDefault("security.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+	v.SetDefault("security.cors.allowed_headers", []string{"Authorization", "Content-Type", "X-API-Token", "X-Request-Id"})
+	v.SetDefault("security.cors.allow_credentials", false)
 	v.SetDefault("seed.enable_dev_bootstrap", false)
 }
 
@@ -172,6 +194,14 @@ func defaultConfig() Config {
 	cfg.Auth.APITokenHeaderName = "X-API-Token"
 	cfg.Auth.APITokenTTLSeconds = 2592000
 	cfg.Auth.APITokenAllowBearer = false
+	cfg.Security.RateLimit.Enabled = false
+	cfg.Security.RateLimit.RequestsPerSecond = 5
+	cfg.Security.RateLimit.Burst = 10
+	cfg.Security.CORS.Enabled = false
+	cfg.Security.CORS.AllowedOrigins = []string{}
+	cfg.Security.CORS.AllowedMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	cfg.Security.CORS.AllowedHeaders = []string{"Authorization", "Content-Type", "X-API-Token", "X-Request-Id"}
+	cfg.Security.CORS.AllowCredentials = false
 	cfg.Seed.EnableDevBootstrap = false
 	return cfg
 }
@@ -238,6 +268,34 @@ func validate(cfg Config) error {
 	}
 	if cfg.Auth.APITokenTTLSeconds <= 0 {
 		return errors.New("auth.api_token_ttl_seconds must be > 0")
+	}
+	if cfg.Security.RateLimit.Enabled {
+		if cfg.Security.RateLimit.RequestsPerSecond <= 0 {
+			return errors.New("security.rate_limit.requests_per_second must be > 0 when rate limiting is enabled")
+		}
+		if cfg.Security.RateLimit.Burst <= 0 {
+			return errors.New("security.rate_limit.burst must be > 0 when rate limiting is enabled")
+		}
+	}
+	if cfg.Security.CORS.Enabled {
+		if len(cfg.Security.CORS.AllowedOrigins) == 0 {
+			return errors.New("security.cors.allowed_origins must not be empty when CORS is enabled")
+		}
+		if len(cfg.Security.CORS.AllowedMethods) == 0 {
+			return errors.New("security.cors.allowed_methods must not be empty when CORS is enabled")
+		}
+		if len(cfg.Security.CORS.AllowedHeaders) == 0 {
+			return errors.New("security.cors.allowed_headers must not be empty when CORS is enabled")
+		}
+		for _, origin := range cfg.Security.CORS.AllowedOrigins {
+			trimmed := strings.TrimSpace(origin)
+			if trimmed == "" {
+				return errors.New("security.cors.allowed_origins must not contain empty values")
+			}
+			if cfg.Security.CORS.AllowCredentials && strings.Contains(trimmed, "*") {
+				return errors.New("security.cors.allowed_origins must not contain wildcards when allow_credentials is true")
+			}
+		}
 	}
 	return nil
 }

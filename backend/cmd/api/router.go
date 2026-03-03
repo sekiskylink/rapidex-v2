@@ -19,7 +19,8 @@ type AppDeps struct {
 	Version             string
 	Commit              string
 	BuildDate           string
-	CORSAllowedOrigins  []string
+	CORSConfig          middleware.CORSConfig
+	RateLimitConfig     middleware.RateLimitConfig
 	AuthHandler         *auth.Handler
 	AuthService         *auth.Service
 	JWTManager          *auth.JWTManager
@@ -35,7 +36,9 @@ func newRouter(deps AppDeps) *gin.Engine {
 	r.Use(middleware.RequestID())
 	r.Use(middleware.AccessLog())
 	r.Use(gin.Recovery())
-	r.Use(middleware.CORS(deps.CORSAllowedOrigins))
+	if deps.CORSConfig.Enabled {
+		r.Use(middleware.CORS(deps.CORSConfig))
+	}
 	if deps.AuthService != nil {
 		r.Use(middleware.APITokenAuth(deps.AuthService, deps.APITokenHeaderName, deps.APITokenAllowBearer))
 	}
@@ -70,9 +73,10 @@ func newRouter(deps AppDeps) *gin.Engine {
 	})
 
 	if deps.AuthHandler != nil && deps.JWTManager != nil {
+		authRateLimiter := middleware.NewAuthRateLimiter(deps.RateLimitConfig)
 		authGroup := api.Group("/auth")
-		authGroup.POST("/login", deps.AuthHandler.Login)
-		authGroup.POST("/refresh", deps.AuthHandler.Refresh)
+		authGroup.POST("/login", authRateLimiter.Middleware(), deps.AuthHandler.Login)
+		authGroup.POST("/refresh", authRateLimiter.Middleware(), deps.AuthHandler.Refresh)
 		authGroup.POST("/logout", deps.AuthHandler.Logout)
 		authGroup.GET("/me", middleware.JWTAuth(deps.JWTManager), middleware.RequireJWTUser(), deps.AuthHandler.Me)
 

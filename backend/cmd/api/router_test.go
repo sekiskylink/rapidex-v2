@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -78,5 +79,50 @@ func TestVersionEndpointReturnsBuildMetadata(t *testing.T) {
 	}
 	if body["buildDate"] != "2026-03-03T00:00:00Z" {
 		t.Fatalf("expected buildDate to be 2026-03-03T00:00:00Z, got %q", body["buildDate"])
+	}
+}
+
+func TestHealthEndpointDoesNotLeakSensitiveData(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	db := sqlx.NewDb(sqlDB, "sqlmock")
+	mock.ExpectPing()
+
+	r := newRouter(AppDeps{DB: db, Version: "0.1.0"})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	bodyText := strings.ToLower(w.Body.String())
+	for _, forbidden := range []string{"password", "secret", "token", "jwt", "env", "dsn", "authorization"} {
+		if strings.Contains(bodyText, forbidden) {
+			t.Fatalf("health response leaked forbidden term %q: %s", forbidden, w.Body.String())
+		}
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, ok := body["status"]; !ok {
+		t.Fatal("expected health status field")
+	}
+	if _, ok := body["db"]; !ok {
+		t.Fatal("expected health db field")
+	}
+	if _, ok := body["version"]; !ok {
+		t.Fatal("expected health version field")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sqlmock expectations: %v", err)
 	}
 }

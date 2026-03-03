@@ -28,5 +28,27 @@ auth:
   api_token_ttl_seconds: 2592000
   api_token_allow_bearer: false
 
+security:
+  rate_limit:
+    enabled: false
+    requests_per_second: 5
+    burst: 10
+  cors:
+    enabled: false
+    allowed_origins: []
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "PATCH"
+      - "DELETE"
+      - "OPTIONS"
+    allowed_headers:
+      - "Authorization"
+      - "Content-Type"
+      - "X-API-Token"
+      - "X-Request-Id"
+    allow_credentials: false
+
 seed:
   enable_dev_bootstrap: false
