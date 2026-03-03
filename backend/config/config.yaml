@@ -34,8 +34,12 @@ security:
     requests_per_second: 5
     burst: 10
   cors:
-    enabled: false
-    allowed_origins: []
+    enabled: true
+    allowed_origins:
+      - "wails://wails.localhost"
+      - "wails://wails.localhost:*"
+      - "http://localhost:5173"
+      - "http://127.0.0.1:5173"
     allowed_methods:
       - "GET"
       - "POST"
