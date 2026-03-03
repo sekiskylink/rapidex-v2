@@ -10,6 +10,22 @@ export interface UiPrefs {
   navCollapsed: boolean
 }
 
+export interface TablePinnedColumns {
+  left: string[]
+  right: string[]
+}
+
+export interface TablePrefsV1 {
+  version: 1
+  pageSize: number
+  density: 'compact' | 'standard' | 'comfortable'
+  columnVisibility: Record<string, boolean>
+  columnOrder: string[]
+  pinnedColumns: TablePinnedColumns
+}
+
+export type TablePrefsMap = Record<string, TablePrefsV1>
+
 export interface AppSettings {
   apiBaseUrl: string
   authMode: AuthMode
@@ -17,6 +33,7 @@ export interface AppSettings {
   refreshToken?: string
   requestTimeoutSeconds: number
   uiPrefs: UiPrefs
+  tablePrefs: TablePrefsMap
 }
 
 export interface SaveSettingsPatch {
@@ -26,6 +43,7 @@ export interface SaveSettingsPatch {
   refreshToken?: string
   requestTimeoutSeconds?: number
   uiPrefs?: Partial<UiPrefs>
+  tablePrefs?: TablePrefsMap
 }
 
 export interface SettingsStore {
@@ -45,4 +63,5 @@ export const defaultSettings: AppSettings = {
   authMode: 'password',
   requestTimeoutSeconds: 15,
   uiPrefs: defaultUiPrefs,
+  tablePrefs: {},
 }

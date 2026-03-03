@@ -189,8 +189,8 @@ func (r *fakeAuditRepo) Insert(_ context.Context, event audit.Event) error {
 	return nil
 }
 
-func (r *fakeAuditRepo) List(_ context.Context, _ audit.ListFilter) ([]audit.Record, error) {
-	return nil, nil
+func (r *fakeAuditRepo) List(_ context.Context, _ audit.ListFilter) (audit.ListResult, error) {
+	return audit.ListResult{}, nil
 }
 
 func newTestService(repo *fakeRepo, auditRepo *fakeAuditRepo) *Service {
@@ -198,6 +198,7 @@ func newTestService(repo *fakeRepo, auditRepo *fakeAuditRepo) *Service {
 		repo,
 		audit.NewService(auditRepo),
 		NewJWTManager("test-key", 5*time.Minute),
+		nil,
 		5*time.Minute,
 		24*time.Hour,
 		24*time.Hour,

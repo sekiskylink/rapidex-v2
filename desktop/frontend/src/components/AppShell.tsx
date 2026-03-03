@@ -30,6 +30,7 @@ import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
+import { useSessionPrincipal } from '../auth/hooks'
 import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
@@ -38,6 +39,12 @@ const DRAWER_WIDTH = 248
 const MINI_DRAWER_WIDTH = 76
 
 function sectionTitle(pathname: string) {
+  if (pathname.startsWith('/users')) {
+    return 'Users'
+  }
+  if (pathname.startsWith('/audit')) {
+    return 'Audit'
+  }
   if (pathname.startsWith('/settings')) {
     return 'Settings'
   }
@@ -59,6 +66,7 @@ export function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const { prefs, setNavCollapsed } = useThemePreferences()
+  const principal = useSessionPrincipal()
 
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
@@ -82,21 +90,25 @@ export function AppShell() {
       active: pathname.startsWith('/settings'),
       disabled: false,
     },
-    {
+  ]
+  if (principal && (principal.permissions.includes('users.read') || principal.permissions.includes('users.write'))) {
+    navItems.push({
       label: 'Users',
       path: '/users',
       icon: <GroupRoundedIcon fontSize="small" />,
-      active: false,
-      disabled: true,
-    },
-    {
+      active: pathname.startsWith('/users'),
+      disabled: false,
+    })
+  }
+  if (principal && principal.permissions.includes('audit.read')) {
+    navItems.push({
       label: 'Audit',
       path: '/audit',
       icon: <FactCheckRoundedIcon fontSize="small" />,
-      active: false,
-      disabled: true,
-    },
-  ]
+      active: pathname.startsWith('/audit'),
+      disabled: false,
+    })
+  }
 
   const closeMenus = () => {
     setMenuAnchor(null)
@@ -241,7 +253,9 @@ export function AppShell() {
           </Typography>
           <Tooltip title="Open user menu">
             <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)}>
-              <Avatar sx={{ width: 32, height: 32 }}>U</Avatar>
+              <Avatar sx={{ width: 32, height: 32 }}>
+                {(principal?.username ?? 'U').slice(0, 1).toUpperCase()}
+              </Avatar>
             </IconButton>
           </Tooltip>
           <Menu

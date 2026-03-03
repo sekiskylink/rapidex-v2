@@ -35,14 +35,14 @@ func (f *fakeLocker) Release(ctx context.Context, db *sqlx.DB, lockID int64) err
 }
 
 type fakeUpRunner struct {
-	upFn    func(databaseDSN, migrationsPath string) error
+	upFn    func(databaseDSN string) error
 	upCalls int
 }
 
-func (f *fakeUpRunner) Up(databaseDSN, migrationsPath string) error {
+func (f *fakeUpRunner) Up(databaseDSN string) error {
 	f.upCalls++
 	if f.upFn != nil {
-		return f.upFn(databaseDSN, migrationsPath)
+		return f.upFn(databaseDSN)
 	}
 	return nil
 }
@@ -55,7 +55,6 @@ func TestRunSkipsWhenAutoMigrateDisabled(t *testing.T) {
 	err := runner.Run(context.Background(), Config{
 		AutoMigrate: false,
 		LockTimeout: 30 * time.Second,
-		Path:        "file://migrations",
 	}, nil, "postgres://test")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -71,7 +70,7 @@ func TestRunSkipsWhenAutoMigrateDisabled(t *testing.T) {
 func TestRunTreatsErrNoChangeAsSuccess(t *testing.T) {
 	locker := &fakeLocker{}
 	up := &fakeUpRunner{
-		upFn: func(databaseDSN, migrationsPath string) error {
+		upFn: func(databaseDSN string) error {
 			return gomigrate.ErrNoChange
 		},
 	}
@@ -80,7 +79,6 @@ func TestRunTreatsErrNoChangeAsSuccess(t *testing.T) {
 	err := runner.Run(context.Background(), Config{
 		AutoMigrate: true,
 		LockTimeout: 30 * time.Second,
-		Path:        "file://migrations",
 	}, nil, "postgres://test")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -109,7 +107,6 @@ func TestRunLockAcquisitionRespectsTimeout(t *testing.T) {
 	err := runner.Run(context.Background(), Config{
 		AutoMigrate: true,
 		LockTimeout: 25 * time.Millisecond,
-		Path:        "file://migrations",
 	}, nil, "postgres://test")
 	if err == nil {
 		t.Fatal("expected timeout error")

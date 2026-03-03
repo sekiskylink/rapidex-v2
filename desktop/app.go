@@ -15,21 +15,23 @@ type App struct {
 }
 
 type Settings struct {
-	APIBaseURL            string  `json:"apiBaseUrl"`
-	AuthMode              string  `json:"authMode"`
-	APIToken              *string `json:"apiToken,omitempty"`
-	RefreshToken          *string `json:"refreshToken,omitempty"`
-	RequestTimeoutSeconds int     `json:"requestTimeoutSeconds"`
-	UIPrefs               UIPrefs `json:"uiPrefs"`
+	APIBaseURL            string                `json:"apiBaseUrl"`
+	AuthMode              string                `json:"authMode"`
+	APIToken              *string               `json:"apiToken,omitempty"`
+	RefreshToken          *string               `json:"refreshToken,omitempty"`
+	RequestTimeoutSeconds int                   `json:"requestTimeoutSeconds"`
+	UIPrefs               UIPrefs               `json:"uiPrefs"`
+	TablePrefs            map[string]TablePrefs `json:"tablePrefs"`
 }
 
 type SettingsPatch struct {
-	APIBaseURL            *string       `json:"apiBaseUrl,omitempty"`
-	AuthMode              *string       `json:"authMode,omitempty"`
-	APIToken              *string       `json:"apiToken,omitempty"`
-	RefreshToken          *string       `json:"refreshToken,omitempty"`
-	RequestTimeoutSeconds *int          `json:"requestTimeoutSeconds,omitempty"`
-	UIPrefs               *UIPrefsPatch `json:"uiPrefs,omitempty"`
+	APIBaseURL            *string                `json:"apiBaseUrl,omitempty"`
+	AuthMode              *string                `json:"authMode,omitempty"`
+	APIToken              *string                `json:"apiToken,omitempty"`
+	RefreshToken          *string                `json:"refreshToken,omitempty"`
+	RequestTimeoutSeconds *int                   `json:"requestTimeoutSeconds,omitempty"`
+	UIPrefs               *UIPrefsPatch          `json:"uiPrefs,omitempty"`
+	TablePrefs            *map[string]TablePrefs `json:"tablePrefs,omitempty"`
 }
 
 type UIPrefs struct {
@@ -42,6 +44,20 @@ type UIPrefsPatch struct {
 	ThemeMode     *string `json:"themeMode,omitempty"`
 	PalettePreset *string `json:"palettePreset,omitempty"`
 	NavCollapsed  *bool   `json:"navCollapsed,omitempty"`
+}
+
+type TablePrefs struct {
+	Version          int              `json:"version"`
+	PageSize         int              `json:"pageSize"`
+	Density          string           `json:"density"`
+	ColumnVisibility map[string]bool  `json:"columnVisibility"`
+	ColumnOrder      []string         `json:"columnOrder"`
+	PinnedColumns    TablePinnedModel `json:"pinnedColumns"`
+}
+
+type TablePinnedModel struct {
+	Left  []string `json:"left"`
+	Right []string `json:"right"`
 }
 
 // NewApp creates a new App application struct
@@ -102,6 +118,9 @@ func (a *App) SaveSettings(patch SettingsPatch) (Settings, error) {
 			next.UIPrefs.NavCollapsed = *patch.UIPrefs.NavCollapsed
 		}
 	}
+	if patch.TablePrefs != nil {
+		next.TablePrefs = *patch.TablePrefs
+	}
 
 	next = normalizeSettings(next)
 	if err := validateSettings(next); err != nil {
@@ -131,6 +150,7 @@ func defaultSettings() Settings {
 			PalettePreset: "ocean",
 			NavCollapsed:  false,
 		},
+		TablePrefs: map[string]TablePrefs{},
 	}
 }
 
@@ -168,7 +188,54 @@ func normalizeSettings(in Settings) Settings {
 			out.RefreshToken = &token
 		}
 	}
+	if out.TablePrefs == nil {
+		out.TablePrefs = map[string]TablePrefs{}
+	}
+	normalizedTablePrefs := make(map[string]TablePrefs, len(out.TablePrefs))
+	for key, pref := range out.TablePrefs {
+		storageKey := strings.TrimSpace(key)
+		if storageKey == "" {
+			continue
+		}
+		normalizedTablePrefs[storageKey] = normalizeTablePrefs(pref)
+	}
+	out.TablePrefs = normalizedTablePrefs
 	return out
+}
+
+func normalizeTablePrefs(in TablePrefs) TablePrefs {
+	out := in
+	if out.Version <= 0 {
+		out.Version = 1
+	}
+	if out.PageSize <= 0 {
+		out.PageSize = 25
+	}
+	if out.Density != "compact" && out.Density != "comfortable" {
+		out.Density = "standard"
+	}
+	if out.ColumnVisibility == nil {
+		out.ColumnVisibility = map[string]bool{}
+	}
+	out.ColumnOrder = normalizeStringSlice(out.ColumnOrder)
+	out.PinnedColumns.Left = normalizeStringSlice(out.PinnedColumns.Left)
+	out.PinnedColumns.Right = normalizeStringSlice(out.PinnedColumns.Right)
+	return out
+}
+
+func normalizeStringSlice(input []string) []string {
+	if len(input) == 0 {
+		return []string{}
+	}
+	result := make([]string, 0, len(input))
+	for _, item := range input {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
 }
 
 func validateSettings(in Settings) error {

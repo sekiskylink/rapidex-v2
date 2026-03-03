@@ -87,7 +87,7 @@ func (h *Handler) Me(c *gin.Context) {
 		apperror.Write(c, apperror.Unauthorized("Missing authorization token"))
 		return
 	}
-	c.JSON(http.StatusOK, h.service.Me(claims))
+	c.JSON(http.StatusOK, h.service.Me(c.Request.Context(), claims))
 }
 
 func (h *Handler) ListAPITokens(c *gin.Context) {

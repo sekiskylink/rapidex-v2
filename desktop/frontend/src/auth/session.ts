@@ -9,6 +9,14 @@ interface SessionData {
 interface SessionState {
   accessToken?: string
   expiresAt?: number
+  principal?: SessionPrincipal
+}
+
+export interface SessionPrincipal {
+  id: number
+  username: string
+  roles: string[]
+  permissions: string[]
 }
 
 type SessionExpiredReason = 'expired' | 'network'
@@ -17,6 +25,13 @@ const state: SessionState = {}
 
 let settingsStoreRef: SettingsStore | null = null
 let sessionExpiryHandler: ((reason: SessionExpiredReason) => void) | null = null
+const authStateListeners = new Set<() => void>()
+
+function notifyAuthStateChange() {
+  for (const listener of authStateListeners) {
+    listener()
+  }
+}
 
 export function configureSessionStorage(settingsStore: SettingsStore) {
   settingsStoreRef = settingsStore
@@ -37,14 +52,17 @@ export async function setSession(session: SessionData) {
   if (settingsStoreRef) {
     await settingsStoreRef.saveSettings({ refreshToken: session.refreshToken })
   }
+  notifyAuthStateChange()
 }
 
 export async function clearSession() {
   state.accessToken = undefined
   state.expiresAt = undefined
+  state.principal = undefined
   if (settingsStoreRef) {
     await settingsStoreRef.saveSettings({ refreshToken: '' })
   }
+  notifyAuthStateChange()
 }
 
 export function isAuthenticated() {
@@ -57,6 +75,35 @@ export function getAccessToken() {
 
 export function getAccessTokenExpiresAt() {
   return state.expiresAt
+}
+
+export function setSessionPrincipal(principal: SessionPrincipal) {
+  state.principal = {
+    id: principal.id,
+    username: principal.username,
+    roles: [...principal.roles],
+    permissions: [...principal.permissions],
+  }
+  notifyAuthStateChange()
+}
+
+export function getSessionPrincipal() {
+  return state.principal
+}
+
+export function can(permission: string) {
+  const principal = state.principal
+  if (!principal) {
+    return false
+  }
+  return principal.permissions.includes(permission)
+}
+
+export function subscribeAuthState(listener: () => void) {
+  authStateListeners.add(listener)
+  return () => {
+    authStateListeners.delete(listener)
+  }
 }
 
 export async function getPersistedRefreshToken() {

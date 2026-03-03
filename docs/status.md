@@ -987,3 +987,56 @@ Verification for this update:
   - invalid startup config failure
   - invalid hot reload rejection with prior config retention
   - health endpoint non-sensitive response assertions.
+
+## Milestone 13 — Phase S3 Step 1 Web Frontend Scaffold & Baseline (Complete)
+
+### What changed
+- Scaffolded `web/` as a standalone Vite + React + TypeScript app (incremental extension of existing placeholder `web/.gitkeep`).
+- Added baseline dependencies for:
+  - Material UI
+  - TanStack Router
+  - TanStack Query
+- Added environment variable support and examples:
+  - `VITE_API_BASE_URL` (required)
+  - `VITE_APP_NAME` (optional)
+  - `VITE_ENABLE_DEVTOOLS` (optional placeholder for future use)
+- Added `web/.env.example`.
+- Added `web/README.md` with setup/dev/build/test instructions.
+- Implemented web routes and baseline pages:
+  - `/` redirects to `/login`
+  - `/login` placeholder page
+  - `/dashboard` placeholder page
+  - NotFound page for unknown routes
+  - global route error boundary component
+- Added minimal route smoke tests in `web/src/routes.test.tsx`.
+- Added root Makefile targets for web:
+  - `make web-dev`
+  - `make web-build`
+  - `make web-test`
+- Added prompt traceability copy:
+  - `docs/prompts/2026-03-03-phase-s3-web-step1.md`
+- Updated `.gitignore` to include web artifacts:
+  - `web/node_modules/`
+  - `web/dist/`
+  - `web/.env`
+
+### How to run
+- Install deps: `cd web && npm install`
+- Start dev server: `npm run dev`
+- Build: `npm run build`
+- Test: `npm run test`
+
+### How to test
+- Backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Desktop route tests: `cd desktop/frontend && npm test`
+- Web route tests: `cd web && npm test`
+
+### Verification summary
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`: PASS
+- `cd desktop/frontend && npm test`: PASS
+- `cd web && npm run test`: PASS (3 tests)
+- `cd web && npm run build`: PASS
+- `cd web && npm run dev -- --host 127.0.0.1 --port 4173 --strictPort`: PASS (server started; `Local: http://127.0.0.1:4173/`)
+
+### Known follow-ups
+- Full web auth flow and RBAC gating are intentionally deferred to later S3 steps.

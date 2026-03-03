@@ -8,13 +8,18 @@ import {
   useRouter,
 } from '@tanstack/react-router'
 import App from './App'
-import { configureSessionStorage, isAuthenticated } from './auth/session'
+import { createApiClient } from './api/client'
+import { useSessionPrincipal } from './auth/hooks'
+import { configureSessionStorage, getSessionPrincipal, isAuthenticated, setSessionPrincipal } from './auth/session'
 import { AppShell } from './components/AppShell'
+import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ForbiddenPage } from './pages/ForbiddenPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SetupPage } from './pages/SetupPage'
+import { UsersPage } from './pages/UsersPage'
 import { settingsStore } from './settings/store'
 import type { SettingsStore } from './settings/types'
 
@@ -95,10 +100,18 @@ function AuthenticatedGatePage() {
   const router = useRouter()
   const navigate = useNavigate()
   const [ready, setReady] = React.useState(false)
+  const settingsStore = router.options.context.settingsStore
+  const apiClient = React.useMemo(
+    () =>
+      createApiClient({
+        getSettings: () => settingsStore.loadSettings(),
+      }),
+    [settingsStore],
+  )
 
   React.useEffect(() => {
     let active = true
-    router.options.context.settingsStore.loadSettings().then((settings) => {
+    settingsStore.loadSettings().then(async (settings) => {
       if (!active) {
         return
       }
@@ -113,19 +126,56 @@ function AuthenticatedGatePage() {
         return
       }
 
+      if (!getSessionPrincipal()) {
+        try {
+          const me = await apiClient.me()
+          if (!active) {
+            return
+          }
+          setSessionPrincipal({
+            id: me.id,
+            username: me.username,
+            roles: me.roles ?? [],
+            permissions: me.permissions ?? [],
+          })
+        } catch {
+          if (!active) {
+            return
+          }
+          void navigate({ to: '/login', replace: true })
+          return
+        }
+      }
+
       setReady(true)
     })
 
     return () => {
       active = false
     }
-  }, [navigate, router.options.context.settingsStore])
+  }, [apiClient, navigate, settingsStore])
 
   if (!ready) {
     return null
   }
 
   return <AppShell />
+}
+
+function UsersRoutePage() {
+  const principal = useSessionPrincipal()
+  if (principal && (principal.permissions.includes('users.read') || principal.permissions.includes('users.write'))) {
+    return <UsersPage />
+  }
+  return <ForbiddenPage />
+}
+
+function AuditRoutePage() {
+  const principal = useSessionPrincipal()
+  if (principal?.permissions.includes('audit.read')) {
+    return <AuditPage />
+  }
+  return <ForbiddenPage />
 }
 
 const indexRoute = createRoute({
@@ -164,11 +214,23 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
+const usersRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/users',
+  component: UsersRoutePage,
+})
+
+const auditRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/audit',
+  component: AuditRoutePage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
   loginRoute,
-  authenticatedRoute.addChildren([dashboardRoute, settingsRoute]),
+  authenticatedRoute.addChildren([dashboardRoute, settingsRoute, usersRoute, auditRoute]),
 ])
 
 export function createAppRouter(

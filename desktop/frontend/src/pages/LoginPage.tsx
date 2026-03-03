@@ -13,7 +13,7 @@ import {
 } from '@mui/material'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { ApiError, createApiClient } from '../api/client'
-import { setSession } from '../auth/session'
+import { clearSession, setSession, setSessionPrincipal } from '../auth/session'
 
 export function LoginPage() {
   const router = useRouter()
@@ -45,8 +45,16 @@ export function LoginPage() {
         refreshToken: response.refreshToken,
         expiresAt: Date.now() + response.expiresIn * 1000,
       })
+      const me = await apiClient.me()
+      setSessionPrincipal({
+        id: me.id,
+        username: me.username,
+        roles: me.roles ?? [],
+        permissions: me.permissions ?? [],
+      })
       await navigate({ to: '/dashboard', replace: true })
     } catch (error) {
+      await clearSession()
       if (error instanceof ApiError && error.status === 401) {
         setErrorMessage('Invalid username or password.')
       } else {

@@ -315,4 +315,229 @@ repo/
 
 ---
 
+# Phase S2 — Platform Hardening & Release Readiness
+
+## 9. Packaging & Versioning
+
+### 9.1 Backend Versioning
+- Build-time version injection (commit, tag, build date)
+- /api/v1/version returns:
+  - version
+  - commit
+  - build date
+
+### 9.2 Desktop Version Display
+- About page shows:
+  - Desktop version
+  - Backend version (if reachable)
+
+### 9.3 CI Requirements
+- Backend tests must pass
+- Frontend tests must pass
+- Frontend build must succeed
+- CI fails on any test failure
+
+## 10. Observability & Error Handling (Milestone 12 Part A)
+
+### 10.1 Structured Logging
+- Backend must use structured logging (single logger implementation).
+- Log level must be configurable (debug/info/warn/error).
+- Logging format must support JSON for production.
+- Console format may be used for development.
+- Logs must never include:
+  - passwords
+  - JWTs
+  - refresh tokens
+  - API tokens
+  - secrets
+
+### 10.2 Request Correlation
+- Every HTTP request must have a Request ID.
+- If not provided, backend must generate one.
+- Request ID must:
+  - be accessible in request context
+  - be included in response headers
+  - be included in all logs for that request
+
+### 10.3 Access Logging
+- Backend must log per-request:
+  - method
+  - path
+  - status code
+  - duration
+  - request_id
+- Authorization headers and token values must not be logged.
+
+### 10.4 Centralized Error Handling
+- All errors must follow a consistent JSON shape:
+
+  ```json
+  {
+    "error": {
+      "code": "<CODE>",
+      "message": "<MESSAGE>",
+      "details": {}
+    }
+  }
+  ```
+
+---
+
+## 11. Security & Operational Baseline (Milestone 12 Part B)
+
+This section defines the minimum security and operational standards required
+before the system is considered production-ready.
+
+All items in this section must be fully implemented and tested
+before Milestone 12 is marked complete.
+
+---
+
+### 11.1 Rate Limiting for Authentication
+
+The backend must implement rate limiting for sensitive authentication endpoints:
+
+- POST `/api/v1/auth/login`
+- POST `/api/v1/auth/refresh`
+
+Requirements:
+
+- Rate limiting must be configurable via application configuration.
+- Default behavior: disabled unless explicitly enabled.
+- Rate limiting must support:
+  - configurable request rate
+  - configurable burst size
+- Rate-limited responses must:
+  - return HTTP 429
+  - return error code `RATE_LIMITED`
+- Rate limiting must not log secrets.
+- Rate limiting must not degrade overall system stability.
+
+---
+
+### 11.2 CORS Support for Optional Web Frontend
+
+The backend must support configurable Cross-Origin Resource Sharing (CORS)
+to enable an optional web frontend.
+
+Requirements:
+
+- CORS must be disabled by default.
+- Configuration must allow specifying:
+  - allowed origins
+  - allowed methods
+  - allowed headers
+  - allow credentials (boolean)
+- When disabled, no CORS headers should be emitted.
+- CORS configuration must not allow wildcard origins when credentials are enabled.
+
+---
+
+### 11.3 Configuration Validation
+
+The backend must validate configuration at startup.
+
+Requirements:
+
+- Invalid configuration must prevent server startup.
+- Validation must include:
+  - server port
+  - database DSN
+  - JWT signing key (must not be empty outside test environments)
+  - rate limit parameters (if enabled)
+  - CORS origin formats (if enabled)
+- On hot reload:
+  - invalid configuration must be rejected
+  - previously valid configuration must remain active
+  - rejection must be logged without leaking secrets
+
+---
+
+### 11.4 Safe Defaults
+
+The application must enforce secure defaults.
+
+Requirements:
+
+- Auto-migrate must default to `false` in production environments.
+- JWT signing key must not be empty outside test environments.
+- Security-sensitive features must default to secure configurations.
+- Debug logging must not be enabled by default in production.
+
+---
+
+### 11.5 Health Endpoint (Non-sensitive)
+
+The `/api/v1/health` endpoint must:
+
+- Not expose secrets.
+- Not expose environment variables.
+- Not expose full configuration.
+- May include:
+  - service status
+  - version
+  - database connectivity status
+  - optional uptime
+
+Health endpoint must remain safe to expose to infrastructure monitoring systems.
+
+---
+
+### 11.6 Mandatory Test Coverage
+
+Milestone 12 Part B is complete only when:
+
+- Rate limiting behavior is tested.
+- CORS enabled/disabled behavior is tested.
+- Configuration validation is tested.
+- Invalid hot reload behavior is tested.
+- Health endpoint does not expose sensitive data.
+- All backend tests pass.
+- Existing frontend tests continue to pass.
+
+---
+
+# Phase S3 — Web Frontend (Optional but Supported)
+
+Because Wails is **not** a web deployment target, the system must support an optional **web frontend** that consumes the **same backend API contract** used by the desktop app.
+
+## 12. Web Frontend (Optional)
+
+### 12.1 Goals
+- Provide a browser-based UI for the same system features supported by the desktop app.
+- Reuse the same backend endpoints, auth contract, RBAC rules, and error formats.
+- Keep desktop and web implementations independent, while optionally sharing UI components/utilities.
+
+### 12.2 Non-Goals
+- The web frontend must **not** introduce a second backend.
+- The web frontend must **not** bypass backend authorization checks (RBAC remains server-enforced).
+- No requirement to implement offline/sync behavior for web unless explicitly added later.
+
+### 12.3 Repository Layout
+- Create a dedicated web app under `web/`:
+  - `web/` (React + TypeScript)
+  - `backend/` (existing Gin API)
+  - optional `packages/` for shared UI/utilities (see 12.9)
+- The web app must be buildable independently (no dependency on Wails build).
+
+### 12.4 Web App Setup (Web Variant)
+- Stack:
+  - React + TypeScript
+  - Material UI (same design language as desktop)
+  - TanStack Router (file-based routing if preferred)
+  - TanStack Query for data fetching/caching
+- Environment configuration (at minimum):
+  - `VITE_API_BASE_URL` (e.g., `http://localhost:8080/api/v1`)
+  - `VITE_APP_NAME` (optional)
+  - Optional: `VITE_ENABLE_DEVTOOLS`
+- Provide:
+  - `web/README.md` with local dev steps
+  - `.env.example` in `web/` showing required variables
+
+### 12.5 API Contract Compatibility
+- Web must use the same endpoints, request/response shapes, and pagination conventions as desktop.
+- Web must fully respect standardized error shape:
+  ```json
+  { "error": { "code": "<CODE>", "message": "<MESSAGE>", "details": {} } }
+
 # END (Authoritative)

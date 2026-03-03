@@ -6,7 +6,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BACKEND_LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildDate=$(BUILD_DATE)
 
-.PHONY: backend-build backend-test backend-run desktop-build desktop-dev desktop-test ci deps migrate-up migrate-down migrate-create
+.PHONY: backend-build backend-test backend-run desktop-build desktop-dev desktop-test web-build web-dev web-test ci deps migrate-up migrate-down migrate-create
 
 backend-build:
 	cd backend && mkdir -p bin && GOCACHE=/tmp/go-build go build -ldflags "$(BACKEND_LDFLAGS)" -o bin/basepro-api ./cmd/api
@@ -25,6 +25,15 @@ desktop-dev:
 
 desktop-test:
 	cd desktop/frontend && npm test
+
+web-build:
+	cd web && npm run build
+
+web-dev:
+	cd web && npm run dev
+
+web-test:
+	cd web && npm test
 
 ci: backend-test desktop-test desktop-build
 

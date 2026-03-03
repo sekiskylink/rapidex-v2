@@ -29,6 +29,7 @@ type Repository interface {
 	EnsureRolePermission(ctx context.Context, roleID, permissionID int64) error
 	EnsureUserRole(ctx context.Context, userID, roleID int64) error
 	GetRoleByName(ctx context.Context, name string) (Role, error)
+	ReplaceUserRoles(ctx context.Context, userID int64, roleIDs []int64) error
 }
 
 type SQLRepository struct {
@@ -132,6 +133,37 @@ func (r *SQLRepository) GetRoleByName(ctx context.Context, name string) (Role, e
 		return Role{}, fmt.Errorf("get role by name: %w", err)
 	}
 	return role, nil
+}
+
+func (r *SQLRepository) ReplaceUserRoles(ctx context.Context, userID int64, roleIDs []int64) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin replace user roles tx: %w", err)
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("clear user roles: %w", err)
+	}
+
+	for _, roleID := range roleIDs {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO user_roles (user_id, role_id, created_at)
+			VALUES ($1, $2, NOW())
+		`, userID, roleID); err != nil {
+			return fmt.Errorf("insert user role: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit replace user roles tx: %w", err)
+	}
+	tx = nil
+	return nil
 }
 
 type Service struct {
@@ -292,6 +324,26 @@ func (s *Service) AssignRoleToUser(ctx context.Context, userID int64, roleName s
 		return err
 	}
 	if err := s.repo.EnsureUserRole(ctx, userID, role.ID); err != nil {
+		return err
+	}
+	s.InvalidateUser(userID)
+	return nil
+}
+
+func (s *Service) SetUserRoles(ctx context.Context, userID int64, roleNames []string) error {
+	ids := make([]int64, 0, len(roleNames))
+	for _, roleName := range roleNames {
+		trimmed := strings.TrimSpace(roleName)
+		if trimmed == "" {
+			continue
+		}
+		role, err := s.repo.GetRoleByName(ctx, trimmed)
+		if err != nil {
+			return err
+		}
+		ids = append(ids, role.ID)
+	}
+	if err := s.repo.ReplaceUserRoles(ctx, userID, ids); err != nil {
 		return err
 	}
 	s.InvalidateUser(userID)

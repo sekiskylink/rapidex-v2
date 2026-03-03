@@ -9,12 +9,14 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/rbac"
 )
 
 type Service struct {
 	repo             Repository
 	auditService     *audit.Service
 	jwt              *JWTManager
+	rbacService      *rbac.Service
 	accessTTL        time.Duration
 	refreshTTL       time.Duration
 	apiTokenTTL      time.Duration
@@ -28,6 +30,7 @@ func NewService(
 	repo Repository,
 	auditService *audit.Service,
 	jwt *JWTManager,
+	rbacService *rbac.Service,
 	accessTTL, refreshTTL, apiTokenTTL time.Duration,
 	apiTokenSecret string,
 	apiTokenEnabled bool,
@@ -37,6 +40,7 @@ func NewService(
 		repo:             repo,
 		auditService:     auditService,
 		jwt:              jwt,
+		rbacService:      rbacService,
 		accessTTL:        accessTTL,
 		refreshTTL:       refreshTTL,
 		apiTokenTTL:      apiTokenTTL,
@@ -201,11 +205,22 @@ func (s *Service) Logout(ctx context.Context, refreshToken, authHeader, ip, user
 	return nil
 }
 
-func (s *Service) Me(claims Claims) map[string]any {
+func (s *Service) Me(ctx context.Context, claims Claims) map[string]any {
+	roles := []string{}
+	permissions := []string{}
+	if s.rbacService != nil {
+		if resolvedRoles, err := s.rbacService.RoleNamesForUser(ctx, claims.UserID); err == nil {
+			roles = resolvedRoles
+		}
+		if resolvedPerms, err := s.rbacService.PermissionsForUser(ctx, claims.UserID); err == nil {
+			permissions = resolvedPerms
+		}
+	}
 	return map[string]any{
-		"id":       claims.UserID,
-		"username": claims.Username,
-		"roles":    []string{},
+		"id":          claims.UserID,
+		"username":    claims.Username,
+		"roles":       roles,
+		"permissions": permissions,
 	}
 }
 

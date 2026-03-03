@@ -38,6 +38,10 @@ func (f *fakeRepository) GetRoleByName(_ context.Context, name string) (Role, er
 	return Role{ID: 1, Name: name}, nil
 }
 
+func (f *fakeRepository) ReplaceUserRoles(context.Context, int64, []int64) error {
+	return nil
+}
+
 func TestPermissionsForUserIncludesAssignedPermission(t *testing.T) {
 	repo := &fakeRepository{
 		rolesByUser: map[int64][]Role{10: []Role{{ID: 1, Name: "Manager"}}},

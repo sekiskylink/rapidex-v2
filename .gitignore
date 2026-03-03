@@ -13,6 +13,11 @@ desktop/bin/
 desktop/build/
 desktop/dist/
 
+# Web
+web/node_modules/
+web/dist/
+web/.env
+
 # General
 .DS_Store
 *.log

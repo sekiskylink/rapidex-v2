@@ -8,6 +8,8 @@ import {
   type SaveSettingsPatch,
   type SettingsStore,
   type ThemeMode,
+  type TablePrefsMap,
+  type TablePrefsV1,
   type UiPrefs,
 } from './types'
 import { LoadSettings, ResetSettings, SaveSettings } from '../../wailsjs/go/main/App'
@@ -45,6 +47,66 @@ function readPositiveInteger(value: unknown, fallback: number): number {
     : fallback
 }
 
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
+function normalizeColumnVisibility(input: unknown): Record<string, boolean> {
+  if (!isObjectRecord(input)) {
+    return {}
+  }
+  const result: Record<string, boolean> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === 'boolean') {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+function normalizeTablePref(input: unknown): TablePrefsV1 {
+  const record = isObjectRecord(input) ? input : {}
+  const density =
+    record.density === 'compact' || record.density === 'standard' || record.density === 'comfortable'
+      ? record.density
+      : 'standard'
+
+  const pinnedColumnsRecord = isObjectRecord(record.pinnedColumns) ? record.pinnedColumns : {}
+
+  return {
+    version: 1,
+    pageSize: readPositiveInteger(record.pageSize, 25),
+    density,
+    columnVisibility: normalizeColumnVisibility(record.columnVisibility),
+    columnOrder: normalizeStringList(record.columnOrder),
+    pinnedColumns: {
+      left: normalizeStringList(pinnedColumnsRecord.left),
+      right: normalizeStringList(pinnedColumnsRecord.right),
+    },
+  }
+}
+
+function normalizeTablePrefs(input: unknown): TablePrefsMap {
+  if (!isObjectRecord(input)) {
+    return {}
+  }
+  const result: TablePrefsMap = {}
+  for (const [key, value] of Object.entries(input)) {
+    const storageKey = key.trim()
+    if (!storageKey) {
+      continue
+    }
+    result[storageKey] = normalizeTablePref(value)
+  }
+  return result
+}
+
 function normalizeUiPrefs(input: unknown): UiPrefs {
   const record = isObjectRecord(input) ? input : {}
   const themeMode = isThemeMode(record.themeMode) ? record.themeMode : defaultUiPrefs.themeMode
@@ -73,6 +135,7 @@ function normalizeSettings(input: unknown): AppSettings {
       defaultSettings.requestTimeoutSeconds,
     ),
     uiPrefs: normalizeUiPrefs(record.uiPrefs),
+    tablePrefs: normalizeTablePrefs(record.tablePrefs),
   }
 }
 
@@ -90,6 +153,7 @@ export const settingsStore: SettingsStore = {
         ...defaultSettings,
         ...patch,
         uiPrefs: { ...defaultSettings.uiPrefs, ...patch.uiPrefs },
+        tablePrefs: patch.tablePrefs ?? defaultSettings.tablePrefs,
       })
     }
     const settings = await SaveSettings(new main.SettingsPatch(patch))
