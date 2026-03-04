@@ -1,4 +1,7 @@
 import React from 'react'
+import DensityMediumRoundedIcon from '@mui/icons-material/DensityMediumRounded'
+import DensitySmallRoundedIcon from '@mui/icons-material/DensitySmallRounded'
+import DensityLargeRoundedIcon from '@mui/icons-material/ReorderRounded'
 import {
   DataGrid,
   type GridColDef,
@@ -241,6 +244,11 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         })
       }
       showToolbar
+      slots={{
+        densityCompactIcon: DensitySmallRoundedIcon,
+        densityStandardIcon: DensityMediumRoundedIcon,
+        densityComfortableIcon: DensityLargeRoundedIcon,
+      }}
       slotProps={{
         toolbar: {
           csvOptions: {
@@ -253,6 +261,11 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
       }}
       initialState={initialState}
       disableRowSelectionOnClick
+      sx={{
+        '& .MuiDataGrid-columnHeaderTitle': {
+          fontWeight: 700,
+        },
+      }}
       pinnedColumns={pinnedColumns}
       onPinnedColumnsChange={(model: { left?: string[]; right?: string[] }) =>
         setPinnedColumns({
