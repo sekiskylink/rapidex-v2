@@ -23,18 +23,21 @@ interface ApiErrorPayload {
   error?: {
     code?: string
     message?: string
+    details?: Record<string, unknown>
   }
 }
 
 class ApiError extends Error {
   status: number
   code?: string
+  details?: Record<string, unknown>
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, details?: Record<string, unknown>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.details = details
   }
 }
 
@@ -56,6 +59,7 @@ function isNetworkError(error: unknown) {
 async function parseApiError(response: Response) {
   let code: string | undefined
   let message = `Request failed: HTTP ${response.status}`
+  let details: Record<string, unknown> | undefined
 
   try {
     const payload = (await response.json()) as ApiErrorPayload
@@ -63,11 +67,12 @@ async function parseApiError(response: Response) {
       message = payload.error.message
     }
     code = payload.error?.code
+    details = payload.error?.details
   } catch {
     // Keep fallback message when body is not JSON.
   }
 
-  return new ApiError(response.status, message, code)
+  return new ApiError(response.status, message, code, details)
 }
 
 export function createApiClient(deps: ApiClientDeps) {

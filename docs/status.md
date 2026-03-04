@@ -1359,3 +1359,28 @@ Verification for this update:
 ### Known follow-ups
 - Vite build emits existing upstream warnings (`"use client"` directive noise and chunk size warning); build still passes.
 - Pinned columns remain feature-flagged for web until enabling a supported DataGrid tier/config.
+
+## Milestone — User Metadata Expansion Part 2 (Desktop) Complete
+
+### What changed
+- Updated desktop users management page in `desktop/frontend/src/pages/UsersPage.tsx`:
+  - added metadata fields to create form: `username`, `password`, `email`, `language`, `firstName`, `lastName`, `displayName`, `phoneNumber`, `whatsappNumber`, `telegramHandle`, `isActive`
+  - added edit form for user metadata with `username` disabled and `password` optional
+  - kept existing RBAC gating (`users.write`) for create/update actions
+  - kept existing session-expiry flow unchanged (global app handler still shows message and redirects to login)
+  - mapped backend `VALIDATION_ERROR` field details to MUI field helper/error states for create/edit forms
+  - updated users table columns to: `username`, `displayName`, `email`, `phoneNumber`, `isActive`, `updatedAt` (plus existing actions)
+- Extended API error handling in `desktop/frontend/src/api/client.ts` to preserve backend `error.details` for form-level validation mapping.
+- Updated desktop route tests in `desktop/frontend/src/routes.test.tsx`:
+  - verifies users list renders metadata (`email`, `phoneNumber`, active switch)
+  - verifies create form submits metadata payload
+  - verifies edit form submits metadata updates with optional password behavior (password omitted when blank)
+
+### How to run tests
+- `make desktop-test`
+
+### Verification summary
+- Desktop tests: PASS (`make desktop-test`)
+
+### Known follow-ups
+- Backend and web suites were not rerun in this desktop-only part.
