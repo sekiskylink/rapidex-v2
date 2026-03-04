@@ -48,7 +48,11 @@ beforeEach(() => {
   clearAuthSnapshot()
   mockViewport(false)
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1')
-  vi.stubGlobal('fetch', vi.fn())
+  window.localStorage.setItem(API_BASE_URL_OVERRIDE_STORAGE_KEY, 'http://localhost:8080/api/v1')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })),
+  )
 })
 
 afterEach(() => {

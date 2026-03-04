@@ -1384,3 +1384,30 @@ Verification for this update:
 
 ### Known follow-ups
 - Backend and web suites were not rerun in this desktop-only part.
+
+## Milestone — User Metadata Expansion Part 3 (Web) Complete
+
+### What changed
+- Updated users management UI in `web/src/pages/UsersPage.tsx` using existing `AppDataGrid` server-side list flow.
+- Expanded `/users` grid columns for metadata: `username`, `displayName` (with fallback to `firstName + lastName` then username), `language`, `email`, `phoneNumber`, `whatsappNumber`, `telegramHandle`, `isActive`, `updatedAt`.
+- Added create/edit user dialogs with metadata fields:
+  - create: `username` + required `password`, plus metadata fields
+  - edit: metadata fields + optional `password` (omitted from payload when blank)
+- Kept standardized API error handling and added field-level validation mapping from backend `VALIDATION_ERROR` details.
+- Added request failure messaging that surfaces backend `requestId` when available.
+- Preserved RBAC gating in users UI:
+  - create action hidden for users without `users.write`
+  - edit action disabled when user lacks write permission
+- Expanded web users tests in `web/src/pages/users-audit-pages.test.tsx` for metadata list rendering, create payload, edit payload (optional password), and validation-field error display.
+- Updated web test setup expectations in `web/src/routes.test.tsx` and base URL resolution fallback in `web/src/lib/apiBaseUrl.ts` to keep deterministic test behavior with local overrides.
+- Saved prompt traceability copy in `docs/prompts/milestone-user-metadata-expansion-part3-web.md` (gitignored).
+
+### How to run tests
+- `cd web && npm run test`
+
+### Verification summary
+- Web tests: PASS (`cd web && npm run test`)
+- Web build: PASS (`cd web && npm run build`)
+
+### Known follow-ups
+- Existing non-blocking warnings remain in build output from third-party bundles (`'use client'` directives and chunk-size warning).

@@ -32,5 +32,10 @@ export function resolveApiBaseUrl() {
     return override
   }
 
-  return normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL ?? '')
+  const fromViteEnv = import.meta.env.VITE_API_BASE_URL
+  const fromProcessEnv =
+    typeof process !== 'undefined' && process.env && typeof process.env.VITE_API_BASE_URL === 'string'
+      ? process.env.VITE_API_BASE_URL
+      : ''
+  return normalizeBaseUrl(fromViteEnv || fromProcessEnv || '')
 }
