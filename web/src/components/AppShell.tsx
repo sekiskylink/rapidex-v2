@@ -13,8 +13,10 @@ import {
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { hasPermission, hasRole } from '../rbac/permissions'
+import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
 
 const drawerWidth = 240
+const miniDrawerWidth = 72
 
 function sectionTitle(pathname: string) {
   if (pathname.startsWith('/employees')) {
@@ -47,7 +49,13 @@ interface NavItem {
 export function AppShell() {
   const navigate = useNavigate()
   const { logout } = useAuth()
+  const { prefs } = useUiPreferences()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const [collapsed, setCollapsed] = React.useState(prefs.collapseNavByDefault)
+
+  React.useEffect(() => {
+    setCollapsed(prefs.collapseNavByDefault)
+  }, [prefs.collapseNavByDefault])
 
   const navItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', visible: true },
@@ -70,6 +78,9 @@ export function AppShell() {
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
+          <Button color="inherit" onClick={() => setCollapsed((current) => !current)} sx={{ mr: 1 }}>
+            {collapsed ? 'Expand' : 'Collapse'}
+          </Button>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {sectionTitle(pathname)}
           </Typography>
@@ -82,18 +93,21 @@ export function AppShell() {
       <Drawer
         variant="permanent"
         sx={{
-          width: drawerWidth,
+          width: collapsed ? miniDrawerWidth : drawerWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: drawerWidth,
+            width: collapsed ? miniDrawerWidth : drawerWidth,
             boxSizing: 'border-box',
+            overflowX: 'hidden',
           },
         }}
       >
         <Toolbar>
-          <Typography variant="h6" component="div">
-            BasePro
-          </Typography>
+          {!collapsed ? (
+            <Typography variant="h6" component="div">
+              BasePro
+            </Typography>
+          ) : null}
         </Toolbar>
         <List>
           {navItems
@@ -104,7 +118,7 @@ export function AppShell() {
                 selected={pathname.startsWith(item.path)}
                 onClick={() => void navigate({ to: item.path })}
               >
-                <ListItemText primary={item.label} />
+                {!collapsed ? <ListItemText primary={item.label} /> : null}
               </ListItemButton>
             ))}
         </List>

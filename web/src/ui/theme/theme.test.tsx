@@ -67,7 +67,12 @@ function renderThemeProbe() {
 function expectStoredPrefs(mode: UiThemeMode, preset: string) {
   const raw = window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY)
   expect(raw).toBeTruthy()
-  expect(JSON.parse(raw ?? '{}')).toEqual({ mode, preset })
+  expect(JSON.parse(raw ?? '{}')).toEqual(
+    expect.objectContaining({
+      mode,
+      preset,
+    }),
+  )
 }
 
 beforeEach(() => {
@@ -114,7 +119,7 @@ describe('theme system persistence', () => {
   })
 
   it('system mode deterministically follows mocked matchMedia', () => {
-    savePrefs({ mode: 'system', preset: 'oceanic' })
+    savePrefs({ mode: 'system', preset: 'oceanic', collapseNavByDefault: false })
 
     mockMatchMedia(true)
     const firstRender = renderThemeProbe()

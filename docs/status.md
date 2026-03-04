@@ -1210,3 +1210,53 @@ Verification for this update:
 
 ### Known follow-ups
 - Existing non-blocking Vite bundle warnings from third-party dependencies (`'use client'` directives, chunk-size warning) remain unchanged.
+
+## Web — Settings Page (Theme + Presets + Connection) Complete
+
+### What changed
+- Implemented full `web` settings experience in `web/src/pages/SettingsPage.tsx` with sections:
+  - Appearance:
+    - theme mode selector (`light | dark | system`)
+    - palette preset picker with mini visual previews for all presets
+    - immediate apply via existing UI preferences provider
+    - preview block with common components
+  - Navigation:
+    - `Collapse side navigation by default` toggle persisted in UI preferences
+  - Connection:
+    - editable API base URL override saved locally
+    - `Test Connection` action calling `GET /health` via API client
+    - snackbar success/failure feedback
+    - failure message includes request id when backend returns `X-Request-Id`
+  - About:
+    - app name and version/build placeholders
+- Extended UI preferences store in `web/src/ui/preferences.ts`:
+  - added `collapseNavByDefault` persisted with existing `mode` and `preset`
+  - added `setCollapseNavByDefault(...)`
+- Extended UI preferences provider in `web/src/ui/theme/UiPreferencesProvider.tsx`:
+  - added `setCollapseNavByDefault(...)` context action
+- Added local API base URL override module `web/src/lib/apiBaseUrl.ts`:
+  - local storage read/write for override
+  - `resolveApiBaseUrl()` helper
+- Updated API client base URL resolution in `web/src/lib/api.ts`:
+  - `baseURL = override || env default`
+- Updated app shell behavior in `web/src/components/AppShell.tsx`:
+  - mini/collapsed drawer state now initializes from persisted `collapseNavByDefault`
+- Added/updated deterministic tests in `web/src/routes.test.tsx` and `web/src/ui/theme/theme.test.tsx` covering:
+  - `/settings` render and control-driven preference updates
+  - mode persistence across reload
+  - preset persistence across reload
+  - API base URL override persistence
+
+### Storage locations
+- UI preferences: `localStorage['basepro.web.ui_preferences']`
+- API base URL override: `localStorage['basepro.web.api_base_url_override']`
+
+### How to run tests
+- `cd web && npm run test`
+
+### Verification summary
+- `cd web && npm run test`: PASS
+- `cd web && npm run build`: PASS
+
+### Known follow-ups
+- Non-blocking Vite warnings from third-party bundles (`'use client'` directives and chunk-size warning) remain unchanged.

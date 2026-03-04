@@ -3,6 +3,7 @@ export type UiThemeMode = 'light' | 'dark' | 'system'
 export interface UiPreferences {
   mode: UiThemeMode
   preset: string
+  collapseNavByDefault: boolean
 }
 
 export const UI_PREFERENCES_STORAGE_KEY = 'basepro.web.ui_preferences'
@@ -10,6 +11,7 @@ export const UI_PREFERENCES_STORAGE_KEY = 'basepro.web.ui_preferences'
 const DEFAULT_PREFERENCES: UiPreferences = {
   mode: 'system',
   preset: 'oceanic',
+  collapseNavByDefault: false,
 }
 
 function isValidMode(value: unknown): value is UiThemeMode {
@@ -35,6 +37,10 @@ export function loadPrefs(): UiPreferences {
     return {
       mode: isValidMode(parsed.mode) ? parsed.mode : DEFAULT_PREFERENCES.mode,
       preset: typeof parsed.preset === 'string' && parsed.preset.trim() ? parsed.preset : DEFAULT_PREFERENCES.preset,
+      collapseNavByDefault:
+        typeof parsed.collapseNavByDefault === 'boolean'
+          ? parsed.collapseNavByDefault
+          : DEFAULT_PREFERENCES.collapseNavByDefault,
     }
   } catch {
     return getDefaultPreferences()
@@ -63,6 +69,15 @@ export function setPreset(preset: string) {
   const next = {
     ...loadPrefs(),
     preset: sanitized || DEFAULT_PREFERENCES.preset,
+  }
+  savePrefs(next)
+  return next
+}
+
+export function setCollapseNavByDefault(collapseNavByDefault: boolean) {
+  const next = {
+    ...loadPrefs(),
+    collapseNavByDefault,
   }
   savePrefs(next)
   return next

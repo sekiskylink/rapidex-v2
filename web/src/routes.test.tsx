@@ -4,9 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthSnapshot, persistRefreshToken, setAuthSnapshot } from './auth/state'
+import { API_BASE_URL_OVERRIDE_STORAGE_KEY } from './lib/apiBaseUrl'
 import { apiRequest } from './lib/api'
 import { createAppRouter } from './routes'
 import { SnackbarProvider } from './ui/snackbar'
+import { UI_PREFERENCES_STORAGE_KEY } from './ui/preferences'
 
 function renderWithRouter(initialPath: string) {
   const router = createAppRouter([initialPath])
@@ -22,6 +24,7 @@ function renderWithRouter(initialPath: string) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   clearAuthSnapshot()
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1')
   vi.stubGlobal('fetch', vi.fn())
@@ -29,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   clearAuthSnapshot()
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
@@ -209,5 +213,91 @@ describe('web RBAC navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('You do not have permission to access this page.')).toBeInTheDocument()
+  })
+})
+
+describe('web settings page', () => {
+  function authenticateForSettings() {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 99,
+        username: 'settings-user',
+        roles: ['Admin'],
+        permissions: ['settings.read'],
+      },
+    })
+  }
+
+  it('/settings renders and controls update persisted preferences', async () => {
+    authenticateForSettings()
+    renderWithRouter('/settings')
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark' }))
+    fireEvent.click(screen.getByLabelText('Select Forest preset'))
+    fireEvent.click(screen.getByRole('switch', { name: 'Collapse side navigation by default' }))
+
+    const rawPrefs = window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY)
+    expect(rawPrefs).toBeTruthy()
+    expect(JSON.parse(rawPrefs ?? '{}')).toEqual(
+      expect.objectContaining({
+        mode: 'dark',
+        preset: 'forest',
+        collapseNavByDefault: true,
+      }),
+    )
+  })
+
+  it('changing mode persists after reload', async () => {
+    authenticateForSettings()
+    const firstRender = renderWithRouter('/settings')
+
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+    fireEvent.click(screen.getByRole('radio', { name: 'Light' }))
+
+    firstRender.unmount()
+    renderWithRouter('/settings')
+
+    expect(await screen.findByRole('radio', { name: 'Light' })).toBeChecked()
+  })
+
+  it('changing preset persists after reload', async () => {
+    authenticateForSettings()
+    const firstRender = renderWithRouter('/settings')
+
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+    fireEvent.click(screen.getByLabelText('Select Graphite preset'))
+
+    firstRender.unmount()
+    renderWithRouter('/settings')
+
+    expect(await screen.findByLabelText('Select Graphite preset')).toBeInTheDocument()
+    expect(screen.getByText('Graphite')).toBeInTheDocument()
+
+    const rawPrefs = window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY)
+    expect(rawPrefs).toBeTruthy()
+    expect(JSON.parse(rawPrefs ?? '{}')).toEqual(
+      expect.objectContaining({
+        preset: 'graphite',
+      }),
+    )
+  })
+
+  it('api base URL override persists after save', async () => {
+    authenticateForSettings()
+    renderWithRouter('/settings')
+
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+
+    fireEvent.change(screen.getByLabelText('API Base URL Override'), {
+      target: { value: 'http://127.0.0.1:8080/api/v1/' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Override' }))
+
+    expect(window.localStorage.getItem(API_BASE_URL_OVERRIDE_STORAGE_KEY)).toBe('http://127.0.0.1:8080/api/v1')
   })
 })

@@ -1,3 +1,5 @@
+import { resolveApiBaseUrl } from './apiBaseUrl'
+
 export type ApiError = {
   code: string
   message: string
@@ -32,10 +34,6 @@ interface ApiErrorEnvelope {
 let getAccessToken: AccessTokenProvider = () => undefined
 let logger: ApiLogger | undefined
 let onUnauthorized: UnauthorizedHandler | undefined
-
-function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.trim().replace(/\/+$/, '')
-}
 
 function sanitizeHeaders(headers: Headers) {
   const safeHeaders: Record<string, string> = {}
@@ -91,7 +89,7 @@ export function configureApiClient(options: ConfigureApiClientOptions) {
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}, options: ApiRequestOptions = {}): Promise<T> {
-  const baseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL ?? '')
+  const baseUrl = resolveApiBaseUrl()
   if (!baseUrl) {
     throw new Error('VITE_API_BASE_URL is not configured')
   }

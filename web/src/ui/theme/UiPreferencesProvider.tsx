@@ -5,6 +5,7 @@ import {
   savePrefs,
   setMode as persistMode,
   setPreset as persistPreset,
+  setCollapseNavByDefault as persistCollapseNavByDefault,
   type UiPreferences,
   type UiThemeMode,
 } from '../preferences'
@@ -15,6 +16,7 @@ interface UiPreferencesContextValue {
   resolvedMode: 'light' | 'dark'
   setMode: (mode: UiThemeMode) => void
   setPreset: (preset: string) => void
+  setCollapseNavByDefault: (collapseNavByDefault: boolean) => void
 }
 
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | undefined>(undefined)
@@ -29,6 +31,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     return {
       mode: loaded.mode,
       preset: sanitizePreset(loaded.preset),
+      collapseNavByDefault: loaded.collapseNavByDefault,
     }
   })
 
@@ -41,6 +44,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
     })
   }, [])
 
@@ -49,6 +53,16 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
+    })
+  }, [])
+
+  const setCollapseNavByDefault = React.useCallback((collapseNavByDefault: boolean) => {
+    const next = persistCollapseNavByDefault(collapseNavByDefault)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
     })
   }, [])
 
@@ -62,8 +76,9 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       resolvedMode,
       setMode,
       setPreset,
+      setCollapseNavByDefault,
     }),
-    [prefs, resolvedMode, setMode, setPreset],
+    [prefs, resolvedMode, setMode, setPreset, setCollapseNavByDefault],
   )
 
   return <UiPreferencesContext.Provider value={value}>{children}</UiPreferencesContext.Provider>
