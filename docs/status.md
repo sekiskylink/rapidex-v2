@@ -1173,3 +1173,40 @@ Verification for this update:
 
 ### Known follow-ups
 - `web` production build still emits non-blocking third-party `'use client'` and chunk-size warnings from existing dependency bundles.
+
+## Web — Theme System + Presets (Foundation) Complete
+
+### What changed
+- Added local UI preferences foundation in `web/src/ui/preferences.ts` with APIs:
+  - `loadPrefs()`
+  - `savePrefs()`
+  - `setMode()`
+  - `setPreset()`
+- Persisted UI preferences in localStorage key `basepro.web.ui_preferences`.
+- Added theme preset catalog in `web/src/ui/theme/presets.ts`:
+  - 8 admin-style presets with `id`, `name`, and light/dark palette tokens.
+  - helper `getPaletteOptions(presetId, mode)` to resolve MUI palette options by preset.
+- Added `UiPreferencesProvider` in `web/src/ui/theme/UiPreferencesProvider.tsx`:
+  - tracks `mode` (`light | dark | system`) and `preset`
+  - resolves `system` mode with `prefers-color-scheme`
+  - applies updates immediately and persists locally.
+- Added app-level theme wiring in `web/src/ui/theme/AppThemeProvider.tsx`:
+  - computes MUI theme from resolved mode + preset
+  - applies `ThemeProvider` + `CssBaseline`
+  - includes token-based component style overrides.
+- Updated `web/src/App.tsx` to use `AppThemeProvider` while keeping existing auth flow and API client behavior intact.
+- Added deterministic theme tests in `web/src/ui/theme/theme.test.tsx` covering:
+  - mode persistence and apply-after-reload
+  - preset persistence and apply-after-reload
+  - deterministic system mode behavior with mocked `matchMedia`.
+- Updated `web/src/test-setup.ts` with a baseline `matchMedia` stub for deterministic test runtime.
+
+### How to run tests
+- `cd web && npm run test`
+
+### Verification summary
+- `cd web && npm run test`: PASS
+- `cd web && npm run build`: PASS
+
+### Known follow-ups
+- Existing non-blocking Vite bundle warnings from third-party dependencies (`'use client'` directives, chunk-size warning) remain unchanged.
