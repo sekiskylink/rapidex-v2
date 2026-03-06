@@ -1,5 +1,59 @@
 # Status
 
+## Milestone H — Desktop/Web Authentication UI Parity (Complete)
+
+### What changed
+- Implemented a redesigned split-layout authentication experience in both desktop and web:
+  - left branding panel + right auth form panel
+  - responsive composition with theme-aware styling for light/dark mode
+  - larger auth field sizing (minimum 56px inputs) and clearer action hierarchy
+- Added shared login-branding consumption for unauthenticated auth-entry screens in both clients:
+  - load branding from backend public settings endpoint
+  - show configured application name and optional image URL
+  - graceful fallback avatar/name rendering when image is absent or fails
+- Added forgot-password and reset-password pages in both desktop and web:
+  - forgot-password request form (username/email) with non-enumerating success message
+  - reset-password form with token + new password + confirm password
+  - clear loading, success, validation, and backend error states
+  - reset token pulled from route query parameter for both clients (`?token=...`)
+- Extended desktop and web Settings pages with login-branding controls:
+  - application display name field
+  - login image URL field (URL-only for this milestone; no uploads)
+  - URL validation and branding preview/fallback
+  - backend-backed save flow gated by `settings.write`
+- Preserved API-only desktop architecture and existing login contract behavior.
+- Saved prompt copy to `docs/prompts/2026-03-06-milestone-h-auth-ui-parity.md` (gitignored).
+
+### Backend APIs consumed
+- Branding:
+  - `GET /api/v1/settings/public/login-branding`
+  - `GET /api/v1/settings/login-branding`
+  - `PUT /api/v1/settings/login-branding`
+- Authentication:
+  - `POST /api/v1/auth/login`
+  - `POST /api/v1/auth/forgot-password`
+  - `POST /api/v1/auth/reset-password`
+
+### Desktop/Web parity notes
+- Capability parity is maintained for:
+  - login branding rendering
+  - forgot-password request UX and response handling
+  - reset-password submission and validation behavior
+  - settings-based branding updates
+- Minor differences are limited to platform shell/context wiring (desktop settings store and setup-gate behavior vs web auth-provider context), with equivalent end-user auth capabilities.
+
+### Tests and verification
+- Desktop frontend tests:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+- Web frontend tests:
+  - `cd web && npm test -- --run` -> PASS
+- Web production build:
+  - `cd web && npm run build` -> PASS
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI `anchorEl` warnings remain in frontend test output.
+- Existing non-blocking Vite warnings for third-party `'use client'` directives/chunk size remain unchanged.
+
 ## Milestone G — Backend Authentication Branding + Password Recovery Contract (Complete)
 
 ### What changed
@@ -54,6 +108,13 @@
 - Desktop and web login/forgot/reset views still need milestone implementation to consume the new backend contract end-to-end in UI flows.
 - Email delivery integration for password reset notifications is intentionally left as pluggable service wiring (backend contract is prepared).
 - Existing non-blocking MUI `anchorEl` warnings remain in frontend test output; tests pass.
+
+### 2026-03-06 Verification Refresh
+- Re-verified Milestone G backend contract implementation against authentication branding and password-recovery requirements.
+- Re-ran backend suite:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Saved prompt copy for this verification at:
+  - `docs/prompts/2026-03-06-backend-auth-branding-password-recovery-contract.txt` (gitignored).
 
 ## Next Planned Milestone — Desktop/Web Authentication UX Consumption Parity (Planned)
 

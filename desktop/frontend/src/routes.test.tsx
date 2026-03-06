@@ -912,4 +912,185 @@ describe('app shell routes', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'View Details' }))
     expect(await screen.findByRole('dialog', { name: 'Permission Details' })).toBeInTheDocument()
   })
+
+  it('renders login branding fallback with backend display name', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/settings/public/login-branding')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'Acme Platform',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/login', store)
+
+    expect(await screen.findByRole('heading', { name: 'Acme Platform', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+  })
+
+  it('submits forgot-password request and shows non-enumerating success message', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+    })
+
+    let forgotCallCount = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/settings/public/login-branding')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/auth/forgot-password') && init?.method === 'POST') {
+          forgotCallCount += 1
+          return new Response(JSON.stringify({ status: 'accepted' }), {
+            status: 202,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/forgot-password', store)
+
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Username or Email' }), {
+      target: { value: 'alice@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reset Instructions' }))
+
+    await waitFor(() => {
+      expect(forgotCallCount).toBe(1)
+    })
+    expect(await screen.findByText('If the account exists, password reset instructions have been sent.')).toBeInTheDocument()
+  })
+
+  it('validates reset-password confirmation before submitting', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/settings/public/login-branding')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/reset-password?token=abc123', store)
+
+    await screen.findByRole('button', { name: 'Reset Password' })
+    fireEvent.change(screen.getByLabelText(/Reset Token/i), { target: { value: 'abc123' } })
+    fireEvent.change(screen.getByLabelText(/^New Password/i), { target: { value: 'PasswordOne!' } })
+    fireEvent.change(screen.getByLabelText(/Confirm New Password/i), { target: { value: 'PasswordTwo!' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Password' }))
+
+    expect(await screen.findByText('Passwords do not match.')).toBeInTheDocument()
+  })
+
+  it('updates login branding from settings page', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let brandingUpdatePayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['settings.read', 'settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/version')) {
+          return new Response(
+            JSON.stringify({ version: '1.0.0', commit: 'abc123', buildDate: '2026-03-06T00:00:00Z' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro',
+              loginImageUrl: 'https://cdn.example.com/old.png',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/login-branding') && init?.method === 'PUT') {
+          brandingUpdatePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'Platform Pro',
+              loginImageUrl: 'https://cdn.example.com/new.png',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings', store)
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    fireEvent.change(await screen.findByLabelText('Application Display Name'), { target: { value: 'Platform Pro' } })
+    fireEvent.change(screen.getByLabelText('Login Image URL'), { target: { value: 'https://cdn.example.com/new.png' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Branding' }))
+
+    await waitFor(() => {
+      expect(brandingUpdatePayload).toEqual({
+        applicationDisplayName: 'Platform Pro',
+        loginImageUrl: 'https://cdn.example.com/new.png',
+      })
+    })
+  })
 })

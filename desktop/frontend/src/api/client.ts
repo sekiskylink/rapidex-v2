@@ -19,6 +19,35 @@ interface VersionResponse {
   buildDate: string
 }
 
+export interface LoginBrandingResponse {
+  appDisplayName?: string
+  applicationDisplayName?: string
+  loginImageUrl?: string | null
+}
+
+export interface ForgotPasswordRequest {
+  identifier: string
+  resetUrl?: string
+}
+
+export interface ForgotPasswordResponse {
+  status: string
+}
+
+export interface ResetPasswordRequest {
+  token: string
+  password: string
+}
+
+export interface ResetPasswordResponse {
+  status: string
+}
+
+export interface LoginBrandingUpdateRequest {
+  applicationDisplayName: string
+  loginImageUrl?: string | null
+}
+
 interface ApiErrorPayload {
   error?: {
     code?: string
@@ -256,6 +285,71 @@ export function createApiClient(deps: ApiClientDeps) {
         throw new Error(`Version check failed: HTTP ${response.status}`)
       }
       return (await response.json()) as VersionResponse
+    },
+
+    async getPublicLoginBranding() {
+      const settings = await deps.getSettings()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+      if (!baseUrl) {
+        throw new Error('API base URL is required')
+      }
+
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/settings/public/login-branding`, {
+        method: 'GET',
+      })
+      if (!response.ok) {
+        throw await parseApiError(response)
+      }
+      return (await response.json()) as LoginBrandingResponse
+    },
+
+    async forgotPassword(payload: ForgotPasswordRequest) {
+      const settings = await deps.getSettings()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+      if (!baseUrl) {
+        throw new Error('API base URL is required')
+      }
+
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw await parseApiError(response)
+      }
+      return (await response.json()) as ForgotPasswordResponse
+    },
+
+    async resetPassword(payload: ResetPasswordRequest) {
+      const settings = await deps.getSettings()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+      if (!baseUrl) {
+        throw new Error('API base URL is required')
+      }
+
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw await parseApiError(response)
+      }
+      return (await response.json()) as ResetPasswordResponse
+    },
+
+    async getLoginBranding() {
+      return authorizedRequest<LoginBrandingResponse>('/api/v1/settings/login-branding', {
+        method: 'GET',
+      })
+    },
+
+    async updateLoginBranding(payload: LoginBrandingUpdateRequest) {
+      return authorizedRequest<LoginBrandingResponse>('/api/v1/settings/login-branding', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
     },
 
     request<T>(path: string, init: RequestInit = {}) {

@@ -14,10 +14,12 @@ import { AppShell } from './components/AppShell'
 import { canAccessRoute } from './navigation'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotAuthorizedPage } from './pages/NotAuthorizedPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PermissionsPage } from './pages/PermissionsPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { RolesPage } from './pages/RolesPage'
 import { RouteErrorPage } from './pages/RouteErrorPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -50,6 +52,28 @@ const loginRoute = createRoute({
     }
   },
   component: LoginPage,
+})
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  beforeLoad: () => {
+    if (getAuthSnapshot().isAuthenticated) {
+      throw redirect({ to: '/dashboard' })
+    }
+  },
+  component: ForgotPasswordPage,
+})
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  beforeLoad: () => {
+    if (getAuthSnapshot().isAuthenticated) {
+      throw redirect({ to: '/dashboard' })
+    }
+  },
+  component: ResetPasswordPage,
 })
 
 const authenticatedRoute = createRoute({
@@ -102,6 +126,8 @@ const settingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
   authenticatedRoute.addChildren([
     dashboardRoute,
     usersRoute,

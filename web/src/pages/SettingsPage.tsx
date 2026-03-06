@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Chip,
@@ -15,7 +16,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { isApiError } from '../auth/AuthProvider'
+import { isApiError, useAuth } from '../auth/AuthProvider'
 import { apiRequest } from '../lib/api'
 import { appName } from '../lib/env'
 import { getApiBaseUrlOverride, setApiBaseUrlOverride } from '../lib/apiBaseUrl'
@@ -32,6 +33,7 @@ interface HealthResponse {
 }
 
 export function SettingsPage() {
+  const auth = useAuth()
   const { showSnackbar } = useSnackbar()
   const {
     prefs,
@@ -46,6 +48,64 @@ export function SettingsPage() {
   const [apiBaseUrlOverride, setApiBaseUrlOverrideValue] = React.useState(() => getApiBaseUrlOverride())
   const [testingConnection, setTestingConnection] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
+  const [brandingDisplayName, setBrandingDisplayName] = React.useState(appName)
+  const [brandingImageUrl, setBrandingImageUrl] = React.useState('')
+  const [brandingLoading, setBrandingLoading] = React.useState(true)
+  const [brandingSaving, setBrandingSaving] = React.useState(false)
+  const [brandingPreviewBroken, setBrandingPreviewBroken] = React.useState(false)
+
+  const canWriteBranding = React.useMemo(
+    () => (auth.user?.permissions ?? []).some((permission) => permission.trim().toLowerCase() === 'settings.write'),
+    [auth.user?.permissions],
+  )
+
+  React.useEffect(() => {
+    let active = true
+    setBrandingLoading(true)
+    apiRequest<{ appDisplayName?: string; applicationDisplayName?: string; loginImageUrl?: string | null }>(
+      '/settings/login-branding',
+      { method: 'GET' },
+      { retryOnUnauthorized: true },
+    )
+      .then((payload) => {
+        if (!active) {
+          return
+        }
+        setBrandingDisplayName((payload.appDisplayName ?? payload.applicationDisplayName ?? '').trim() || appName)
+        setBrandingImageUrl(typeof payload.loginImageUrl === 'string' ? payload.loginImageUrl.trim() : '')
+        setBrandingPreviewBroken(false)
+      })
+      .catch(() => {
+        if (active) {
+          setBrandingDisplayName(appName)
+          setBrandingImageUrl('')
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setBrandingLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const brandingUrlValidationError = React.useMemo(() => {
+    if (!brandingImageUrl.trim()) {
+      return ''
+    }
+    try {
+      const parsed = new URL(brandingImageUrl)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return 'Image URL must use http or https.'
+      }
+      return ''
+    } catch {
+      return 'Image URL must be a valid absolute URL.'
+    }
+  }, [brandingImageUrl])
 
   const handleBaseUrlSave = () => {
     setApiBaseUrlOverride(apiBaseUrlOverride)
@@ -82,6 +142,42 @@ export function SettingsPage() {
       }
     } finally {
       setTestingConnection(false)
+    }
+  }
+
+  const handleSaveBranding = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    if (brandingUrlValidationError) {
+      showSnackbar({ severity: 'error', message: brandingUrlValidationError })
+      return
+    }
+
+    setBrandingSaving(true)
+    try {
+      const payload = await apiRequest<{ appDisplayName?: string; applicationDisplayName?: string; loginImageUrl?: string | null }>(
+        '/settings/login-branding',
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            applicationDisplayName: brandingDisplayName.trim(),
+            loginImageUrl: brandingImageUrl.trim() || null,
+          }),
+        },
+      )
+      setBrandingDisplayName((payload.appDisplayName ?? payload.applicationDisplayName ?? '').trim() || appName)
+      setBrandingImageUrl(typeof payload.loginImageUrl === 'string' ? payload.loginImageUrl.trim() : '')
+      setBrandingPreviewBroken(false)
+      showSnackbar({ severity: 'success', message: 'Login branding saved.' })
+    } catch (error) {
+      if (isApiError(error)) {
+        showSnackbar({ severity: 'error', message: error.message })
+      } else {
+        showSnackbar({ severity: 'error', message: 'Unable to save login branding.' })
+      }
+    } finally {
+      setBrandingSaving(false)
     }
   }
 
@@ -158,6 +254,79 @@ export function SettingsPage() {
               <Chip label="Theme Chip" color="primary" />
             </Stack>
           </Paper>
+        </Stack>
+      </Paper>
+
+      <Paper elevation={1} sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2">
+            Login Branding
+          </Typography>
+          <Divider />
+          <Typography color="text.secondary">
+            Configure authentication screen branding for both desktop and web clients.
+          </Typography>
+          <TextField
+            label="Application Display Name"
+            value={brandingDisplayName}
+            onChange={(event) => setBrandingDisplayName(event.target.value)}
+            disabled={brandingLoading || brandingSaving || !canWriteBranding}
+            fullWidth
+          />
+          <TextField
+            label="Login Image URL"
+            value={brandingImageUrl}
+            onChange={(event) => {
+              setBrandingImageUrl(event.target.value)
+              setBrandingPreviewBroken(false)
+            }}
+            error={Boolean(brandingUrlValidationError)}
+            helperText={brandingUrlValidationError || 'Optional absolute http(s) URL.'}
+            disabled={brandingLoading || brandingSaving || !canWriteBranding}
+            fullWidth
+          />
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              p: 2,
+              minHeight: 140,
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            {brandingImageUrl.trim() && !brandingPreviewBroken && !brandingUrlValidationError ? (
+              <Box
+                component="img"
+                src={brandingImageUrl}
+                alt="Login branding preview"
+                onError={() => setBrandingPreviewBroken(true)}
+                sx={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain' }}
+              />
+            ) : (
+              <Stack spacing={1} alignItems="center">
+                <Avatar sx={{ bgcolor: 'primary.main' }}>{brandingDisplayName.slice(0, 1).toUpperCase()}</Avatar>
+                <Typography>{brandingDisplayName || appName}</Typography>
+              </Stack>
+            )}
+          </Box>
+          {!canWriteBranding ? <Alert severity="info">You need settings.write permission to update branding.</Alert> : null}
+          <Stack direction="row" justifyContent="flex-end">
+            <Button
+              variant="contained"
+              onClick={handleSaveBranding}
+              disabled={
+                brandingLoading ||
+                brandingSaving ||
+                !canWriteBranding ||
+                !brandingDisplayName.trim() ||
+                Boolean(brandingUrlValidationError)
+              }
+            >
+              {brandingSaving ? 'Saving...' : 'Save Branding'}
+            </Button>
+          </Stack>
         </Stack>
       </Paper>
 

@@ -15,10 +15,12 @@ import { AppShell } from './components/AppShell'
 import { canAccessRoute } from './navigation'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ForbiddenPage } from './pages/ForbiddenPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PermissionsPage } from './pages/PermissionsPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { RolesPage } from './pages/RolesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SetupPage } from './pages/SetupPage'
@@ -97,6 +99,80 @@ function LoginGatePage() {
   }
 
   return <LoginPage />
+}
+
+function ForgotPasswordGatePage() {
+  const router = useRouter()
+  const navigate = useNavigate()
+  const [ready, setReady] = React.useState(false)
+
+  React.useEffect(() => {
+    let active = true
+    router.options.context.settingsStore.loadSettings().then((settings) => {
+      if (!active) {
+        return
+      }
+
+      if (!settings.apiBaseUrl.trim()) {
+        void navigate({ to: '/setup', replace: true })
+        return
+      }
+
+      if (isAuthenticated()) {
+        void navigate({ to: '/dashboard', replace: true })
+        return
+      }
+
+      setReady(true)
+    })
+
+    return () => {
+      active = false
+    }
+  }, [navigate, router.options.context.settingsStore])
+
+  if (!ready) {
+    return null
+  }
+
+  return <ForgotPasswordPage />
+}
+
+function ResetPasswordGatePage() {
+  const router = useRouter()
+  const navigate = useNavigate()
+  const [ready, setReady] = React.useState(false)
+
+  React.useEffect(() => {
+    let active = true
+    router.options.context.settingsStore.loadSettings().then((settings) => {
+      if (!active) {
+        return
+      }
+
+      if (!settings.apiBaseUrl.trim()) {
+        void navigate({ to: '/setup', replace: true })
+        return
+      }
+
+      if (isAuthenticated()) {
+        void navigate({ to: '/dashboard', replace: true })
+        return
+      }
+
+      setReady(true)
+    })
+
+    return () => {
+      active = false
+    }
+  }, [navigate, router.options.context.settingsStore])
+
+  if (!ready) {
+    return null
+  }
+
+  return <ResetPasswordPage />
 }
 
 function AuthenticatedGatePage() {
@@ -215,6 +291,18 @@ const loginRoute = createRoute({
   component: LoginGatePage,
 })
 
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: ForgotPasswordGatePage,
+})
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  component: ResetPasswordGatePage,
+})
+
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'authenticated',
@@ -261,6 +349,8 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
   loginRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
   authenticatedRoute.addChildren([dashboardRoute, settingsRoute, usersRoute, rolesRoute, permissionsRoute, auditRoute]),
 ])
 

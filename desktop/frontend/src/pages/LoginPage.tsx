@@ -1,24 +1,22 @@
 import React from 'react'
 import {
   Alert,
-  Box,
   Button,
-  Card,
-  CardContent,
-  Container,
   Link,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { ApiError, createApiClient } from '../api/client'
 import { clearSession, setSession, setSessionPrincipal } from '../auth/session'
+import { AuthSplitLayout } from './auth/AuthSplitLayout'
+import { useAuthBranding } from './auth/useAuthBranding'
 
 export function LoginPage() {
   const router = useRouter()
   const navigate = useNavigate()
   const settingsStore = router.options.context.settingsStore
+  const branding = useAuthBranding(settingsStore)
 
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
@@ -66,63 +64,48 @@ export function LoginPage() {
   }
 
   return (
-    <Container
-      maxWidth="sm"
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        py: 4,
-      }}
+    <AuthSplitLayout
+      branding={branding}
+      panelTitle="Welcome back"
+      panelSubtitle="Sign in with your platform account to continue."
     >
-      <Card sx={{ width: '100%', maxWidth: 420 }}>
-        <CardContent>
-          <Stack spacing={2.5} component="form" onSubmit={onLogin}>
-            <Box>
-              <Typography variant="h5" component="h1" gutterBottom>
-                BasePro Desktop
-              </Typography>
-              <Typography color="text.secondary">Sign in to continue to the dashboard.</Typography>
-            </Box>
+      <Stack spacing={2.25} component="form" onSubmit={onLogin}>
+        <TextField
+          label="Username or Email"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+          autoComplete="username"
+          required
+          fullWidth
+          InputProps={{ sx: { minHeight: 56 } }}
+        />
 
-            <TextField
-              label="Username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-              required
-              fullWidth
-            />
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          autoComplete="current-password"
+          required
+          fullWidth
+          InputProps={{ sx: { minHeight: 56 } }}
+        />
 
-            <TextField
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-              fullWidth
-            />
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Link component="button" type="button" underline="hover" onClick={() => void navigate({ to: '/forgot-password' })}>
+            Forgot password?
+          </Link>
+          <Link component="button" type="button" underline="hover" onClick={() => void navigate({ to: '/setup' })}>
+            API settings
+          </Link>
+        </Stack>
 
-            {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+        {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
-            <Button type="submit" variant="contained" disabled={submitting}>
-              {submitting ? 'Signing in...' : 'Login'}
-            </Button>
-
-            <Link
-              component="button"
-              type="button"
-              underline="hover"
-              onClick={() => void navigate({ to: '/setup' })}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              Change API Settings
-            </Link>
-          </Stack>
-        </CardContent>
-      </Card>
-    </Container>
+        <Button type="submit" variant="contained" disabled={submitting} size="large" sx={{ minHeight: 52 }}>
+          {submitting ? 'Signing in...' : 'Sign In'}
+        </Button>
+      </Stack>
+    </AuthSplitLayout>
   )
 }

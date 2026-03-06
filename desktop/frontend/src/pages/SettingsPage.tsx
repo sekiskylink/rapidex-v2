@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -18,6 +19,8 @@ import {
 } from '@mui/material'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { createApiClient } from '../api/client'
+import { useSessionPrincipal } from '../auth/hooks'
+import { hasPermission } from '../rbac/permissions'
 import { THEME_MODES, type AppSettings, type ThemeMode } from '../settings/types'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
@@ -34,6 +37,8 @@ export function SettingsPage() {
     setDataGridBorderRadius,
     presets,
   } = useThemePreferences()
+  const principal = useSessionPrincipal()
+  const canWriteBranding = hasPermission(principal, 'settings.write')
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -45,6 +50,12 @@ export function SettingsPage() {
   )
   const [backendVersionLoading, setBackendVersionLoading] = React.useState(true)
   const [status, setStatus] = React.useState<{ severity: 'success' | 'error'; message: string } | null>(null)
+  const [brandingDisplayName, setBrandingDisplayName] = React.useState('BasePro')
+  const [brandingImageUrl, setBrandingImageUrl] = React.useState('')
+  const [brandingLoading, setBrandingLoading] = React.useState(true)
+  const [brandingSaving, setBrandingSaving] = React.useState(false)
+  const [brandingStatus, setBrandingStatus] = React.useState<{ severity: 'success' | 'error'; message: string } | null>(null)
+  const [brandingPreviewBroken, setBrandingPreviewBroken] = React.useState(false)
 
   React.useEffect(() => {
     let active = true
@@ -113,6 +124,82 @@ export function SettingsPage() {
       active = false
     }
   }, [apiClient, settings?.apiBaseUrl])
+
+  React.useEffect(() => {
+    let active = true
+    setBrandingLoading(true)
+    apiClient
+      .getLoginBranding()
+      .then((payload) => {
+        if (!active) {
+          return
+        }
+        const displayName = (payload.appDisplayName ?? payload.applicationDisplayName ?? '').trim() || 'BasePro'
+        const loginImageUrl = typeof payload.loginImageUrl === 'string' ? payload.loginImageUrl.trim() : ''
+        setBrandingDisplayName(displayName)
+        setBrandingImageUrl(loginImageUrl)
+        setBrandingPreviewBroken(false)
+      })
+      .catch(() => {
+        if (!active) {
+          return
+        }
+        setBrandingDisplayName('BasePro')
+        setBrandingImageUrl('')
+      })
+      .finally(() => {
+        if (active) {
+          setBrandingLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [apiClient])
+
+  const brandingUrlValidationError = React.useMemo(() => {
+    if (!brandingImageUrl.trim()) {
+      return ''
+    }
+    try {
+      const parsed = new URL(brandingImageUrl)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return 'Image URL must use http or https.'
+      }
+      return ''
+    } catch {
+      return 'Image URL must be a valid absolute URL.'
+    }
+  }, [brandingImageUrl])
+
+  const onSaveBranding = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    if (brandingUrlValidationError) {
+      setBrandingStatus({ severity: 'error', message: brandingUrlValidationError })
+      return
+    }
+
+    setBrandingSaving(true)
+    setBrandingStatus(null)
+    try {
+      const saved = await apiClient.updateLoginBranding({
+        applicationDisplayName: brandingDisplayName.trim(),
+        loginImageUrl: brandingImageUrl.trim() || null,
+      })
+      setBrandingDisplayName((saved.appDisplayName ?? saved.applicationDisplayName ?? '').trim() || 'BasePro')
+      setBrandingImageUrl(typeof saved.loginImageUrl === 'string' ? saved.loginImageUrl : '')
+      setBrandingPreviewBroken(false)
+      setBrandingStatus({ severity: 'success', message: 'Login branding saved.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save login branding.'
+      setBrandingStatus({ severity: 'error', message })
+    } finally {
+      setBrandingSaving(false)
+    }
+  }
 
   const onSaveConnection = async () => {
     if (!settings) {
@@ -277,6 +364,79 @@ export function SettingsPage() {
               inputProps={{ min: 4, max: 32 }}
               sx={{ maxWidth: 220 }}
             />
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Typography variant="h6">Login Branding</Typography>
+            <Typography color="text.secondary">
+              Configure authentication screen branding used by desktop and web clients.
+            </Typography>
+            <TextField
+              label="Application Display Name"
+              value={brandingDisplayName}
+              onChange={(event) => setBrandingDisplayName(event.target.value)}
+              disabled={brandingLoading || brandingSaving || !canWriteBranding}
+              fullWidth
+            />
+            <TextField
+              label="Login Image URL"
+              value={brandingImageUrl}
+              onChange={(event) => {
+                setBrandingImageUrl(event.target.value)
+                setBrandingPreviewBroken(false)
+              }}
+              error={Boolean(brandingUrlValidationError)}
+              helperText={brandingUrlValidationError || 'Optional absolute http(s) URL.'}
+              disabled={brandingLoading || brandingSaving || !canWriteBranding}
+              fullWidth
+            />
+            <Box
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 2,
+                p: 2,
+                minHeight: 140,
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              {brandingImageUrl.trim() && !brandingPreviewBroken && !brandingUrlValidationError ? (
+                <Box
+                  component="img"
+                  src={brandingImageUrl}
+                  alt="Login branding preview"
+                  onError={() => setBrandingPreviewBroken(true)}
+                  sx={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain' }}
+                />
+              ) : (
+                <Stack spacing={1} alignItems="center">
+                  <Avatar sx={{ bgcolor: 'primary.main' }}>{brandingDisplayName.slice(0, 1).toUpperCase()}</Avatar>
+                  <Typography>{brandingDisplayName || 'BasePro'}</Typography>
+                </Stack>
+              )}
+            </Box>
+            {!canWriteBranding ? <Alert severity="info">You need settings.write permission to update branding.</Alert> : null}
+            {brandingStatus ? <Alert severity={brandingStatus.severity}>{brandingStatus.message}</Alert> : null}
+            <Stack direction="row" justifyContent="flex-end">
+              <Button
+                variant="contained"
+                onClick={onSaveBranding}
+                disabled={
+                  brandingLoading ||
+                  brandingSaving ||
+                  !canWriteBranding ||
+                  !brandingDisplayName.trim() ||
+                  Boolean(brandingUrlValidationError)
+                }
+              >
+                {brandingSaving ? 'Saving...' : 'Save Branding'}
+              </Button>
+            </Stack>
           </Stack>
         </CardContent>
       </Card>
