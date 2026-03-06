@@ -600,4 +600,302 @@ describe('app shell routes', () => {
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText(/Backend version:\s*1\.2\.3/i)).toBeInTheDocument()
   })
+
+  it('supports users role multi-select in create flow', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let createPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['users.read', 'users.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/admin/roles')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: 1, name: 'Admin' },
+                { id: 2, name: 'Viewer' },
+              ],
+              totalCount: 2,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/users') && (init?.method === undefined || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/users') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(JSON.stringify({ id: 10, username: 'ops-user' }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/users', store)
+
+    expect(await screen.findByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create User' }))
+    const createDialog = await screen.findByRole('dialog', { name: 'Create User' })
+    fireEvent.change(within(createDialog).getByRole('textbox', { name: 'Username' }), { target: { value: 'ops-user' } })
+    const passwordInput = createDialog.querySelector('input[type=\"password\"]')
+    expect(passwordInput).not.toBeNull()
+    fireEvent.change(passwordInput as Element, { target: { value: 'TempPass123!' } })
+    const rolesInput = within(createDialog).getByRole('combobox', { name: 'Roles' })
+    fireEvent.mouseDown(rolesInput)
+    fireEvent.change(rolesInput, { target: { value: 'Admin' } })
+    fireEvent.click(await screen.findByText('Admin'))
+    fireEvent.click(within(createDialog).getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => {
+      expect(createPayload).not.toBeNull()
+    })
+    expect(createPayload).toMatchObject({
+      username: 'ops-user',
+      roles: ['Admin'],
+    })
+  })
+
+  it('supports roles list/create/edit/detail flows', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const requestedUrls: string[] = []
+    let createPayload: Record<string, unknown> | null = null
+    let patchPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        requestedUrls.push(url)
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['users.read', 'users.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/admin/permissions')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: 1, name: 'users.read', moduleScope: 'admin', createdAt: '2026-03-01T00:00:00Z' },
+                { id: 2, name: 'users.write', moduleScope: 'admin', createdAt: '2026-03-01T00:00:00Z' },
+              ],
+              totalCount: 2,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/admin/roles/2?includeUsers=false')) {
+          return new Response(
+            JSON.stringify({
+              id: 2,
+              name: 'Manager',
+              permissions: [{ id: 1, name: 'users.read', moduleScope: 'admin', createdAt: '2026-03-01T00:00:00Z' }],
+              createdAt: '2026-03-01T00:00:00Z',
+              updatedAt: '2026-03-01T00:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/admin/roles/2?includeUsers=true')) {
+          return new Response(
+            JSON.stringify({
+              id: 2,
+              name: 'Manager',
+              permissions: [{ id: 1, name: 'users.read', moduleScope: 'admin', createdAt: '2026-03-01T00:00:00Z' }],
+              users: [{ id: 10, username: 'jane', isActive: true }],
+              createdAt: '2026-03-01T00:00:00Z',
+              updatedAt: '2026-03-01T00:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/admin/roles') && (init?.method === undefined || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 2,
+                  name: 'Manager',
+                  permissionCount: 1,
+                  userCount: 1,
+                  createdAt: '2026-03-01T00:00:00Z',
+                  updatedAt: '2026-03-02T00:00:00Z',
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/admin/roles') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(JSON.stringify({ id: 3, name: 'Ops' }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.endsWith('/api/v1/admin/roles/2') && init?.method === 'PATCH') {
+          patchPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(JSON.stringify({ id: 2, name: 'Manager Updated' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/roles', store)
+
+    expect(await screen.findByRole('heading', { name: 'Roles', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByText('Manager')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Role' }))
+    const createDialog = await screen.findByRole('dialog', { name: 'Create Role' })
+    fireEvent.change(within(createDialog).getByRole('textbox', { name: 'Role Name' }), { target: { value: 'Ops' } })
+    fireEvent.click(within(createDialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => {
+      expect(createPayload).not.toBeNull()
+    })
+    expect(createPayload).toMatchObject({ name: 'Ops' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Manager' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit Role' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Edit Role' })
+    fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Role Name' }), {
+      target: { value: 'Manager Updated' },
+    })
+    fireEvent.click(within(editDialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => {
+      expect(patchPayload).not.toBeNull()
+    })
+    expect(patchPayload).toMatchObject({ name: 'Manager Updated' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Manager' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View Details' }))
+    expect(await screen.findByRole('dialog', { name: 'Role Details' })).toBeInTheDocument()
+    expect(screen.getByText('jane')).toBeInTheDocument()
+    expect(requestedUrls.some((url) => url.includes('/api/v1/admin/roles/2?includeUsers=true'))).toBe(true)
+  })
+
+  it('supports permissions list/filter/details flows', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const permissionUrls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['users.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/admin/permissions')) {
+          permissionUrls.push(url)
+          return new Response(
+            JSON.stringify({
+              items: [{ id: 1, name: 'users.read', moduleScope: 'admin', createdAt: '2026-03-01T00:00:00Z' }],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/permissions', store)
+
+    expect(await screen.findByRole('heading', { name: 'Permissions', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByText('users.read')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), { target: { value: 'users' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Module Scope' }), { target: { value: 'admin' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => {
+      expect(permissionUrls.some((url) => url.includes('q=users'))).toBe(true)
+      expect(permissionUrls.some((url) => url.includes('moduleScope=admin'))).toBe(true)
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for users.read' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View Details' }))
+    expect(await screen.findByRole('dialog', { name: 'Permission Details' })).toBeInTheDocument()
+  })
 })

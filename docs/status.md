@@ -1,5 +1,59 @@
 # Status
 
+## Milestone C — Desktop RBAC Administration Pages + User Multi-Role UX (Complete)
+
+### What changed
+- Implemented desktop `/roles` page using shared admin patterns:
+  - server-backed roles list with `AppDataGrid`
+  - create role dialog
+  - edit role dialog (name + permissions update)
+  - role details dialog (assigned permissions + assigned users)
+  - row action menu wired through shared `AdminRowActions`
+- Implemented desktop `/permissions` page using shared admin patterns:
+  - server-backed permissions list with `AppDataGrid`
+  - search and module-scope filtering
+  - permission details dialog
+  - permission metadata viewer via shared JSON metadata dialog
+- Extended desktop `/users` create/edit flows for multi-role assignment:
+  - replaced static role select with API-driven MUI `Autocomplete` multi-select + chips
+  - included role multi-select in both create and edit dialogs
+  - retained dedicated roles action/edit dialog and upgraded to autocomplete chips
+- Improved users role visibility UX:
+  - added explicit roles column in users grid with chips
+  - added user details dialog that clearly shows assigned roles and core metadata
+- Preserved permission-based action enablement and existing auth/session error handling behavior via shared API client.
+- Kept all desktop data access API-only (no DB access from desktop).
+- Saved prompt copy to `docs/prompts/2026-03-06-milestone-c-desktop-rbac-admin.md` (gitignored).
+
+### API endpoints consumed (desktop)
+- `GET /api/v1/users`
+- `POST /api/v1/users`
+- `PATCH /api/v1/users/:id`
+- `POST /api/v1/users/:id/reset-password`
+- `GET /api/v1/admin/roles`
+- `POST /api/v1/admin/roles`
+- `GET /api/v1/admin/roles/:id?includeUsers=true|false`
+- `PATCH /api/v1/admin/roles/:id`
+- `GET /api/v1/admin/permissions`
+
+### How to test
+- Backend tests:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Desktop frontend tests:
+  - `cd desktop/frontend && npm test -- --run`
+- Web frontend tests:
+  - `cd web && npm test -- --run`
+
+### Verification summary
+- Backend tests: PASS
+- Desktop frontend tests: PASS (including new RBAC route/page smoke tests and role multi-select behavior coverage)
+- Web frontend tests: PASS
+
+### Known parity items for web
+- Desktop Milestone C RBAC administration UX and user role autocomplete are now implemented.
+- Equivalent web-role/permission management UX for Milestone C is still a follow-up item to maintain full cross-client feature parity.
+- Existing jsdom MUI `anchorEl` warnings remain non-blocking in test runs; tests pass.
+
 ## Milestone B — Backend RBAC Administration Contract (Complete)
 
 ### What changed

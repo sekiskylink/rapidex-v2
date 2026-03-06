@@ -1,17 +1,14 @@
 import React from 'react'
 import {
+  Autocomplete,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   FormControlLabel,
-  InputLabel,
-  MenuItem,
-  OutlinedInput,
-  Select,
   Stack,
   Switch,
   TextField,
@@ -43,6 +40,11 @@ interface UserRow {
   createdAt: string
 }
 
+interface RoleOption {
+  id: number
+  name: string
+}
+
 interface UserFormState {
   username: string
   password: string
@@ -58,8 +60,6 @@ interface UserFormState {
 }
 
 type UserFormErrors = Partial<Record<keyof UserFormState, string>>
-
-const ROLE_OPTIONS = ['Admin', 'Manager', 'Staff', 'Viewer']
 
 const defaultCreateForm: UserFormState = {
   username: '',
@@ -142,12 +142,37 @@ function toUserForm(row: UserRow): UserFormState {
   }
 }
 
+function formatDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.valueOf())) {
+    return value
+  }
+  return parsed.toLocaleString()
+}
+
+function renderRoleChips(roles: string[]) {
+  if (!roles.length) {
+    return <Typography color="text.secondary">No roles assigned</Typography>
+  }
+  return (
+    <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ py: 0.25 }}>
+      {roles.map((role) => (
+        <Chip key={role} label={role} size="small" variant="outlined" />
+      ))}
+    </Stack>
+  )
+}
+
 export function UsersPage() {
   const apiClient = useApiClient()
   const principal = useSessionPrincipal()
   const canWrite = Boolean(principal?.permissions.includes('users.write'))
+  const canReadRoles = Boolean(principal?.permissions.includes('users.read'))
 
   const [reloadToken, setReloadToken] = React.useState(0)
+
+  const [roleOptions, setRoleOptions] = React.useState<RoleOption[]>([])
+  const [loadingRoleOptions, setLoadingRoleOptions] = React.useState(false)
 
   const [createOpen, setCreateOpen] = React.useState(false)
   const [createForm, setCreateForm] = React.useState<UserFormState>(defaultCreateForm)
@@ -157,7 +182,11 @@ export function UsersPage() {
   const [editOpen, setEditOpen] = React.useState(false)
   const [editUser, setEditUser] = React.useState<UserRow | null>(null)
   const [editForm, setEditForm] = React.useState<UserFormState>(defaultCreateForm)
+  const [editRoles, setEditRoles] = React.useState<string[]>([])
   const [editErrors, setEditErrors] = React.useState<UserFormErrors>({})
+
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [detailsUser, setDetailsUser] = React.useState<UserRow | null>(null)
 
   const [resetOpen, setResetOpen] = React.useState(false)
   const [resetUser, setResetUser] = React.useState<UserRow | null>(null)
@@ -170,6 +199,25 @@ export function UsersPage() {
   const [submitting, setSubmitting] = React.useState(false)
 
   const refreshGrid = React.useCallback(() => setReloadToken((value) => value + 1), [])
+
+  const loadRoleOptions = React.useCallback(async () => {
+    if (!canReadRoles) {
+      return
+    }
+    setLoadingRoleOptions(true)
+    try {
+      const payload = await apiClient.request<PaginatedResponse<RoleOption>>('/api/v1/admin/roles?page=1&pageSize=200&sort=name:asc')
+      setRoleOptions(Array.isArray(payload.items) ? payload.items : [])
+    } catch {
+      setRoleOptions([])
+    } finally {
+      setLoadingRoleOptions(false)
+    }
+  }, [apiClient, canReadRoles])
+
+  React.useEffect(() => {
+    void loadRoleOptions()
+  }, [loadRoleOptions])
 
   const fetchUsers = React.useCallback(
     async (params: AppDataGridFetchParams) => {
@@ -239,6 +287,7 @@ export function UsersPage() {
       whatsappNumber: editForm.whatsappNumber,
       telegramHandle: editForm.telegramHandle,
       isActive: editForm.isActive,
+      roles: editRoles,
     }
     if (editForm.password.trim()) {
       payload.password = editForm.password
@@ -253,6 +302,7 @@ export function UsersPage() {
       setEditOpen(false)
       setEditUser(null)
       setEditForm(defaultCreateForm)
+      setEditRoles([])
       refreshGrid()
     } catch (error) {
       const fieldErrors = validationFieldErrors(error)
@@ -322,6 +372,8 @@ export function UsersPage() {
     }
   }
 
+  const roleNames = React.useMemo(() => roleOptions.map((role) => role.name), [roleOptions])
+
   const columns = React.useMemo<GridColDef<UserRow>[]>(
     () => [
       { field: 'username', headerName: 'Username', flex: 1, minWidth: 160 },
@@ -331,6 +383,14 @@ export function UsersPage() {
         flex: 1,
         minWidth: 200,
         valueGetter: (_value, row) => displayNameForRow(row),
+      },
+      {
+        field: 'roles',
+        headerName: 'Roles',
+        flex: 1,
+        minWidth: 220,
+        sortable: false,
+        renderCell: (params: GridRenderCellParams<UserRow>) => renderRoleChips(params.row.roles ?? []),
       },
       {
         field: 'email',
@@ -364,7 +424,7 @@ export function UsersPage() {
         field: 'updatedAt',
         headerName: 'Updated',
         width: 190,
-        valueGetter: (_value, row) => new Date(row.updatedAt).toLocaleString(),
+        valueGetter: (_value, row) => formatDate(row.updatedAt),
       },
       {
         field: 'actions',
@@ -377,6 +437,15 @@ export function UsersPage() {
             rowLabel={params.row.username}
             actions={[
               {
+                id: 'view',
+                label: 'View Details',
+                icon: 'view',
+                onClick: () => {
+                  setDetailsUser(params.row)
+                  setDetailsOpen(true)
+                },
+              },
+              {
                 id: 'edit',
                 label: 'Edit',
                 icon: 'edit',
@@ -384,6 +453,7 @@ export function UsersPage() {
                 onClick: () => {
                   setEditUser(params.row)
                   setEditForm(toUserForm(params.row))
+                  setEditRoles(params.row.roles ?? [])
                   setEditErrors({})
                   setEditOpen(true)
                 },
@@ -541,22 +611,17 @@ export function UsersPage() {
               error={Boolean(createErrors.telegramHandle)}
               helperText={createErrors.telegramHandle}
             />
-            <FormControl fullWidth>
-              <InputLabel id="create-roles-label">Roles</InputLabel>
-              <Select
-                labelId="create-roles-label"
-                multiple
-                value={createRoles}
-                onChange={(event) => setCreateRoles(event.target.value as string[])}
-                input={<OutlinedInput label="Roles" />}
-              >
-                {ROLE_OPTIONS.map((role) => (
-                  <MenuItem key={role} value={role}>
-                    {role}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              multiple
+              options={roleNames}
+              loading={loadingRoleOptions}
+              value={createRoles}
+              onChange={(_event, value) => setCreateRoles(value)}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => <Chip label={option} {...getTagProps({ index })} key={option} size="small" />)
+              }
+              renderInput={(params) => <TextField {...params} label="Roles" placeholder="Assign roles" />}
+            />
             <FormControlLabel
               control={
                 <Switch
@@ -667,6 +732,17 @@ export function UsersPage() {
               error={Boolean(editErrors.telegramHandle)}
               helperText={editErrors.telegramHandle}
             />
+            <Autocomplete
+              multiple
+              options={roleNames}
+              loading={loadingRoleOptions}
+              value={editRoles}
+              onChange={(_event, value) => setEditRoles(value)}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => <Chip label={option} {...getTagProps({ index })} key={option} size="small" />)
+              }
+              renderInput={(params) => <TextField {...params} label="Roles" placeholder="Assign roles" />}
+            />
             <FormControlLabel
               control={
                 <Switch
@@ -683,6 +759,47 @@ export function UsersPage() {
           <Button variant="contained" onClick={() => void onSaveEdit()} disabled={submitting || !editUser}>
             Save
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>User Details</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Username
+              </Typography>
+              <Typography>{detailsUser?.username ?? '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Display Name
+              </Typography>
+              <Typography>{detailsUser ? displayNameForRow(detailsUser) : '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Roles
+              </Typography>
+              {renderRoleChips(detailsUser?.roles ?? [])}
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Status
+              </Typography>
+              <Typography>{detailsUser?.isActive ? 'Active' : 'Inactive'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Updated
+              </Typography>
+              <Typography>{detailsUser ? formatDate(detailsUser.updatedAt) : '-'}</Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
@@ -715,22 +832,17 @@ export function UsersPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Typography color="text.secondary">Update role assignments for {rolesUser?.username ?? 'this user'}.</Typography>
-            <FormControl fullWidth>
-              <InputLabel id="edit-roles-label">Roles</InputLabel>
-              <Select
-                labelId="edit-roles-label"
-                multiple
-                value={rolesSelection}
-                onChange={(event) => setRolesSelection(event.target.value as string[])}
-                input={<OutlinedInput label="Roles" />}
-              >
-                {ROLE_OPTIONS.map((role) => (
-                  <MenuItem key={role} value={role}>
-                    {role}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              multiple
+              options={roleNames}
+              loading={loadingRoleOptions}
+              value={rolesSelection}
+              onChange={(_event, value) => setRolesSelection(value)}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => <Chip label={option} {...getTagProps({ index })} key={option} size="small" />)
+              }
+              renderInput={(params) => <TextField {...params} label="Roles" placeholder="Assign roles" />}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
