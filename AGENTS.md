@@ -355,6 +355,15 @@ At minimum, review whether the module needs entries in:
 Agents should prefer extending registry/config-driven structures over duplicating one-off wiring.
 When laying initial registry foundations, use existing Administration pages/routes as first consumers where practical before introducing new modules.
 
+### 21.2.1 Route organization rule
+Route organization for modules must remain registry-aligned.
+
+Rules:
+
+- define canonical module route/base path in module registry metadata
+- keep navigation and route wiring consistent with the same registry definitions
+- avoid scattering module route constants across unrelated files without registry linkage
+
 ### 21.3 Permission naming rule
 Permissions for new modules must follow a consistent naming convention.
 

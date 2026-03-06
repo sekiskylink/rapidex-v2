@@ -13,10 +13,13 @@
 - Backend/desktop/web contracts remain aligned for shared module behaviors.
 - Registry-first architecture should reduce scattered wiring for future module additions.
 - Any temporary parity gap discovered during implementation must be documented explicitly.
+- This planned milestone entry is architecture/documentation-first only; no application/runtime code changes are part of this step.
 
 ### Planned verification
 - Milestone foundation docs updated (`docs/requirements.md`, `AGENTS.md`, `docs/status.md`).
 - Prompt traceability copy saved under `docs/prompts/` and not committed.
+- Confirm prompt copy is not staged for commit.
+- Confirm no application code files changed as part of this docs-only planning step.
 - Implementation milestone gate (when code changes begin) remains:
   - backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...`
   - desktop route/smoke tests: `cd desktop/frontend && npm test -- --run`

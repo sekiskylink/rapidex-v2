@@ -747,6 +747,7 @@ The milestone is architecture and documentation first and must remain domain-agn
 ### 15.2 Navigation Registry Concept
 - Define a typed navigation registry derived from module definitions and platform shell requirements.
 - Navigation registry must support grouped navigation semantics (for example `Dashboard`, `Administration`, `Settings`) and child ordering.
+- Route organization should remain registry-aligned so module routes can be discovered and wired predictably from shared definitions instead of scattered one-off declarations.
 - Navigation visibility remains RBAC-aware:
   - frontend visibility checks are UX-level
   - backend authorization is authoritative
@@ -764,10 +765,11 @@ The milestone is architecture and documentation first and must remain domain-agn
 - New module extension flow must be registry-first:
   1) add/update module registry entry
   2) add/update navigation registry mapping
-  3) add/update permission registry definitions
-  4) add/update backend API contract (when module introduces data/actions)
-  5) add/update desktop/web route wiring and UI consumption
-  6) update milestone status documentation
+  3) add/update route organization wiring from registry definitions
+  4) add/update permission registry definitions
+  5) add/update backend API contract (when module introduces data/actions)
+  6) add/update desktop/web route wiring and UI consumption
+  7) update milestone status documentation
 - Do not introduce a dynamic plugin loader; keep registration static, typed, and maintainable.
 - Avoid broad refactors in one step; prefer incremental migration of existing platform features to registry consumers.
 
