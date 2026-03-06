@@ -313,5 +313,127 @@ Prompts should also explicitly require updates to:
 
 Do not replace working behavior with temporary placeholders that reduce parity, quality, or architectural consistency unless requirements explicitly permit it.
 
+---
+
+## 21) New Module Contract
+
+When introducing a new module, agents must treat it as a cross-layer feature unless `docs/requirements.md` explicitly limits scope.
+
+A new module should be defined intentionally, not scattered across unrelated files.
+
+### 21.1 Before implementing a new module
+Agents must first confirm the module is defined in `docs/requirements.md` or explicitly requested by the user.
+
+Before implementation, identify and document:
+
+- module key/id
+- display label
+- base route/path
+- navigation group
+- permission keys
+- backend API scope
+- whether the module applies to:
+  - backend only
+  - desktop + backend
+  - web + backend
+  - backend + desktop + web
+
+If the module changes platform structure, update `docs/status.md` accordingly.
+
+### 21.2 Registry-first rule
+New modules must be added through the project registries/configuration first, not by hardcoding scattered entries.
+
+At minimum, review whether the module needs entries in:
+
+- module registry
+- navigation registry
+- permission registry
+- route definitions
+- settings or feature flags
+- dashboard shortcuts/widgets if applicable
+
+Agents should prefer extending registry/config-driven structures over duplicating one-off wiring.
+When laying initial registry foundations, use existing Administration pages/routes as first consumers where practical before introducing new modules.
+
+### 21.3 Permission naming rule
+Permissions for new modules must follow a consistent naming convention.
+
+Preferred pattern:
+
+- `<module>.read`
+- `<module>.write`
+- `<module>.delete`
+- `<module>.admin`
+
+If more granular permissions are needed, they must remain predictable and documented.
+
+Examples:
+
+- `inventory.read`
+- `inventory.write`
+- `inventory.adjust`
+- `reports.read`
+
+Do not invent inconsistent naming styles across modules.
+
+### 21.4 Cross-client parity for modules
+If a new module is intended to exist in both desktop and web, agents must maintain parity unless `docs/status.md` records a temporary intentional gap.
+
+Parity applies to:
+
+- route existence
+- navigation visibility
+- permission checks
+- major CRUD capabilities
+- shared backend contract usage
+
+### 21.5 Backend-first module rule
+If a module requires new business data or actions:
+
+- define/update backend API contract first
+- then implement desktop/web consumers against that contract
+
+Desktop must never access the database directly.
+
+### 21.6 Shared UX patterns for modules
+New modules must reuse shared platform patterns where applicable:
+
+- app shell and navigation
+- DataGrid wrappers
+- actions column patterns
+- dialogs/drawers
+- notifications and error handling
+- auth/session handling
+- settings conventions
+
+Avoid inventing module-specific UX patterns unless requirements justify them.
+
+### 21.7 Module documentation rule
+Every new module milestone must update `docs/status.md` with:
+
+- module name
+- layers affected
+- routes/pages added
+- permissions added
+- backend endpoints added or changed
+- tests added/run
+- any known parity gaps
+
+If the module introduces a reusable pattern, add a short `docs/notes/` entry when helpful.
+If work is architecture/documentation-only (registry foundation), status must still include a planned/completed milestone entry with scope and follow-up implementation targets.
+
+### 21.8 Keep the skeleton extensible
+Agents must not implement modules in ways that make future extension harder.
+
+Prefer:
+
+- typed registries
+- predictable route structure
+- predictable permission naming
+- reusable form/list/detail patterns
+- minimal coupling between unrelated modules
+
+Do not over-engineer plugin systems unless explicitly required.
+
 
 ## END

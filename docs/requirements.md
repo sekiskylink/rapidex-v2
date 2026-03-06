@@ -727,4 +727,74 @@ This milestone defines reusable authentication-entry improvements for the BasePr
   - web frontend route/smoke tests passing
   - `docs/status.md` updated with completion evidence
 
+---
+
+## 15. Upcoming Milestone — Registry-First Module Foundation
+
+This milestone establishes a reusable architecture baseline for adding future modules without scattered one-off wiring.
+The milestone is architecture and documentation first and must remain domain-agnostic.
+
+### 15.1 Module Registry Concept
+- Define a typed module registry as the canonical inventory of platform/application modules.
+- Each module entry must declare at minimum:
+  - module key/id
+  - display label
+  - base route/path
+  - navigation group
+  - default enabled/visibility intent
+- Registry entries should be additive and predictable; avoid implicit behavior that depends on file location conventions alone.
+
+### 15.2 Navigation Registry Concept
+- Define a typed navigation registry derived from module definitions and platform shell requirements.
+- Navigation registry must support grouped navigation semantics (for example `Dashboard`, `Administration`, `Settings`) and child ordering.
+- Navigation visibility remains RBAC-aware:
+  - frontend visibility checks are UX-level
+  - backend authorization is authoritative
+- Existing `Administration` routes/pages should be the first concrete consumers of the navigation registry baseline.
+
+### 15.3 Permission Registry Concept
+- Define a typed permission registry as the canonical source for permission identifiers and optional module scope metadata.
+- Permission registry must be reusable by:
+  - backend authorization wiring
+  - role/permission administration APIs
+  - client-side permission-aware UI affordances
+- Existing administration permissions should be the first concrete consumers of the permission registry baseline.
+
+### 15.4 Registry-First Module Extension Workflow
+- New module extension flow must be registry-first:
+  1) add/update module registry entry
+  2) add/update navigation registry mapping
+  3) add/update permission registry definitions
+  4) add/update backend API contract (when module introduces data/actions)
+  5) add/update desktop/web route wiring and UI consumption
+  6) update milestone status documentation
+- Do not introduce a dynamic plugin loader; keep registration static, typed, and maintainable.
+- Avoid broad refactors in one step; prefer incremental migration of existing platform features to registry consumers.
+
+### 15.5 Permission Naming Conventions
+- Permission names must follow predictable module-based naming:
+  - `<module>.read`
+  - `<module>.write`
+  - `<module>.delete`
+  - `<module>.admin`
+- Granular permissions are allowed when justified, but must stay consistent and documented (for example `inventory.adjust`).
+- Do not mix naming styles for the same module.
+
+### 15.6 Desktop/Web Parity Expectations for Modules
+- If a module is defined as shared, route organization, navigation visibility intent, and major CRUD capabilities must be aligned across desktop and web.
+- Temporary parity gaps are allowed only when explicitly documented in `docs/status.md` with scope and follow-up milestone.
+- Backend API contracts for shared modules must be defined/updated before client consumption.
+
+### 15.7 Required Tests for Milestone Completion
+- For the registry-foundation milestone:
+  - documentation updates are required in `docs/requirements.md`, `AGENTS.md`, and `docs/status.md`
+  - prompt traceability copy must be saved under `docs/prompts/` and remain uncommitted
+  - verify no application/runtime code changes are introduced
+- For subsequent implementation milestones:
+  - backend tests (`go test ./...`) must pass
+  - desktop/frontend route/smoke tests must pass
+  - web/frontend route/smoke tests must pass
+  - targeted tests should cover registry wiring usage (navigation visibility and permission mapping behavior)
+  - `docs/status.md` must record completion evidence and parity notes
+
 # END (Authoritative)

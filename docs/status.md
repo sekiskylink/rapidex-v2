@@ -1,5 +1,27 @@
 # Status
 
+## Next Planned Milestone — Registry-First Module Foundation (Planned)
+
+### Planned scope
+- Define a typed module registry baseline for future platform/domain modules.
+- Define a typed navigation registry baseline for grouped shell navigation wiring.
+- Define a typed permission registry baseline for RBAC-aware permission definitions.
+- Refactor existing Administration-related platform features to consume registry entries incrementally (users, roles, permissions, audit, settings-adjacent navigation intent) without introducing domain modules.
+- Keep implementation static/config-driven (no dynamic plugin loader), simple, and maintainable.
+
+### Planned delivery constraints
+- Backend/desktop/web contracts remain aligned for shared module behaviors.
+- Registry-first architecture should reduce scattered wiring for future module additions.
+- Any temporary parity gap discovered during implementation must be documented explicitly.
+
+### Planned verification
+- Milestone foundation docs updated (`docs/requirements.md`, `AGENTS.md`, `docs/status.md`).
+- Prompt traceability copy saved under `docs/prompts/` and not committed.
+- Implementation milestone gate (when code changes begin) remains:
+  - backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...`
+  - desktop route/smoke tests: `cd desktop/frontend && npm test -- --run`
+  - web route/smoke tests: `cd web && npm test -- --run`
+
 ## Milestone J — Page-Level Notification/Error Handling Migration (Complete)
 
 ### What changed
