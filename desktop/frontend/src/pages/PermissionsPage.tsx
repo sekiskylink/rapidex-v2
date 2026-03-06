@@ -4,6 +4,8 @@ import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import type { PaginatedResponse } from '../api/pagination'
 import { useApiClient } from '../api/useApiClient'
 import { useSessionPrincipal } from '../auth/hooks'
+import { hasAnyPermission } from '../rbac/permissions'
+import { getPermissionDefinition } from '../registry/permissions'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { JsonMetadataDialog } from '../components/admin/JsonMetadataDialog'
 import { buildAdminListRequestQuery, useAdminListSearch } from '../components/admin/listSearch'
@@ -28,7 +30,7 @@ function formatDate(value: string) {
 export function PermissionsPage() {
   const apiClient = useApiClient()
   const principal = useSessionPrincipal()
-  const canRead = Boolean(principal?.permissions.includes('users.read'))
+  const canRead = hasAnyPermission(principal, ['users.read', 'users.write'])
 
   const { searchInput, setSearchInput, search } = useAdminListSearch()
   const {
@@ -42,6 +44,10 @@ export function PermissionsPage() {
 
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [selectedPermission, setSelectedPermission] = React.useState<PermissionRow | null>(null)
+  const selectedPermissionDefinition = React.useMemo(
+    () => (selectedPermission ? getPermissionDefinition(selectedPermission.name) : undefined),
+    [selectedPermission],
+  )
 
   const fetchPermissions = React.useCallback(
     async (params: AppDataGridFetchParams) => {
@@ -163,9 +169,33 @@ export function PermissionsPage() {
             </Box>
             <Box>
               <Typography variant="subtitle2" color="text.secondary">
+                Label
+              </Typography>
+              <Typography>{selectedPermissionDefinition?.label ?? '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Description
+              </Typography>
+              <Typography>{selectedPermissionDefinition?.description ?? '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
                 Module Scope
               </Typography>
               <Typography>{selectedPermission?.moduleScope ?? '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Registry Module
+              </Typography>
+              <Typography>{selectedPermissionDefinition?.module ?? '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Category
+              </Typography>
+              <Typography>{selectedPermissionDefinition?.category ?? '-'}</Typography>
             </Box>
             <Box>
               <Typography variant="subtitle2" color="text.secondary">

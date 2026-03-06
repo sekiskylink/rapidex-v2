@@ -12,6 +12,6 @@ export function hasPermission(principal: SessionPrincipal | null | undefined, pe
   return principal.permissions.some((candidate) => normalize(candidate) === target)
 }
 
-export function hasAnyPermission(principal: SessionPrincipal | null | undefined, permissions: string[]) {
+export function hasAnyPermission(principal: SessionPrincipal | null | undefined, permissions: readonly string[]) {
   return permissions.some((permission) => hasPermission(principal, permission))
 }

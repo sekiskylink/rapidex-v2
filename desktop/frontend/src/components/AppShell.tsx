@@ -36,34 +36,13 @@ import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
 import { buildNavigation } from '../navigation'
+import { getRouteLabel } from '../registry/navigation'
 import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
 
 const DRAWER_WIDTH = 248
 const MINI_DRAWER_WIDTH = 76
-
-function sectionTitle(pathname: string) {
-  if (pathname.startsWith('/users')) {
-    return 'Users'
-  }
-  if (pathname.startsWith('/audit')) {
-    return 'Audit Log'
-  }
-  if (pathname.startsWith('/roles')) {
-    return 'Roles'
-  }
-  if (pathname.startsWith('/permissions')) {
-    return 'Permissions'
-  }
-  if (pathname.startsWith('/settings')) {
-    return 'Settings'
-  }
-  if (pathname.startsWith('/dashboard')) {
-    return 'Dashboard'
-  }
-  return 'BasePro'
-}
 
 function normalizeBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim().replace(/\/+$/, '')
@@ -305,7 +284,7 @@ export function AppShell() {
             </IconButton>
           ) : null}
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            {sectionTitle(pathname)}
+            {getRouteLabel(pathname)}
           </Typography>
           <Tooltip title="Open user menu">
             <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)}>

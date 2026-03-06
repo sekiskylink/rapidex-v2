@@ -87,41 +87,41 @@ func newRouter(deps AppDeps) *gin.Engine {
 
 		admin := api.Group("/admin/api-tokens")
 		admin.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
-		admin.GET("", middleware.RequirePermission(deps.RBACService, "api_tokens.read"), deps.AuthHandler.ListAPITokens)
-		admin.POST("", middleware.RequirePermission(deps.RBACService, "api_tokens.write"), deps.AuthHandler.CreateAPIToken)
-		admin.POST("/:id/revoke", middleware.RequirePermission(deps.RBACService, "api_tokens.write"), deps.AuthHandler.RevokeAPIToken)
+		admin.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensRead), deps.AuthHandler.ListAPITokens)
+		admin.POST("", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensWrite), deps.AuthHandler.CreateAPIToken)
+		admin.POST("/:id/revoke", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensWrite), deps.AuthHandler.RevokeAPIToken)
 	}
 
 	if deps.UsersHandler != nil {
 		usersGroup := api.Group("/users")
 		usersGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
-		usersGroup.GET("", middleware.RequirePermission(deps.RBACService, "users.read"), deps.UsersHandler.List)
-		usersGroup.GET("/:id", middleware.RequirePermission(deps.RBACService, "users.read"), deps.UsersHandler.Get)
-		usersGroup.POST("", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Create)
-		usersGroup.PUT("/:id", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Put)
-		usersGroup.PATCH("/:id", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.Patch)
-		usersGroup.POST("/:id/reset-password", middleware.RequirePermission(deps.RBACService, "users.write"), deps.UsersHandler.ResetPassword)
+		usersGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.UsersHandler.List)
+		usersGroup.GET("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.UsersHandler.Get)
+		usersGroup.POST("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.UsersHandler.Create)
+		usersGroup.PUT("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.UsersHandler.Put)
+		usersGroup.PATCH("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.UsersHandler.Patch)
+		usersGroup.POST("/:id/reset-password", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.UsersHandler.ResetPassword)
 	}
 
 	if deps.AuditHandler != nil {
 		auditGroup := api.Group("/audit")
 		auditGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
-		auditGroup.GET("", middleware.RequirePermission(deps.RBACService, "audit.read"), deps.AuditHandler.List)
+		auditGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionAuditRead), deps.AuditHandler.List)
 	}
 
 	if deps.RBACAdminHandler != nil {
 		rolesGroup := api.Group("/admin/roles")
 		rolesGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
-		rolesGroup.GET("", middleware.RequirePermission(deps.RBACService, "users.read"), deps.RBACAdminHandler.ListRoles)
-		rolesGroup.POST("", middleware.RequirePermission(deps.RBACService, "users.write"), deps.RBACAdminHandler.CreateRole)
-		rolesGroup.GET("/:id", middleware.RequirePermission(deps.RBACService, "users.read"), deps.RBACAdminHandler.GetRole)
-		rolesGroup.PUT("/:id", middleware.RequirePermission(deps.RBACService, "users.write"), deps.RBACAdminHandler.PutRole)
-		rolesGroup.PATCH("/:id", middleware.RequirePermission(deps.RBACService, "users.write"), deps.RBACAdminHandler.PatchRole)
-		rolesGroup.PUT("/:id/permissions", middleware.RequirePermission(deps.RBACService, "users.write"), deps.RBACAdminHandler.UpdateRolePermissions)
+		rolesGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.RBACAdminHandler.ListRoles)
+		rolesGroup.POST("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.RBACAdminHandler.CreateRole)
+		rolesGroup.GET("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.RBACAdminHandler.GetRole)
+		rolesGroup.PUT("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.RBACAdminHandler.PutRole)
+		rolesGroup.PATCH("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.RBACAdminHandler.PatchRole)
+		rolesGroup.PUT("/:id/permissions", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.RBACAdminHandler.UpdateRolePermissions)
 
 		permissionsGroup := api.Group("/admin/permissions")
 		permissionsGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
-		permissionsGroup.GET("", middleware.RequirePermission(deps.RBACService, "users.read"), deps.RBACAdminHandler.ListPermissions)
+		permissionsGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.RBACAdminHandler.ListPermissions)
 	}
 
 	if deps.SettingsHandler != nil {
@@ -129,8 +129,8 @@ func newRouter(deps AppDeps) *gin.Engine {
 
 		settingsGroup := api.Group("/settings")
 		settingsGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
-		settingsGroup.GET("/login-branding", middleware.RequirePermission(deps.RBACService, "settings.read"), deps.SettingsHandler.GetLoginBranding)
-		settingsGroup.PUT("/login-branding", middleware.RequirePermission(deps.RBACService, "settings.write"), deps.SettingsHandler.UpdateLoginBranding)
+		settingsGroup.GET("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetLoginBranding)
+		settingsGroup.PUT("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite), deps.SettingsHandler.UpdateLoginBranding)
 	}
 
 	return r

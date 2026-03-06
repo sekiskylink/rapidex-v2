@@ -1,26 +1,87 @@
 # Status
 
-## Next Planned Milestone — Registry-First Module Foundation (Planned)
+## Milestone — Registry-First Module Foundation (Implementation) (Complete)
 
-### Planned scope
+### What changed
+- Added typed permission registries in both clients:
+  - `desktop/frontend/src/registry/permissions.ts`
+  - `web/src/registry/permissions.ts`
+- Added typed navigation registries in both clients:
+  - `desktop/frontend/src/registry/navigation.ts`
+  - `web/src/registry/navigation.ts`
+- Added typed module registries in both clients:
+  - `desktop/frontend/src/registry/modules.ts`
+  - `web/src/registry/modules.ts`
+- Refactored desktop navigation composition and route-access checks to consume registry-driven navigation rules.
+- Refactored web navigation composition and route-access checks to consume registry-driven navigation rules.
+- Refactored shell route-title resolution in desktop and web to use registry-backed route labels.
+- Refactored permissions pages in desktop and web to consume permission registry metadata for details display and permission checks.
+- Added backend RBAC registry foundations and constants:
+  - `backend/internal/rbac/registry.go`
+  - `backend/internal/rbac/registry_test.go`
+- Updated backend RBAC base seeding (`EnsureBaseRBAC`) and router permission middleware wiring to use registry/constants instead of repeated string literals.
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-06-registry-foundation-implementation.md` (gitignored, not for commit)
+
+### Registry usage coverage
+- Desktop now consumes registries for:
+  - authenticated shell navigation visibility
+  - route authorization checks (`canAccessRoute`)
+  - AppBar section-title mapping
+  - permission metadata lookup in Permissions details dialog
+- Web now consumes registries for:
+  - authenticated shell navigation visibility
+  - route authorization checks (`canAccessRoute`)
+  - AppBar section-title mapping
+  - permission metadata lookup in Permissions details dialog
+- Backend now consumes registry/constants for:
+  - base permission definitions used in RBAC bootstrapping
+  - permission-key references in route middleware guards
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+- Web frontend:
+  - `cd web && npm test -- --run` -> PASS
+- Web production build:
+  - `cd web && npm run build` -> PASS
+
+### Added targeted tests
+- Backend:
+  - `backend/internal/rbac/registry_test.go`
+- Desktop:
+  - `desktop/frontend/src/registry/registry.test.ts`
+- Web:
+  - `web/src/registry/registry.test.ts`
+
+### Remaining follow-ups
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in desktop/web frontend test logs.
+- Existing non-blocking Vite warnings for third-party `'use client'` directives and chunk-size notices remain unchanged.
+- Some non-navigation UI labels/titles are still page-local constants; they can be migrated incrementally if registry expansion continues.
+
+## Milestone — Registry-First Module Foundation (Documentation) (Complete)
+
+### Scope completed
 - Define a typed module registry baseline for future platform/domain modules.
 - Define a typed navigation registry baseline for grouped shell navigation wiring.
 - Define a typed permission registry baseline for RBAC-aware permission definitions.
 - Refactor existing Administration-related platform features to consume registry entries incrementally (users, roles, permissions, audit, settings-adjacent navigation intent) without introducing domain modules.
 - Keep implementation static/config-driven (no dynamic plugin loader), simple, and maintainable.
 
-### Planned delivery constraints
+### Delivery constraints met
 - Backend/desktop/web contracts remain aligned for shared module behaviors.
 - Registry-first architecture should reduce scattered wiring for future module additions.
 - Any temporary parity gap discovered during implementation must be documented explicitly.
-- This planned milestone entry is architecture/documentation-first only; no application/runtime code changes are part of this step.
+- This milestone was architecture/documentation-first only; no application/runtime code changes were included in this documentation step.
 
-### Planned verification
+### Verification completed
 - Milestone foundation docs updated (`docs/requirements.md`, `AGENTS.md`, `docs/status.md`).
 - Prompt traceability copy saved under `docs/prompts/` and not committed.
 - Confirm prompt copy is not staged for commit.
 - Confirm no application code files changed as part of this docs-only planning step.
-- Implementation milestone gate (when code changes begin) remains:
+- Implementation milestone gate (for the next code-change milestone) remains:
   - backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...`
   - desktop route/smoke tests: `cd desktop/frontend && npm test -- --run`
   - web route/smoke tests: `cd web && npm test -- --run`

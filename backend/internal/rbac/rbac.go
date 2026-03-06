@@ -271,15 +271,7 @@ func (s *Service) RoleNamesForUser(ctx context.Context, userID int64) ([]string,
 
 func (s *Service) EnsureBaseRBAC(ctx context.Context) error {
 	roleDefinitions := []string{"Admin", "Manager", "Staff", "Viewer"}
-	permissionDefinitions := []Permission{
-		{Name: "users.read"},
-		{Name: "users.write"},
-		{Name: "audit.read"},
-		{Name: "settings.read"},
-		{Name: "settings.write"},
-		{Name: "api_tokens.read"},
-		{Name: "api_tokens.write"},
-	}
+	permissionDefinitions := BasePermissionRegistry()
 
 	roleMap := map[string]Role{}
 	for _, name := range roleDefinitions {
@@ -292,18 +284,26 @@ func (s *Service) EnsureBaseRBAC(ctx context.Context) error {
 
 	permMap := map[string]Permission{}
 	for _, definition := range permissionDefinitions {
-		perm, err := s.repo.EnsurePermission(ctx, definition.Name, definition.ModuleScope)
+		perm, err := s.repo.EnsurePermission(ctx, definition.Key, nil)
 		if err != nil {
 			return err
 		}
-		permMap[definition.Name] = perm
+		permMap[definition.Key] = perm
 	}
 
 	mappings := map[string][]string{
-		"Admin":   {"users.read", "users.write", "audit.read", "settings.read", "settings.write", "api_tokens.read", "api_tokens.write"},
-		"Manager": {"users.read", "audit.read", "settings.read"},
-		"Staff":   {"settings.read"},
-		"Viewer":  {"users.read", "audit.read", "settings.read"},
+		"Admin": {
+			PermissionUsersRead,
+			PermissionUsersWrite,
+			PermissionAuditRead,
+			PermissionSettingsRead,
+			PermissionSettingsWrite,
+			PermissionAPITokensRead,
+			PermissionAPITokensWrite,
+		},
+		"Manager": {PermissionUsersRead, PermissionAuditRead, PermissionSettingsRead},
+		"Staff":   {PermissionSettingsRead},
+		"Viewer":  {PermissionUsersRead, PermissionAuditRead, PermissionSettingsRead},
 	}
 
 	for roleName, perms := range mappings {

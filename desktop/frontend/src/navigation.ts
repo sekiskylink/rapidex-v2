@@ -1,5 +1,5 @@
 import type { SessionPrincipal } from './auth/session'
-import { hasAnyPermission, hasPermission } from './rbac/permissions'
+import { authenticatedNavigationRegistry, canAccessNavigationPath } from './registry/navigation'
 
 export interface NavigationLeaf {
   label: string
@@ -15,72 +15,60 @@ export interface NavigationGroup {
   visible: boolean
 }
 
-function canAccessUsers(principal: SessionPrincipal | null | undefined) {
-  return hasAnyPermission(principal, ['users.read', 'users.write'])
-}
-
-function canAccessRoles(principal: SessionPrincipal | null | undefined) {
-  return hasAnyPermission(principal, ['users.read', 'users.write'])
-}
-
-function canAccessPermissions(principal: SessionPrincipal | null | undefined) {
-  return hasAnyPermission(principal, ['users.read', 'users.write'])
-}
-
-function canAccessAudit(principal: SessionPrincipal | null | undefined) {
-  return hasPermission(principal, 'audit.read')
-}
-
 export function buildNavigation(principal: SessionPrincipal | null | undefined) {
-  const dashboard: NavigationLeaf = {
-    key: 'dashboard',
-    label: 'Dashboard',
-    path: '/dashboard',
-    visible: true,
-  }
+  const topLevel: NavigationLeaf[] = []
+  const administrationChildren: NavigationLeaf[] = []
 
-  const settings: NavigationLeaf = {
-    key: 'settings',
-    label: 'Settings',
-    path: '/settings',
-    visible: hasAnyPermission(principal, ['settings.read', 'settings.write']),
-  }
+  for (const item of authenticatedNavigationRegistry) {
+    if (item.id === 'administration') {
+      for (const child of item.children ?? []) {
+        if (!child.path) {
+          continue
+        }
+        const visible = canAccessNavigationPath(principal, child.path)
+        if (!visible) {
+          continue
+        }
+        administrationChildren.push({
+          key: child.id,
+          label: child.label,
+          path: child.path,
+          visible: true,
+        })
+      }
+      continue
+    }
 
-  const administrationChildren: NavigationLeaf[] = [
-    { key: 'users', label: 'Users', path: '/users', visible: canAccessUsers(principal) },
-    { key: 'roles', label: 'Roles', path: '/roles', visible: canAccessRoles(principal) },
-    { key: 'permissions', label: 'Permissions', path: '/permissions', visible: canAccessPermissions(principal) },
-    { key: 'audit', label: 'Audit Log', path: '/audit', visible: canAccessAudit(principal) },
-  ]
+    if (!item.path) {
+      continue
+    }
+
+    const visible = canAccessNavigationPath(principal, item.path)
+    if (!visible) {
+      continue
+    }
+
+    topLevel.push({
+      key: item.id,
+      label: item.label,
+      path: item.path,
+      visible: true,
+    })
+  }
 
   const administration: NavigationGroup = {
     key: 'administration',
     label: 'Administration',
-    children: administrationChildren.filter((item) => item.visible),
-    visible: administrationChildren.some((item) => item.visible),
+    children: administrationChildren,
+    visible: administrationChildren.length > 0,
   }
 
   return {
-    topLevel: [dashboard, settings].filter((item) => item.visible),
+    topLevel,
     administration,
   }
 }
 
 export function canAccessRoute(principal: SessionPrincipal | null | undefined, pathname: string) {
-  if (pathname.startsWith('/users')) {
-    return canAccessUsers(principal)
-  }
-  if (pathname.startsWith('/roles')) {
-    return canAccessRoles(principal)
-  }
-  if (pathname.startsWith('/permissions')) {
-    return canAccessPermissions(principal)
-  }
-  if (pathname.startsWith('/audit')) {
-    return canAccessAudit(principal)
-  }
-  if (pathname.startsWith('/settings')) {
-    return hasAnyPermission(principal, ['settings.read', 'settings.write'])
-  }
-  return true
+  return canAccessNavigationPath(principal, pathname)
 }

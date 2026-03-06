@@ -23,6 +23,7 @@ import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { appName } from '../lib/env'
 import { buildNavigation } from '../navigation'
+import { getRouteLabel } from '../registry/navigation'
 import {
   AdminPanelSettingsRoundedIcon,
   ChevronLeftRoundedIcon,
@@ -44,28 +45,6 @@ import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
 
 const drawerWidth = 260
 const miniDrawerWidth = 80
-
-function sectionTitle(pathname: string) {
-  if (pathname.startsWith('/users')) {
-    return 'Users'
-  }
-  if (pathname.startsWith('/roles')) {
-    return 'Roles'
-  }
-  if (pathname.startsWith('/permissions')) {
-    return 'Permissions'
-  }
-  if (pathname.startsWith('/audit')) {
-    return 'Audit Log'
-  }
-  if (pathname.startsWith('/settings')) {
-    return 'Settings'
-  }
-  if (pathname.startsWith('/dashboard')) {
-    return 'Dashboard'
-  }
-  return 'BasePro'
-}
 
 export function AppShell() {
   const navigate = useNavigate()
@@ -335,7 +314,7 @@ export function AppShell() {
             {isMobile ? <MenuIcon /> : collapsed ? <ChevronRightRoundedIcon /> : <ChevronLeftRoundedIcon />}
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }} noWrap>
-            {sectionTitle(pathname)}
+            {getRouteLabel(pathname)}
           </Typography>
           <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' }, mr: 1.25, opacity: 0.95 }}>
             {user?.username ?? 'User'}
