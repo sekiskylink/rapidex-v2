@@ -14,6 +14,7 @@ import {
   type GridSortModel,
   type GridValidRowModel,
 } from '@mui/x-data-grid'
+import type { Theme } from '@mui/material/styles'
 import { useRouter } from '@tanstack/react-router'
 import type { SettingsStore, TablePrefsV1 } from '../../settings/types'
 
@@ -53,6 +54,7 @@ interface AppDataGridProps<R extends GridValidRowModel = GridValidRowModel> {
   settingsStore?: SettingsStore
   reloadToken?: number
   stickyRightFields?: string[]
+  pinActionsToRight?: boolean
 }
 
 function moveField(fields: string[], field: string, targetIndex: number | undefined): string[] {
@@ -155,8 +157,10 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   settingsStore,
   reloadToken,
   stickyRightFields,
+  pinActionsToRight,
 }: AppDataGridProps<R>) {
   const stickyFields = stickyRightFields ?? EMPTY_STICKY_RIGHT_FIELDS
+  const [enforcedStickyFields, setEnforcedStickyFields] = React.useState(stickyFields)
   const stickyFieldsKey = stickyFields.join('\u0000')
   const router = useRouter()
   const store = settingsStore ?? router.options.context.settingsStore
@@ -176,6 +180,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   const [columnOrder, setColumnOrder] = React.useState<string[]>([])
   const [density, setDensity] = React.useState<GridDensity>(defaultTablePrefs.density)
   const [pinnedColumns, setPinnedColumns] = React.useState(defaultTablePrefs.pinnedColumns)
+  const [gridBorderRadius, setGridBorderRadius] = React.useState(12)
   const [hydrated, setHydrated] = React.useState(false)
   const requestIdRef = React.useRef(0)
   const lastFetchKeyRef = React.useRef('')
@@ -189,6 +194,9 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         return
       }
       const persisted = settings.tablePrefs[storageKey] ?? defaultTablePrefs
+      const shouldPinActions = pinActionsToRight ?? settings.uiPrefs.pinActionsColumnRight
+      const resolvedStickyFields = shouldPinActions ? stickyFields : EMPTY_STICKY_RIGHT_FIELDS
+      setEnforcedStickyFields(resolvedStickyFields)
       setPaginationModel((current) => ({
         page: current.page,
         pageSize: PAGE_SIZE_OPTIONS.includes(persisted.pageSize) ? persisted.pageSize : defaultTablePrefs.pageSize,
@@ -196,14 +204,15 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
       setColumnVisibilityModel(persisted.columnVisibility)
       setColumnOrder(persisted.columnOrder)
       setDensity(persisted.density)
-      setPinnedColumns(withStickyRightFields(persisted.pinnedColumns, stickyFields))
+      setPinnedColumns(withStickyRightFields(persisted.pinnedColumns, resolvedStickyFields))
+      setGridBorderRadius(settings.uiPrefs.dataGridBorderRadius)
       setHydrated(true)
     })
 
     return () => {
       active = false
     }
-  }, [storageKey, store, stickyFieldsKey])
+  }, [pinActionsToRight, storageKey, store, stickyFieldsKey])
 
   const persistTablePrefs = React.useCallback(
     async (updater: (current: TablePrefsV1) => TablePrefsV1) => {
@@ -342,8 +351,19 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
       initialState={initialState}
       disableRowSelectionOnClick
       sx={{
+        borderRadius: `${gridBorderRadius}px`,
         '& .MuiDataGrid-columnHeaderTitle': {
           fontWeight: 700,
+        },
+        '& .MuiDataGrid-main': {
+          minWidth: 0,
+        },
+        '& .MuiDataGrid-virtualScroller': {
+          overflowX: 'auto',
+          overflowY: 'auto',
+        },
+        '& .MuiDataGrid-menu': {
+          zIndex: (theme: Theme) => theme.zIndex.modal + 1,
         },
       }}
       pinnedColumns={pinnedColumns}
@@ -354,7 +374,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
               left: model.left ?? [],
               right: model.right ?? [],
             },
-            stickyFields,
+            enforcedStickyFields,
           ),
         )
       }

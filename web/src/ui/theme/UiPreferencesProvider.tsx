@@ -7,6 +7,8 @@ import {
   setPreset as persistPreset,
   setCollapseNavByDefault as persistCollapseNavByDefault,
   setShowFooter as persistShowFooter,
+  setPinActionsColumnRight as persistPinActionsColumnRight,
+  setDataGridBorderRadius as persistDataGridBorderRadius,
   type UiPreferences,
   type UiThemeMode,
 } from '../preferences'
@@ -19,6 +21,8 @@ interface UiPreferencesContextValue {
   setPreset: (preset: string) => void
   setCollapseNavByDefault: (collapseNavByDefault: boolean) => void
   setShowFooter: (showFooter: boolean) => void
+  setPinActionsColumnRight: (pinActionsColumnRight: boolean) => void
+  setDataGridBorderRadius: (dataGridBorderRadius: number) => void
 }
 
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | undefined>(undefined)
@@ -35,6 +39,8 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(loaded.preset),
       collapseNavByDefault: loaded.collapseNavByDefault,
       showFooter: loaded.showFooter,
+      pinActionsColumnRight: loaded.pinActionsColumnRight,
+      dataGridBorderRadius: loaded.dataGridBorderRadius,
     }
   })
 
@@ -49,6 +55,8 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
     })
   }, [])
 
@@ -59,6 +67,8 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
     })
   }, [])
 
@@ -69,6 +79,8 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
     })
   }, [])
 
@@ -79,6 +91,32 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
+    })
+  }, [])
+
+  const setPinActionsColumnRight = React.useCallback((pinActionsColumnRight: boolean) => {
+    const next = persistPinActionsColumnRight(pinActionsColumnRight)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
+      showFooter: next.showFooter,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
+    })
+  }, [])
+
+  const setDataGridBorderRadius = React.useCallback((dataGridBorderRadius: number) => {
+    const next = persistDataGridBorderRadius(dataGridBorderRadius)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
+      showFooter: next.showFooter,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
     })
   }, [])
 
@@ -94,8 +132,19 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       setPreset,
       setCollapseNavByDefault,
       setShowFooter,
+      setPinActionsColumnRight,
+      setDataGridBorderRadius,
     }),
-    [prefs, resolvedMode, setMode, setPreset, setCollapseNavByDefault, setShowFooter],
+    [
+      prefs,
+      resolvedMode,
+      setMode,
+      setPreset,
+      setCollapseNavByDefault,
+      setShowFooter,
+      setPinActionsColumnRight,
+      setDataGridBorderRadius,
+    ],
   )
 
   return <UiPreferencesContext.Provider value={value}>{children}</UiPreferencesContext.Provider>

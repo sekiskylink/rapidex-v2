@@ -18,6 +18,7 @@ import {
   saveDataGridPreferences,
   type DataGridPinnedColumns,
 } from './storage'
+import { loadPrefs } from '../../ui/preferences'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 export interface AppDataGridFetchParams {
@@ -39,6 +40,23 @@ interface AppDataGridProps<R extends GridValidRowModel = GridValidRowModel> {
   getRowId?: (row: R) => string | number
   reloadToken?: number
   enablePinnedColumns?: boolean
+  stickyRightFields?: string[]
+  pinActionsToRight?: boolean
+}
+
+const EMPTY_STICKY_RIGHT_FIELDS: string[] = []
+
+function withStickyRightFields(pinnedColumns: DataGridPinnedColumns, stickyRightFields: string[]) {
+  if (!stickyRightFields.length) {
+    return pinnedColumns
+  }
+  const stickySet = new Set(stickyRightFields)
+  const left = pinnedColumns.left.filter((field) => !stickySet.has(field))
+  const right = [...pinnedColumns.right.filter((field) => !stickySet.has(field)), ...stickyRightFields]
+  return {
+    left: Array.from(new Set(left)),
+    right: Array.from(new Set(right)),
+  }
 }
 
 function moveField(fields: string[], field: string, targetIndex: number | undefined): string[] {
@@ -98,7 +116,12 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   getRowId,
   reloadToken,
   enablePinnedColumns = false,
+  stickyRightFields,
+  pinActionsToRight,
 }: AppDataGridProps<R>) {
+  const stickyFields = stickyRightFields ?? EMPTY_STICKY_RIGHT_FIELDS
+  const stickyFieldsKey = stickyFields.join('\u0000')
+  const [enforcedStickyFields, setEnforcedStickyFields] = React.useState(stickyFields)
   const { showSnackbar } = useSnackbar()
   const [rows, setRows] = React.useState<R[]>([])
   const [rowCount, setRowCount] = React.useState(0)
@@ -114,10 +137,15 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   const [columnOrder, setColumnOrder] = React.useState<string[]>([])
   const [density, setDensity] = React.useState<GridDensity>(defaultDataGridPreferences.density)
   const [pinnedColumns, setPinnedColumns] = React.useState<DataGridPinnedColumns>(defaultDataGridPreferences.pinnedColumns)
+  const [gridBorderRadius, setGridBorderRadius] = React.useState(12)
   const requestIdRef = React.useRef(0)
 
   React.useEffect(() => {
     const preferences = loadDataGridPreferences(storageKey)
+    const uiPrefs = loadPrefs()
+    const shouldPinActions = pinActionsToRight ?? uiPrefs.pinActionsColumnRight
+    const resolvedStickyFields = shouldPinActions ? stickyFields : EMPTY_STICKY_RIGHT_FIELDS
+    setEnforcedStickyFields(resolvedStickyFields)
     setPaginationModel({
       page: 0,
       pageSize: PAGE_SIZE_OPTIONS.includes(preferences.pageSize) ? preferences.pageSize : defaultDataGridPreferences.pageSize,
@@ -125,9 +153,10 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
     setColumnVisibilityModel(preferences.columnVisibility)
     setColumnOrder(preferences.columnOrder)
     setDensity(preferences.density)
-    setPinnedColumns(preferences.pinnedColumns)
+    setPinnedColumns(withStickyRightFields(preferences.pinnedColumns, resolvedStickyFields))
+    setGridBorderRadius(uiPrefs.dataGridBorderRadius)
     setHydrated(true)
-  }, [storageKey])
+  }, [pinActionsToRight, storageKey, stickyFieldsKey])
 
   React.useEffect(() => {
     if (!hydrated) {
@@ -218,8 +247,19 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         },
       }}
       sx={{
+        borderRadius: `${gridBorderRadius}px`,
         '& .MuiDataGrid-columnHeaderTitle': {
           fontWeight: 700,
+        },
+        '& .MuiDataGrid-main': {
+          minWidth: 0,
+        },
+        '& .MuiDataGrid-virtualScroller': {
+          overflowX: 'auto',
+          overflowY: 'auto',
+        },
+        '& .MuiDataGrid-menu': {
+          zIndex: (theme) => theme.zIndex.modal + 1,
         },
       }}
       disableRowSelectionOnClick
@@ -227,10 +267,15 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         ? {
             pinnedColumns,
             onPinnedColumnsChange: (value: { left?: string[]; right?: string[] }) =>
-              setPinnedColumns({
-                left: value.left ?? [],
-                right: value.right ?? [],
-              }),
+              setPinnedColumns(
+                withStickyRightFields(
+                  {
+                    left: value.left ?? [],
+                    right: value.right ?? [],
+                  },
+                  enforcedStickyFields,
+                ),
+              ),
           }
         : {})}
     />

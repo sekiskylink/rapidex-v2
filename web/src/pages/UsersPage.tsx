@@ -2,6 +2,7 @@ import React from 'react'
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Switch, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import { getAuthSnapshot } from '../auth/state'
+import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
 import { apiRequest } from '../lib/api'
 import { isApiError } from '../auth/AuthProvider'
@@ -234,6 +235,22 @@ export function UsersPage() {
     }
   }
 
+  const onToggleActive = React.useCallback(
+    async (row: UserRow, nextActive: boolean) => {
+      try {
+        await apiRequest(`/users/${row.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive: nextActive }),
+        })
+        showSnackbar({ severity: 'success', message: `User ${nextActive ? 'activated' : 'deactivated'}.` })
+        refreshGrid()
+      } catch (error) {
+        showSnackbar({ severity: 'error', message: toRequestErrorMessage(error, 'Unable to update active status.') })
+      }
+    },
+    [refreshGrid, showSnackbar],
+  )
+
   const columns = React.useMemo<GridColDef<UserRow>[]>(
     () => [
       { field: 'username', headerName: 'Username', minWidth: 150, flex: 1 },
@@ -261,25 +278,52 @@ export function UsersPage() {
         headerName: 'Actions',
         sortable: false,
         filterable: false,
-        width: 120,
+        width: 100,
         renderCell: (params: GridRenderCellParams<UserRow>) => (
-          <Button
-            size="small"
-            onClick={() => {
-              setEditUser(params.row)
-              setEditForm(toUserForm(params.row))
-              setEditErrors({})
-              setEditErrorMessage('')
-              setEditOpen(true)
-            }}
-            disabled={!canWrite}
-          >
-            Edit
-          </Button>
+          <AdminRowActions
+            rowLabel={params.row.username}
+            actions={[
+              {
+                id: 'view',
+                label: 'View',
+                icon: 'view',
+                onClick: () => {
+                  setEditUser(params.row)
+                  setEditForm(toUserForm(params.row))
+                  setEditErrors({})
+                  setEditErrorMessage('')
+                  setEditOpen(true)
+                },
+              },
+              {
+                id: 'edit',
+                label: 'Edit',
+                icon: 'edit',
+                disabled: !canWrite,
+                onClick: () => {
+                  setEditUser(params.row)
+                  setEditForm(toUserForm(params.row))
+                  setEditErrors({})
+                  setEditErrorMessage('')
+                  setEditOpen(true)
+                },
+              },
+              {
+                id: 'toggle-active',
+                label: params.row.isActive ? 'Deactivate' : 'Activate',
+                icon: 'delete',
+                disabled: !canWrite,
+                destructive: params.row.isActive,
+                confirmTitle: params.row.isActive ? 'Deactivate user' : 'Activate user',
+                confirmMessage: `${params.row.isActive ? 'Deactivate' : 'Activate'} ${params.row.username}?`,
+                onClick: () => void onToggleActive(params.row, !params.row.isActive),
+              },
+            ]}
+          />
         ),
       },
     ],
-    [canWrite],
+    [canWrite, onToggleActive],
   )
 
   return (
@@ -305,7 +349,7 @@ export function UsersPage() {
           </Button>
         ) : null}
       </Box>
-      <Box sx={{ height: 620, width: '100%' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchUsers}

@@ -183,7 +183,7 @@ describe('web auth routes', () => {
 })
 
 describe('web RBAC navigation', () => {
-  it('role Admin sees Payroll module', async () => {
+  it('shows Administration group with allowed children', async () => {
     setAuthSnapshot({
       isAuthenticated: true,
       accessToken: 'access-token',
@@ -192,17 +192,21 @@ describe('web RBAC navigation', () => {
         id: 1,
         username: 'admin',
         roles: ['Admin'],
-        permissions: ['settings.read'],
+        permissions: ['settings.read', 'users.read'],
       },
     })
 
     renderWithRouter('/settings')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
-    expect(screen.getByText('Payroll')).toBeInTheDocument()
+    expect(screen.getByText('Administration')).toBeInTheDocument()
+    expect(screen.getByText('Users')).toBeInTheDocument()
+    expect(screen.getByText('Roles')).toBeInTheDocument()
+    expect(screen.getByText('Permissions')).toBeInTheDocument()
+    expect(screen.queryByText('Audit Log')).not.toBeInTheDocument()
   })
 
-  it('role Staff does not see Payroll module', async () => {
+  it('hides Administration group when no admin route is allowed', async () => {
     setAuthSnapshot({
       isAuthenticated: true,
       accessToken: 'access-token',
@@ -218,7 +222,10 @@ describe('web RBAC navigation', () => {
     renderWithRouter('/settings')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
-    expect(screen.queryByText('Payroll')).not.toBeInTheDocument()
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument()
+    expect(screen.queryByText('Users')).not.toBeInTheDocument()
+    expect(screen.queryByText('Roles')).not.toBeInTheDocument()
+    expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
   })
 
   it('unauthorized route navigation shows Not Authorized page', async () => {
@@ -234,7 +241,7 @@ describe('web RBAC navigation', () => {
       },
     })
 
-    renderWithRouter('/users')
+    renderWithRouter('/roles')
 
     expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('You do not have permission to access this page.')).toBeInTheDocument()

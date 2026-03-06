@@ -35,15 +35,19 @@ type SettingsPatch struct {
 }
 
 type UIPrefs struct {
-	ThemeMode     string `json:"themeMode"`
-	PalettePreset string `json:"palettePreset"`
-	NavCollapsed  bool   `json:"navCollapsed"`
+	ThemeMode             string `json:"themeMode"`
+	PalettePreset         string `json:"palettePreset"`
+	NavCollapsed          bool   `json:"navCollapsed"`
+	PinActionsColumnRight bool   `json:"pinActionsColumnRight"`
+	DataGridBorderRadius  int    `json:"dataGridBorderRadius"`
 }
 
 type UIPrefsPatch struct {
-	ThemeMode     *string `json:"themeMode,omitempty"`
-	PalettePreset *string `json:"palettePreset,omitempty"`
-	NavCollapsed  *bool   `json:"navCollapsed,omitempty"`
+	ThemeMode             *string `json:"themeMode,omitempty"`
+	PalettePreset         *string `json:"palettePreset,omitempty"`
+	NavCollapsed          *bool   `json:"navCollapsed,omitempty"`
+	PinActionsColumnRight *bool   `json:"pinActionsColumnRight,omitempty"`
+	DataGridBorderRadius  *int    `json:"dataGridBorderRadius,omitempty"`
 }
 
 type TablePrefs struct {
@@ -117,6 +121,12 @@ func (a *App) SaveSettings(patch SettingsPatch) (Settings, error) {
 		if patch.UIPrefs.NavCollapsed != nil {
 			next.UIPrefs.NavCollapsed = *patch.UIPrefs.NavCollapsed
 		}
+		if patch.UIPrefs.PinActionsColumnRight != nil {
+			next.UIPrefs.PinActionsColumnRight = *patch.UIPrefs.PinActionsColumnRight
+		}
+		if patch.UIPrefs.DataGridBorderRadius != nil {
+			next.UIPrefs.DataGridBorderRadius = *patch.UIPrefs.DataGridBorderRadius
+		}
 	}
 	if patch.TablePrefs != nil {
 		next.TablePrefs = *patch.TablePrefs
@@ -146,9 +156,11 @@ func defaultSettings() Settings {
 		AuthMode:              "password",
 		RequestTimeoutSeconds: 15,
 		UIPrefs: UIPrefs{
-			ThemeMode:     "system",
-			PalettePreset: "ocean",
-			NavCollapsed:  false,
+			ThemeMode:             "system",
+			PalettePreset:         "ocean",
+			NavCollapsed:          false,
+			PinActionsColumnRight: true,
+			DataGridBorderRadius:  12,
 		},
 		TablePrefs: map[string]TablePrefs{},
 	}
@@ -169,6 +181,12 @@ func normalizeSettings(in Settings) Settings {
 	out.UIPrefs.PalettePreset = strings.TrimSpace(out.UIPrefs.PalettePreset)
 	if out.UIPrefs.PalettePreset == "" {
 		out.UIPrefs.PalettePreset = "ocean"
+	}
+	if out.UIPrefs.DataGridBorderRadius <= 0 {
+		out.UIPrefs.DataGridBorderRadius = 12
+		if !out.UIPrefs.PinActionsColumnRight {
+			out.UIPrefs.PinActionsColumnRight = true
+		}
 	}
 	if out.AuthMode != "api_token" {
 		out.APIToken = nil
@@ -250,6 +268,9 @@ func validateSettings(in Settings) error {
 	}
 	if strings.TrimSpace(in.UIPrefs.PalettePreset) == "" {
 		return errors.New("uiPrefs.palettePreset is required")
+	}
+	if in.UIPrefs.DataGridBorderRadius < 4 || in.UIPrefs.DataGridBorderRadius > 32 {
+		return errors.New("uiPrefs.dataGridBorderRadius must be between 4 and 32")
 	}
 	return nil
 }

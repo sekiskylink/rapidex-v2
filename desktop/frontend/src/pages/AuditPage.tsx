@@ -13,6 +13,8 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { ApiError } from '../api/client'
 import { buildServerQuery, type PaginatedResponse } from '../api/pagination'
 import { useApiClient } from '../api/useApiClient'
+import { AdminRowActions } from '../components/admin/AdminRowActions'
+import { JsonMetadataDialog } from '../components/admin/JsonMetadataDialog'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
 import { notify } from '../notifications/store'
 
@@ -38,14 +40,14 @@ const ACTION_FILTER_OPTIONS = [
 
 function compactMetadata(metadata: unknown) {
   if (metadata == null) {
-    return ''
+    return 'No metadata'
   }
   if (typeof metadata === 'string') {
-    return metadata
+    return metadata.length > 72 ? `${metadata.slice(0, 72)}...` : metadata
   }
   try {
     const value = JSON.stringify(metadata)
-    return value.length > 80 ? `${value.slice(0, 80)}...` : value
+    return value.length > 72 ? `${value.slice(0, 72)}...` : value
   } catch {
     return String(metadata)
   }
@@ -59,6 +61,8 @@ export function AuditPage() {
   const [dateFrom, setDateFrom] = React.useState('')
   const [dateTo, setDateTo] = React.useState('')
   const [reloadToken, setReloadToken] = React.useState(0)
+  const [metadataDialogOpen, setMetadataDialogOpen] = React.useState(false)
+  const [selectedMetadata, setSelectedMetadata] = React.useState<unknown>(null)
 
   const columns = React.useMemo<GridColDef<AuditRow>[]>(
     () => [
@@ -79,6 +83,29 @@ export function AuditPage() {
         minWidth: 260,
         sortable: false,
         valueGetter: (_value, row) => compactMetadata(row.metadata),
+      },
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        sortable: false,
+        filterable: false,
+        width: 96,
+        renderCell: (params) => (
+          <AdminRowActions
+            rowLabel={params.row.action}
+            actions={[
+              {
+                id: 'view-metadata',
+                label: 'View Metadata',
+                icon: 'view',
+                onClick: () => {
+                  setSelectedMetadata(params.row.metadata)
+                  setMetadataDialogOpen(true)
+                },
+              },
+            ]}
+          />
+        ),
       },
     ],
     [],
@@ -119,7 +146,7 @@ export function AuditPage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
         <Typography variant="h5" component="h1" gutterBottom>
-          Audit
+          Audit Log
         </Typography>
         <Typography color="text.secondary">View audit events with server-side filtering and pagination.</Typography>
       </Box>
@@ -178,14 +205,21 @@ export function AuditPage() {
         />
       </Stack>
 
-      <Box sx={{ height: 620, width: '100%' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchAudit}
           storageKey="audit-table"
           reloadToken={reloadToken}
+          stickyRightFields={['actions']}
         />
       </Box>
+      <JsonMetadataDialog
+        open={metadataDialogOpen}
+        metadata={selectedMetadata}
+        onClose={() => setMetadataDialogOpen(false)}
+        onCopied={() => notify({ severity: 'success', message: 'Metadata copied.' })}
+      />
     </Box>
   )
 }

@@ -11,18 +11,17 @@ import {
 import App from './App'
 import { getAuthSnapshot } from './auth/state'
 import { AppShell } from './components/AppShell'
+import { canAccessRoute } from './navigation'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { EmployeesPage } from './pages/EmployeesPage'
-import { LeavePage } from './pages/LeavePage'
 import { LoginPage } from './pages/LoginPage'
 import { NotAuthorizedPage } from './pages/NotAuthorizedPage'
 import { NotFoundPage } from './pages/NotFoundPage'
-import { PayrollPage } from './pages/PayrollPage'
+import { PermissionsPage } from './pages/PermissionsPage'
+import { RolesPage } from './pages/RolesPage'
 import { RouteErrorPage } from './pages/RouteErrorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
-import { hasPermission, hasRole } from './rbac/permissions'
 
 const rootRoute = createRootRoute({
   component: App,
@@ -70,40 +69,34 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 })
 
-const employeesRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: '/employees',
-  component: () => (hasRole('Admin') || hasRole('Manager') ? <EmployeesPage /> : <NotAuthorizedPage />),
-})
-
-const leaveRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: '/leave',
-  component: () => (hasRole('Admin') || hasRole('Manager') || hasRole('Staff') ? <LeavePage /> : <NotAuthorizedPage />),
-})
-
-const payrollRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: '/payroll',
-  component: () => (hasRole('Admin') || hasRole('Manager') ? <PayrollPage /> : <NotAuthorizedPage />),
-})
-
 const usersRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/users',
-  component: () => (hasPermission('users.read') || hasPermission('users.write') ? <UsersPage /> : <NotAuthorizedPage />),
+  component: () => (canAccessRoute('/users') ? <UsersPage /> : <NotAuthorizedPage />),
+})
+
+const rolesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/roles',
+  component: () => (canAccessRoute('/roles') ? <RolesPage /> : <NotAuthorizedPage />),
+})
+
+const permissionsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/permissions',
+  component: () => (canAccessRoute('/permissions') ? <PermissionsPage /> : <NotAuthorizedPage />),
 })
 
 const auditRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/audit',
-  component: () => (hasPermission('audit.read') ? <AuditPage /> : <NotAuthorizedPage />),
+  component: () => (canAccessRoute('/audit') ? <AuditPage /> : <NotAuthorizedPage />),
 })
 
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/settings',
-  component: () => (hasPermission('settings.read') || hasPermission('settings.write') ? <SettingsPage /> : <NotAuthorizedPage />),
+  component: () => (canAccessRoute('/settings') ? <SettingsPage /> : <NotAuthorizedPage />),
 })
 
 const routeTree = rootRoute.addChildren([
@@ -111,10 +104,9 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   authenticatedRoute.addChildren([
     dashboardRoute,
-    employeesRoute,
-    leaveRoute,
-    payrollRoute,
     usersRoute,
+    rolesRoute,
+    permissionsRoute,
     auditRoute,
     settingsRoute,
   ]),

@@ -58,6 +58,8 @@ export namespace main {
 	    themeMode: string;
 	    palettePreset: string;
 	    navCollapsed: boolean;
+	    pinActionsColumnRight: boolean;
+	    dataGridBorderRadius: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIPrefs(source);
@@ -68,6 +70,8 @@ export namespace main {
 	        this.themeMode = source["themeMode"];
 	        this.palettePreset = source["palettePreset"];
 	        this.navCollapsed = source["navCollapsed"];
+	        this.pinActionsColumnRight = source["pinActionsColumnRight"];
+	        this.dataGridBorderRadius = source["dataGridBorderRadius"];
 	    }
 	}
 	export class Settings {
@@ -116,6 +120,8 @@ export namespace main {
 	    themeMode?: string;
 	    palettePreset?: string;
 	    navCollapsed?: boolean;
+	    pinActionsColumnRight?: boolean;
+	    dataGridBorderRadius?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIPrefsPatch(source);
@@ -126,6 +132,8 @@ export namespace main {
 	        this.themeMode = source["themeMode"];
 	        this.palettePreset = source["palettePreset"];
 	        this.navCollapsed = source["navCollapsed"];
+	        this.pinActionsColumnRight = source["pinActionsColumnRight"];
+	        this.dataGridBorderRadius = source["dataGridBorderRadius"];
 	    }
 	}
 	export class SettingsPatch {

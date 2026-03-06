@@ -70,6 +70,14 @@ function readPositiveInteger(value: unknown, fallback: number): number {
     : fallback
 }
 
+function readBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const next = readPositiveInteger(value, fallback)
+  if (next < min || next > max) {
+    return fallback
+  }
+  return next
+}
+
 function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return []
@@ -139,6 +147,13 @@ function normalizeUiPrefs(input: unknown): UiPrefs {
     themeMode,
     palettePreset: palettePreset || defaultUiPrefs.palettePreset,
     navCollapsed: readBoolean(record.navCollapsed, defaultUiPrefs.navCollapsed),
+    pinActionsColumnRight: readBoolean(record.pinActionsColumnRight, defaultUiPrefs.pinActionsColumnRight),
+    dataGridBorderRadius: readBoundedInteger(
+      record.dataGridBorderRadius,
+      defaultUiPrefs.dataGridBorderRadius,
+      4,
+      32,
+    ),
   }
 }
 

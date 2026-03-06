@@ -231,7 +231,8 @@ describe('users and audit pages', () => {
 
     renderRoute('/users')
     expect(await screen.findByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for jane' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Edit User' })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Email' }), { target: { value: 'jane-updated@example.com' } })
@@ -308,7 +309,7 @@ describe('users and audit pages', () => {
     apiRequestSpy.mockImplementation(async (path: string) => {
       if (path.includes('/audit?')) {
         return {
-          items: [{ id: 20, timestamp: new Date().toISOString(), action: 'auth.login.success' }],
+          items: [{ id: 20, timestamp: new Date().toISOString(), action: 'auth.login.success', metadata: { ip: '127.0.0.1' } }],
           totalCount: 1,
           page: 1,
           pageSize: 25,
@@ -319,8 +320,12 @@ describe('users and audit pages', () => {
 
     renderRoute('/audit')
 
-    expect(await screen.findByRole('heading', { name: 'Audit', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Audit Log', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('auth.login.success')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for auth.login.success' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View Metadata' }))
+    expect(await screen.findByRole('dialog', { name: 'Audit Metadata' })).toBeInTheDocument()
+    expect(screen.getByText(/\"ip\": \"127.0.0.1\"/)).toBeInTheDocument()
     await waitFor(() => expect(apiRequestSpy).toHaveBeenCalledWith(expect.stringContaining('/audit?')))
   })
 })

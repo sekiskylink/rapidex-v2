@@ -5,6 +5,8 @@ export interface UiPreferences {
   preset: string
   collapseNavByDefault: boolean
   showFooter: boolean
+  pinActionsColumnRight: boolean
+  dataGridBorderRadius: number
 }
 
 export const UI_PREFERENCES_STORAGE_KEY = 'basepro.web.ui_preferences'
@@ -14,10 +16,23 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   preset: 'oceanic',
   collapseNavByDefault: false,
   showFooter: true,
+  pinActionsColumnRight: true,
+  dataGridBorderRadius: 12,
 }
 
 function isValidMode(value: unknown): value is UiThemeMode {
   return value === 'light' || value === 'dark' || value === 'system'
+}
+
+function sanitizeBorderRadius(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_PREFERENCES.dataGridBorderRadius
+  }
+  const rounded = Math.round(value)
+  if (rounded < 4 || rounded > 32) {
+    return DEFAULT_PREFERENCES.dataGridBorderRadius
+  }
+  return rounded
 }
 
 export function getDefaultPreferences(): UiPreferences {
@@ -44,6 +59,11 @@ export function loadPrefs(): UiPreferences {
           ? parsed.collapseNavByDefault
           : DEFAULT_PREFERENCES.collapseNavByDefault,
       showFooter: typeof parsed.showFooter === 'boolean' ? parsed.showFooter : DEFAULT_PREFERENCES.showFooter,
+      pinActionsColumnRight:
+        typeof parsed.pinActionsColumnRight === 'boolean'
+          ? parsed.pinActionsColumnRight
+          : DEFAULT_PREFERENCES.pinActionsColumnRight,
+      dataGridBorderRadius: sanitizeBorderRadius(parsed.dataGridBorderRadius),
     }
   } catch {
     return getDefaultPreferences()
@@ -90,6 +110,24 @@ export function setShowFooter(showFooter: boolean) {
   const next = {
     ...loadPrefs(),
     showFooter,
+  }
+  savePrefs(next)
+  return next
+}
+
+export function setPinActionsColumnRight(pinActionsColumnRight: boolean) {
+  const next = {
+    ...loadPrefs(),
+    pinActionsColumnRight,
+  }
+  savePrefs(next)
+  return next
+}
+
+export function setDataGridBorderRadius(dataGridBorderRadius: number) {
+  const next = {
+    ...loadPrefs(),
+    dataGridBorderRadius: sanitizeBorderRadius(dataGridBorderRadius),
   }
   savePrefs(next)
   return next

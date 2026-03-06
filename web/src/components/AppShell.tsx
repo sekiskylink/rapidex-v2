@@ -21,21 +21,20 @@ import {
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { appName } from '../lib/env'
-import { hasPermission, hasRole } from '../rbac/permissions'
+import { buildNavigation } from '../navigation'
 import {
-  AccountBalanceWalletRoundedIcon,
-  BadgeRoundedIcon,
+  AdminPanelSettingsRoundedIcon,
   ChevronLeftRoundedIcon,
   ChevronRightRoundedIcon,
   CloseIcon,
   DashboardRoundedIcon,
-  EventAvailableRoundedIcon,
   FactCheckRoundedIcon,
   GroupRoundedIcon,
   LogoutRoundedArrowIcon,
   MenuIcon,
   PaletteRoundedIcon,
   SettingsRoundedIcon,
+  VpnKeyRoundedIcon,
 } from '../ui/icons'
 import { PalettePresetPicker } from '../ui/theme/PalettePresetPicker'
 import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
@@ -44,20 +43,17 @@ const drawerWidth = 260
 const miniDrawerWidth = 80
 
 function sectionTitle(pathname: string) {
-  if (pathname.startsWith('/employees')) {
-    return 'Employees'
-  }
-  if (pathname.startsWith('/leave')) {
-    return 'Leave'
-  }
-  if (pathname.startsWith('/payroll')) {
-    return 'Payroll'
-  }
   if (pathname.startsWith('/users')) {
     return 'Users'
   }
+  if (pathname.startsWith('/roles')) {
+    return 'Roles'
+  }
+  if (pathname.startsWith('/permissions')) {
+    return 'Permissions'
+  }
   if (pathname.startsWith('/audit')) {
-    return 'Audit'
+    return 'Audit Log'
   }
   if (pathname.startsWith('/settings')) {
     return 'Settings'
@@ -66,13 +62,6 @@ function sectionTitle(pathname: string) {
     return 'Dashboard'
   }
   return 'BasePro'
-}
-
-interface NavItem {
-  label: string
-  icon: React.ReactNode
-  path: string
-  visible: boolean
 }
 
 export function AppShell() {
@@ -104,47 +93,15 @@ export function AppShell() {
     }
   }, [isMobile, mobileOpen])
 
-  const navItems: NavItem[] = [
-    { label: 'Dashboard', icon: <DashboardRoundedIcon fontSize="small" />, path: '/dashboard', visible: true },
-    {
-      label: 'Employees',
-      icon: <BadgeRoundedIcon fontSize="small" />,
-      path: '/employees',
-      visible: hasRole('Admin') || hasRole('Manager'),
-    },
-    {
-      label: 'Leave',
-      icon: <EventAvailableRoundedIcon fontSize="small" />,
-      path: '/leave',
-      visible: hasRole('Admin') || hasRole('Manager') || hasRole('Staff'),
-    },
-    {
-      label: 'Payroll',
-      icon: <AccountBalanceWalletRoundedIcon fontSize="small" />,
-      path: '/payroll',
-      visible: hasRole('Admin') || hasRole('Manager'),
-    },
-    {
-      label: 'Users',
-      icon: <GroupRoundedIcon fontSize="small" />,
-      path: '/users',
-      visible: hasPermission('users.read') || hasPermission('users.write'),
-    },
-    {
-      label: 'Audit',
-      icon: <FactCheckRoundedIcon fontSize="small" />,
-      path: '/audit',
-      visible: hasPermission('audit.read'),
-    },
-    {
-      label: 'Settings',
-      icon: <SettingsRoundedIcon fontSize="small" />,
-      path: '/settings',
-      visible: hasPermission('settings.read') || hasPermission('settings.write'),
-    },
-  ]
-
-  const visibleNavItems = navItems.filter((item) => item.visible)
+  const navigation = buildNavigation(user)
+  const navIcons = {
+    dashboard: <DashboardRoundedIcon fontSize="small" />,
+    settings: <SettingsRoundedIcon fontSize="small" />,
+    users: <GroupRoundedIcon fontSize="small" />,
+    roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
+    permissions: <VpnKeyRoundedIcon fontSize="small" />,
+    audit: <FactCheckRoundedIcon fontSize="small" />,
+  }
   const activeDrawerWidth = collapsed ? miniDrawerWidth : drawerWidth
 
   const handleDesktopDrawerToggle = () => {
@@ -192,11 +149,11 @@ export function AppShell() {
       </Toolbar>
       <Divider />
       <List sx={{ px: 1, py: 1.5 }}>
-        {visibleNavItems.map((item, index) => {
+        {navigation.topLevel.map((item, index) => {
           const selected = pathname.startsWith(item.path)
           const button = (
             <ListItemButton
-              key={item.path}
+              key={item.key}
               ref={index === 0 ? firstNavItemRef : undefined}
               selected={selected}
               onClick={() => handleNavItemClick(item.path)}
@@ -209,7 +166,7 @@ export function AppShell() {
               }}
             >
               <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
-                {item.icon}
+                {navIcons[item.key as keyof typeof navIcons]}
               </ListItemIcon>
               <ListItemText
                 primary={item.label}
@@ -237,6 +194,60 @@ export function AppShell() {
 
           return button
         })}
+        {navigation.administration.visible ? (
+          <>
+            {!collapsed || isMobile ? (
+              <Typography variant="overline" color="text.secondary" sx={{ px: 1.5, pt: 1.25, pb: 0.5, display: 'block' }}>
+                Administration
+              </Typography>
+            ) : null}
+            {navigation.administration.children.map((item) => {
+              const selected = pathname.startsWith(item.path)
+              const button = (
+                <ListItemButton
+                  key={item.key}
+                  selected={selected}
+                  onClick={() => handleNavItemClick(item.path)}
+                  aria-label={item.label}
+                  sx={{
+                    minHeight: 46,
+                    mb: 0.5,
+                    justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+                    borderRadius: 1.5,
+                    pl: collapsed && !isMobile ? 1.5 : 2.5,
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
+                    {navIcons[item.key as keyof typeof navIcons]}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      noWrap: true,
+                      fontWeight: selected ? 600 : 500,
+                    }}
+                    sx={{
+                      opacity: collapsed && !isMobile ? 0 : 1,
+                      transition: theme.transitions.create('opacity', {
+                        duration: theme.transitions.duration.shortest,
+                      }),
+                    }}
+                  />
+                </ListItemButton>
+              )
+
+              if (collapsed && !isMobile) {
+                return (
+                  <Tooltip key={item.key} title={item.label} placement="right">
+                    {button}
+                  </Tooltip>
+                )
+              }
+
+              return button
+            })}
+          </>
+        ) : null}
       </List>
     </Box>
   )

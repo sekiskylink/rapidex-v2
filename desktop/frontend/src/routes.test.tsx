@@ -87,7 +87,7 @@ describe('app shell routes', () => {
     await clearSession()
   })
 
-  it('hides Audit menu item when user lacks audit.read permission', async () => {
+  it('shows Administration group only with allowed children', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -123,8 +123,11 @@ describe('app shell routes', () => {
     renderWithRouter('/dashboard', store)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Users' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Audit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Roles' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Permissions' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
   })
 
   it('shows Forbidden when navigating to /audit without audit.read permission', async () => {
@@ -164,6 +167,49 @@ describe('app shell routes', () => {
 
     expect(await screen.findByRole('heading', { name: '403', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Forbidden')).toBeInTheDocument()
+  })
+
+  it('hides Administration group when no admin route permission is granted', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 8,
+              username: 'viewer',
+              roles: ['Viewer'],
+              permissions: ['settings.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/dashboard', store)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Roles' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Permissions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
   })
 
   it('renders users list metadata columns and values', async () => {
@@ -414,7 +460,8 @@ describe('app shell routes', () => {
     renderWithRouter('/users', store)
 
     expect(await screen.findByRole('heading', { name: 'Users', level: 1 })).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for jane' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
 
     const editDialog = await screen.findByRole('dialog', { name: 'Edit User' })
     expect(within(editDialog).getByDisplayValue('jane')).toBeDisabled()
@@ -497,8 +544,12 @@ describe('app shell routes', () => {
 
     renderWithRouter('/audit', store)
 
-    expect(await screen.findByRole('heading', { name: 'Audit', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Audit Log', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('users.create')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for users.create' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View Metadata' }))
+    expect(await screen.findByRole('dialog', { name: 'Audit Metadata' })).toBeInTheDocument()
+    expect(screen.getByText(/\"username\": \"new-user\"/)).toBeInTheDocument()
   })
 
   it('renders backend version in Settings About section', async () => {

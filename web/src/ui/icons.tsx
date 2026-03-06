@@ -59,3 +59,22 @@ export const AccountBalanceWalletRoundedIcon = makeIcon(
 )
 
 export const CloseIcon = makeIcon('M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z')
+export const MoreVertRoundedIcon = makeIcon('M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2m0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2')
+export const VisibilityRoundedIcon = makeIcon(
+  'M12 6c-5 0-9.27 3.11-11 7.5C2.73 17.89 7 21 12 21s9.27-3.11 11-7.5C21.27 9.11 17 6 12 6m0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9m0-7.2A2.7 2.7 0 1 0 12 16a2.7 2.7 0 0 0 0-5.2',
+)
+export const EditRoundedIcon = makeIcon(
+  'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zm17.71-10.04a1.003 1.003 0 0 0 0-1.42L18.21 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75z',
+)
+export const DeleteOutlineRoundedIcon = makeIcon(
+  'M16 9v10H8V9zm-1.5-6h-5l-1 1H5v2h14V4h-3.5zm3.5 4H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2z',
+)
+export const ContentCopyRoundedIcon = makeIcon(
+  'M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z',
+)
+export const AdminPanelSettingsRoundedIcon = makeIcon(
+  'M17 11c.34 0 .67.04 1 .09V6.27L12 2 6 6.27v8.46L12 19l2.56-1.82c-.35-.63-.56-1.34-.56-2.09 0-2.25 1.75-4.09 4-4.09m2.94 1.5-.45-1.06-1.06-.45-.45-1.06h-1.12l-.45 1.06-1.06.45-.45 1.06.45 1.06 1.06.45.45 1.06h1.12l.45-1.06 1.06-.45zm-2.44 2.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5',
+)
+export const VpnKeyRoundedIcon = makeIcon(
+  'M7 14a5 5 0 1 1 4.9-6H22v3h-2v2h-2v2h-2.1A5 5 0 0 1 7 14m0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+)

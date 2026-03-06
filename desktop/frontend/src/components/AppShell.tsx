@@ -3,7 +3,6 @@ import {
   AppBar,
   Avatar,
   Box,
-  Chip,
   Divider,
   Drawer,
   IconButton,
@@ -25,12 +24,15 @@ import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded'
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded'
+import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
+import VpnKeyRoundedIcon from '@mui/icons-material/VpnKeyRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
+import { buildNavigation } from '../navigation'
 import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
@@ -43,7 +45,13 @@ function sectionTitle(pathname: string) {
     return 'Users'
   }
   if (pathname.startsWith('/audit')) {
-    return 'Audit'
+    return 'Audit Log'
+  }
+  if (pathname.startsWith('/roles')) {
+    return 'Roles'
+  }
+  if (pathname.startsWith('/permissions')) {
+    return 'Permissions'
   }
   if (pathname.startsWith('/settings')) {
     return 'Settings'
@@ -75,39 +83,15 @@ export function AppShell() {
   const navCollapsed = !isMobile && prefs.navCollapsed
   const drawerWidth = navCollapsed ? MINI_DRAWER_WIDTH : DRAWER_WIDTH
 
-  const navItems = [
-    {
-      label: 'Dashboard',
-      path: '/dashboard',
-      icon: <DashboardRoundedIcon fontSize="small" />,
-      active: pathname.startsWith('/dashboard'),
-      disabled: false,
-    },
-    {
-      label: 'Settings',
-      path: '/settings',
-      icon: <SettingsRoundedIcon fontSize="small" />,
-      active: pathname.startsWith('/settings'),
-      disabled: false,
-    },
-  ]
-  if (principal && (principal.permissions.includes('users.read') || principal.permissions.includes('users.write'))) {
-    navItems.push({
-      label: 'Users',
-      path: '/users',
-      icon: <GroupRoundedIcon fontSize="small" />,
-      active: pathname.startsWith('/users'),
-      disabled: false,
-    })
-  }
-  if (principal && principal.permissions.includes('audit.read')) {
-    navItems.push({
-      label: 'Audit',
-      path: '/audit',
-      icon: <FactCheckRoundedIcon fontSize="small" />,
-      active: pathname.startsWith('/audit'),
-      disabled: false,
-    })
+  const navigation = buildNavigation(principal)
+
+  const navIcons = {
+    dashboard: <DashboardRoundedIcon fontSize="small" />,
+    settings: <SettingsRoundedIcon fontSize="small" />,
+    users: <GroupRoundedIcon fontSize="small" />,
+    roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
+    permissions: <VpnKeyRoundedIcon fontSize="small" />,
+    audit: <FactCheckRoundedIcon fontSize="small" />,
   }
 
   const closeMenus = () => {
@@ -164,15 +148,11 @@ export function AppShell() {
       <Divider />
 
       <List sx={{ px: 1, py: 1 }}>
-        {navItems.map((item) => (
+        {navigation.topLevel.map((item) => (
           <ListItemButton
-            key={item.label}
-            selected={item.active}
-            disabled={item.disabled}
+            key={item.key}
+            selected={pathname.startsWith(item.path)}
             onClick={() => {
-              if (item.disabled) {
-                return
-              }
               void navigate({ to: item.path })
               setMobileOpen(false)
             }}
@@ -184,24 +164,41 @@ export function AppShell() {
             }}
           >
             <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>
-              {item.icon}
+              {navIcons[item.key as keyof typeof navIcons]}
             </ListItemIcon>
-            {!navCollapsed ? (
-              <ListItemText
-                primary={item.label}
-                secondary={item.disabled ? 'Coming soon' : undefined}
-                slotProps={{
-                  secondary: {
-                    sx: {
-                      color: 'text.disabled',
-                    },
-                  },
-                }}
-              />
-            ) : null}
-            {!navCollapsed && item.disabled ? <Chip label="Soon" size="small" /> : null}
+            {!navCollapsed ? <ListItemText primary={item.label} /> : null}
           </ListItemButton>
         ))}
+        {navigation.administration.visible ? (
+          <>
+            {!navCollapsed ? (
+              <Typography variant="overline" color="text.secondary" sx={{ px: 1.5, pt: 1.25, pb: 0.5, display: 'block' }}>
+                Administration
+              </Typography>
+            ) : null}
+            {navigation.administration.children.map((item) => (
+              <ListItemButton
+                key={item.key}
+                selected={pathname.startsWith(item.path)}
+                onClick={() => {
+                  void navigate({ to: item.path })
+                  setMobileOpen(false)
+                }}
+                sx={{
+                  borderRadius: 2,
+                  mb: 0.5,
+                  justifyContent: navCollapsed ? 'center' : 'flex-start',
+                  px: navCollapsed ? 1 : 2.25,
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>
+                  {navIcons[item.key as keyof typeof navIcons]}
+                </ListItemIcon>
+                {!navCollapsed ? <ListItemText primary={item.label} /> : null}
+              </ListItemButton>
+            ))}
+          </>
+        ) : null}
       </List>
       <Box sx={{ mt: 'auto', p: 1.25 }}>
         <Box

@@ -8,9 +8,11 @@ import {
   CircularProgress,
   Divider,
   FormControl,
+  FormControlLabel,
   MenuItem,
   Select,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -24,7 +26,14 @@ export function SettingsPage() {
   const router = useRouter()
   const navigate = useNavigate()
   const settingsStore = router.options.context.settingsStore
-  const { prefs, setThemeMode, setPalettePreset, presets } = useThemePreferences()
+  const {
+    prefs,
+    setThemeMode,
+    setPalettePreset,
+    setPinActionsColumnRight,
+    setDataGridBorderRadius,
+    presets,
+  } = useThemePreferences()
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -249,6 +258,25 @@ export function SettingsPage() {
                 </Button>
               </Stack>
             </Box>
+            <Divider />
+            <Typography variant="subtitle2">Data Grid defaults</Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={prefs.pinActionsColumnRight}
+                  onChange={(event) => void setPinActionsColumnRight(event.target.checked)}
+                />
+              }
+              label="Pin actions column to the right"
+            />
+            <TextField
+              label="DataGrid border radius"
+              type="number"
+              value={prefs.dataGridBorderRadius}
+              onChange={(event) => void setDataGridBorderRadius(Number(event.target.value))}
+              inputProps={{ min: 4, max: 32 }}
+              sx={{ maxWidth: 220 }}
+            />
           </Stack>
         </CardContent>
       </Card>

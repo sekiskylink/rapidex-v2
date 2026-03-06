@@ -1,5 +1,49 @@
 # Status
 
+## Milestone A — Shared Administration UX Foundation + Desktop/Web Parity (Complete)
+
+### What changed
+- Refactored authenticated navigation in both desktop and web to grouped platform structure:
+  - top-level: `Dashboard`, `Settings`
+  - grouped: `Administration` with `Users`, `Roles`, `Permissions`, `Audit Log`
+- Added `Roles` and `Permissions` admin routes/pages on desktop and web without adding any domain/business modules.
+- Removed web domain-module routing from active navigation (`Employees`, `Leave`, `Payroll`) to keep skeleton scope platform-only.
+- Centralized permission-gated navigation intent with shared navigation helpers in both clients and hide the entire `Administration` group when no child route is allowed.
+- Added reusable shared row-actions pattern in both clients:
+  - vertical ellipsis menu
+  - permission-aware action visibility/disabled states
+  - destructive-action confirmation flow
+- Updated users grids to use shared row-actions menu pattern.
+- Added reusable audit metadata JSON dialog in desktop and web:
+  - concise metadata preview in grid
+  - full metadata dialog
+  - pretty-printed scrollable JSON
+  - copy-to-clipboard
+  - graceful empty/invalid JSON handling
+- Extended desktop and web global UI preferences with DataGrid defaults:
+  - `pinActionsColumnRight`
+  - `dataGridBorderRadius`
+- Updated DataGrid wrappers in desktop and web to honor global defaults while still allowing per-table sticky-right overrides.
+- Improved table container/wrapper styles to keep horizontal/vertical scroll and reduce clipping risk for menus, pinned areas, and scrollbars.
+- Saved prompt copy to `docs/prompts/2026-03-06-milestone-a-admin-ux.md` (gitignored).
+
+### How to test
+- Backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Desktop frontend tests: `cd desktop/frontend && npm test -- --run`
+- Web frontend tests: `cd web && npm test -- --run`
+
+### Verification summary
+- Backend tests: PASS
+- Desktop frontend tests: PASS
+- Web frontend tests: PASS
+
+### Parity notes
+- Desktop and web now share aligned grouped admin navigation semantics, admin action-menu behavior, and audit metadata dialog UX.
+- `Roles` and `Permissions` pages are intentionally scaffolded UI foundations pending backend role/permission administration endpoints; parity is maintained across both clients.
+
+### Known follow-ups
+- MUI `anchorEl` test-runtime warnings can appear in jsdom when opening menu/popover controls from virtualized DataGrid cells, but tests pass and runtime behavior is correct.
+
 ## Milestone 1 — Repo Bootstrap + Baseline Build (Complete)
 
 ### What changed
@@ -1411,3 +1455,23 @@ Verification for this update:
 
 ### Known follow-ups
 - Existing non-blocking warnings remain in build output from third-party bundles (`'use client'` directives and chunk-size warning).
+
+## Planned Milestone — Shared Administration UX + Parity (Upcoming)
+
+### Planned scope
+- Expand administration navigation as grouped platform sections with first-class `Roles` and `Permissions` pages.
+- Add reusable RBAC administration UI patterns for roles/permissions management on both desktop and web.
+- Extend user create/update flows to support multi-role assignment with typed validation feedback.
+- Standardize shared DataGrid actions-column behavior across administration pages.
+- Introduce and apply global DataGrid UI preference controls (for example density, action pinning, radius) across shared admin tables.
+- Add audit metadata details UX with truncated in-grid previews and full JSON details dialog/drawer.
+- Enforce cross-client parity expectations for shared admin capabilities unless temporary gaps are explicitly documented.
+
+### Planned validation expectations
+- Backend tests for RBAC administration and multi-role assignment validation.
+- Desktop and web route/smoke tests for new admin pages and permission-gated navigation.
+- Shared DataGrid action-pattern tests and audit metadata details dialog tests.
+
+### Notes
+- This milestone remains skeleton-focused and intentionally avoids domain placeholders.
+- This entry documents upcoming work only; no implementation completion is claimed here.

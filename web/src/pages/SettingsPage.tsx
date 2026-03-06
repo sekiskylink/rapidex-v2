@@ -33,7 +33,16 @@ interface HealthResponse {
 
 export function SettingsPage() {
   const { showSnackbar } = useSnackbar()
-  const { prefs, resolvedMode, setMode, setPreset, setCollapseNavByDefault, setShowFooter } = useUiPreferences()
+  const {
+    prefs,
+    resolvedMode,
+    setMode,
+    setPreset,
+    setCollapseNavByDefault,
+    setShowFooter,
+    setPinActionsColumnRight,
+    setDataGridBorderRadius,
+  } = useUiPreferences()
   const [apiBaseUrlOverride, setApiBaseUrlOverrideValue] = React.useState(() => getApiBaseUrlOverride())
   const [testingConnection, setTestingConnection] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
@@ -170,6 +179,32 @@ export function SettingsPage() {
           <FormControlLabel
             control={<Switch checked={prefs.showFooter} onChange={(event) => setShowFooter(event.target.checked)} />}
             label="Show footer on authenticated pages"
+          />
+        </Stack>
+      </Paper>
+
+      <Paper elevation={1} sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2">
+            Data Grid Defaults
+          </Typography>
+          <Divider />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={prefs.pinActionsColumnRight}
+                onChange={(event) => setPinActionsColumnRight(event.target.checked)}
+              />
+            }
+            label="Pin actions column to the right"
+          />
+          <TextField
+            label="DataGrid border radius"
+            type="number"
+            value={prefs.dataGridBorderRadius}
+            onChange={(event) => setDataGridBorderRadius(Number(event.target.value))}
+            inputProps={{ min: 4, max: 32 }}
+            sx={{ maxWidth: 220 }}
           />
         </Stack>
       </Paper>

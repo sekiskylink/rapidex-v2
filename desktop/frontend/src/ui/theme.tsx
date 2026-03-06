@@ -11,6 +11,8 @@ interface ThemePreferencesContextValue {
   setThemeMode: (mode: ThemeMode) => Promise<void>
   setPalettePreset: (preset: string) => Promise<void>
   setNavCollapsed: (collapsed: boolean) => Promise<void>
+  setPinActionsColumnRight: (enabled: boolean) => Promise<void>
+  setDataGridBorderRadius: (radius: number) => Promise<void>
   presets: typeof palettePresets
 }
 
@@ -151,6 +153,20 @@ export function AppThemeProvider({
     [persistPrefs, prefs],
   )
 
+  const setPinActionsColumnRight = React.useCallback(
+    async (enabled: boolean) => {
+      await persistPrefs({ ...prefs, pinActionsColumnRight: enabled })
+    },
+    [persistPrefs, prefs],
+  )
+
+  const setDataGridBorderRadius = React.useCallback(
+    async (radius: number) => {
+      await persistPrefs({ ...prefs, dataGridBorderRadius: radius })
+    },
+    [persistPrefs, prefs],
+  )
+
   const resolvedMode = prefs.themeMode === 'system' ? systemMode : prefs.themeMode
 
   const theme = React.useMemo(() => createAppTheme(resolvedMode, prefs), [resolvedMode, prefs])
@@ -168,9 +184,19 @@ export function AppThemeProvider({
       setThemeMode,
       setPalettePreset,
       setNavCollapsed,
+      setPinActionsColumnRight,
+      setDataGridBorderRadius,
       presets: palettePresets,
     }),
-    [prefs, resolvedMode, setThemeMode, setPalettePreset, setNavCollapsed],
+    [
+      prefs,
+      resolvedMode,
+      setThemeMode,
+      setPalettePreset,
+      setNavCollapsed,
+      setPinActionsColumnRight,
+      setDataGridBorderRadius,
+    ],
   )
 
   return (

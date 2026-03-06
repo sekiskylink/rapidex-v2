@@ -2,7 +2,6 @@ import React from 'react'
 import {
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -23,6 +22,7 @@ import { ApiError } from '../api/client'
 import { buildServerQuery, type PaginatedResponse } from '../api/pagination'
 import { useApiClient } from '../api/useApiClient'
 import { useSessionPrincipal } from '../auth/hooks'
+import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
 import { notify } from '../notifications/store'
 
@@ -369,46 +369,52 @@ export function UsersPage() {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 320,
+        width: 100,
         sortable: false,
         filterable: false,
         renderCell: (params: GridRenderCellParams<UserRow>) => (
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              onClick={() => {
-                setEditUser(params.row)
-                setEditForm(toUserForm(params.row))
-                setEditErrors({})
-                setEditOpen(true)
-              }}
-              disabled={!canWrite}
-            >
-              Edit
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                setRolesUser(params.row)
-                setRolesSelection(params.row.roles ?? [])
-                setRolesOpen(true)
-              }}
-              disabled={!canWrite}
-            >
-              Roles
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                setResetUser(params.row)
-                setResetPassword('')
-                setResetOpen(true)
-              }}
-              disabled={!canWrite}
-            >
-              Reset Password
-            </Button>
-          </Stack>
+          <AdminRowActions
+            rowLabel={params.row.username}
+            actions={[
+              {
+                id: 'edit',
+                label: 'Edit',
+                icon: 'edit',
+                disabled: !canWrite,
+                onClick: () => {
+                  setEditUser(params.row)
+                  setEditForm(toUserForm(params.row))
+                  setEditErrors({})
+                  setEditOpen(true)
+                },
+              },
+              {
+                id: 'roles',
+                label: 'Roles',
+                icon: 'view',
+                disabled: !canWrite,
+                onClick: () => {
+                  setRolesUser(params.row)
+                  setRolesSelection(params.row.roles ?? [])
+                  setRolesOpen(true)
+                },
+              },
+              {
+                id: 'reset-password',
+                label: 'Reset Password',
+                icon: 'delete',
+                disabled: !canWrite,
+                destructive: true,
+                confirmTitle: 'Reset password',
+                confirmMessage: `Reset password for ${params.row.username}?`,
+                onClick: () => {
+                  setResetUser(params.row)
+                  setResetPassword('')
+                  setResetOpen(true)
+                },
+              },
+            ]}
+          />
         ),
       },
     ],
@@ -438,7 +444,7 @@ export function UsersPage() {
         </Button>
       </Box>
 
-      <Box sx={{ height: 620, width: '100%' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchUsers}
