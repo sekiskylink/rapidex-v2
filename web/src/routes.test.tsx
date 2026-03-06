@@ -200,10 +200,23 @@ describe('web RBAC navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Administration')).toBeInTheDocument()
+    expect(screen.queryByText('Users')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
     expect(screen.getByText('Users')).toBeInTheDocument()
     expect(screen.getByText('Roles')).toBeInTheDocument()
     expect(screen.getByText('Permissions')).toBeInTheDocument()
     expect(screen.queryByText('Audit Log')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
+    await waitFor(() => {
+      expect(screen.queryByText('Users')).not.toBeInTheDocument()
+      expect(screen.queryByText('Roles')).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
+    await waitFor(() => {
+      expect(screen.getByText('Users')).toBeInTheDocument()
+    })
   })
 
   it('hides Administration group when no admin route is allowed', async () => {

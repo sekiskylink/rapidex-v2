@@ -2,7 +2,7 @@
 ## Authoritative Requirements Specification
 ## Phase S1 – Skeleton/Foundation
 
-Last Updated: 2026-02-27
+Last Updated: 2026-03-06
 
 ---
 
@@ -559,6 +559,8 @@ The scope is platform administration only and must remain domain-agnostic.
     - `Audit Log`
   - `Settings`
 - Visibility of administration links must respect RBAC permissions.
+- `Administration` must be an expandable/collapsible navigation group (not a static section label).
+- If no administration child route is visible to the current principal, hide the entire `Administration` group.
 - Desktop and web may differ in responsive presentation, but group semantics must remain aligned.
 
 ### 13.2 RBAC Administration UI
@@ -579,6 +581,10 @@ The scope is platform administration only and must remain domain-agnostic.
   - create/edit dialogs (or drawers)
   - confirmation dialogs for destructive actions
   - validation error presentation
+- User administration create/edit forms should use responsive multi-column layout:
+  - 1 column on narrow/mobile overlays
+  - 2 columns on medium widths
+  - 3 columns on wide dialogs where space allows
 - Avoid one-off page patterns when shared components can be extended.
 - Keep all labels and copy generic so the skeleton can be reused across domains.
 
@@ -594,6 +600,8 @@ The scope is platform administration only and must remain domain-agnostic.
 ### 13.6 Standard Actions Column
 - Administration DataGrids must use a shared actions-column pattern.
 - Actions column should be pinned right when supported; if unsupported, degrade gracefully without breaking usability.
+- Shared table wrappers should default actions-column pinning when a standard `actions` field is present and pinning support is enabled.
+- Actions-column pinning behavior should avoid excessive right-pinned width that causes usability/layout regressions.
 - Action rendering should be centralized so row actions remain consistent across users, roles, permissions, and audit pages.
 
 ### 13.7 Audit Metadata Details UX

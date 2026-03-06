@@ -124,10 +124,23 @@ describe('app shell routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
     expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
     expect(screen.getByRole('button', { name: 'Users' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Roles' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Permissions' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Roles' })).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Users' })).toBeInTheDocument()
+    })
   })
 
   it('shows Forbidden when navigating to /audit without audit.read permission', async () => {
@@ -350,6 +363,7 @@ describe('app shell routes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Create User' }))
     const createDialog = await screen.findByRole('dialog', { name: 'Create User' })
+    expect(within(createDialog).getByTestId('desktop-user-create-form-grid')).toBeInTheDocument()
     fireEvent.change(within(createDialog).getByRole('textbox', { name: 'Username' }), { target: { value: 'new-user' } })
     const createPasswordInput = createDialog.querySelector('input[type=\"password\"]')
     expect(createPasswordInput).not.toBeNull()
@@ -464,6 +478,7 @@ describe('app shell routes', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
 
     const editDialog = await screen.findByRole('dialog', { name: 'Edit User' })
+    expect(within(editDialog).getByTestId('desktop-user-edit-form-grid')).toBeInTheDocument()
     expect(within(editDialog).getByDisplayValue('jane')).toBeDisabled()
     fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Email' }), { target: { value: 'jane-updated@example.com' } })
     fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Phone Number' }), { target: { value: '+15559876543' } })

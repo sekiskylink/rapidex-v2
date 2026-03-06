@@ -21,6 +21,7 @@ import {
 import { loadPrefs } from '../../ui/preferences'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
+const MAX_RIGHT_PINNED_COLUMNS = 2
 export interface AppDataGridFetchParams {
   page: number
   pageSize: number
@@ -52,11 +53,25 @@ function withStickyRightFields(pinnedColumns: DataGridPinnedColumns, stickyRight
   }
   const stickySet = new Set(stickyRightFields)
   const left = pinnedColumns.left.filter((field) => !stickySet.has(field))
-  const right = [...pinnedColumns.right.filter((field) => !stickySet.has(field)), ...stickyRightFields]
+  const right = [...pinnedColumns.right.filter((field) => !stickySet.has(field)), ...stickyRightFields].slice(-MAX_RIGHT_PINNED_COLUMNS)
   return {
     left: Array.from(new Set(left)),
     right: Array.from(new Set(right)),
   }
+}
+
+function resolveStickyRightFields<R extends GridValidRowModel>(
+  columns: GridColDef<R>[],
+  stickyRightFields: string[],
+  shouldPinActions: boolean,
+) {
+  if (!shouldPinActions) {
+    return stickyRightFields
+  }
+  if (stickyRightFields.length > 0) {
+    return stickyRightFields
+  }
+  return columns.some((column) => column.field === 'actions') ? ['actions'] : stickyRightFields
 }
 
 function moveField(fields: string[], field: string, targetIndex: number | undefined): string[] {
@@ -115,7 +130,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   storageKey,
   getRowId,
   reloadToken,
-  enablePinnedColumns = false,
+  enablePinnedColumns = true,
   stickyRightFields,
   pinActionsToRight,
 }: AppDataGridProps<R>) {
@@ -144,7 +159,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
     const preferences = loadDataGridPreferences(storageKey)
     const uiPrefs = loadPrefs()
     const shouldPinActions = pinActionsToRight ?? uiPrefs.pinActionsColumnRight
-    const resolvedStickyFields = shouldPinActions ? stickyFields : EMPTY_STICKY_RIGHT_FIELDS
+    const resolvedStickyFields = resolveStickyRightFields(columns, shouldPinActions ? stickyFields : EMPTY_STICKY_RIGHT_FIELDS, shouldPinActions)
     setEnforcedStickyFields(resolvedStickyFields)
     setPaginationModel({
       page: 0,
@@ -156,7 +171,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
     setPinnedColumns(withStickyRightFields(preferences.pinnedColumns, resolvedStickyFields))
     setGridBorderRadius(uiPrefs.dataGridBorderRadius)
     setHydrated(true)
-  }, [pinActionsToRight, storageKey, stickyFieldsKey])
+  }, [columns, pinActionsToRight, storageKey, stickyFieldsKey])
 
   React.useEffect(() => {
     if (!hydrated) {
@@ -260,6 +275,12 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         },
         '& .MuiDataGrid-menu': {
           zIndex: (theme) => theme.zIndex.modal + 1,
+        },
+        '& .MuiDataGrid-pinnedColumns, & .MuiDataGrid-pinnedColumnHeaders': {
+          bgcolor: 'background.paper',
+        },
+        '& .MuiDataGrid-cell--pinnedRight, & .MuiDataGrid-columnHeader--pinnedRight': {
+          boxShadow: (theme) => `-1px 0 0 ${theme.palette.divider}`,
         },
       }}
       disableRowSelectionOnClick

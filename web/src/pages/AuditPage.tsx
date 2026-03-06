@@ -103,7 +103,7 @@ export function AuditPage() {
         </Typography>
         <Typography color="text.secondary">Server-side pagination, sorting, filtering, and metadata details for audit events.</Typography>
       </Box>
-      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchAudit}

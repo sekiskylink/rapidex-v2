@@ -3,6 +3,7 @@ import {
   AppBar,
   Avatar,
   Box,
+  Collapse,
   Divider,
   Drawer,
   IconButton,
@@ -28,6 +29,8 @@ import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSetting
 import VpnKeyRoundedIcon from '@mui/icons-material/VpnKeyRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
+import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded'
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
 import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
@@ -79,11 +82,28 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
+  const [adminExpanded, setAdminExpanded] = React.useState(
+    pathname.startsWith('/users') ||
+      pathname.startsWith('/roles') ||
+      pathname.startsWith('/permissions') ||
+      pathname.startsWith('/audit'),
+  )
 
   const navCollapsed = !isMobile && prefs.navCollapsed
   const drawerWidth = navCollapsed ? MINI_DRAWER_WIDTH : DRAWER_WIDTH
 
   const navigation = buildNavigation(principal)
+
+  React.useEffect(() => {
+    if (
+      pathname.startsWith('/users') ||
+      pathname.startsWith('/roles') ||
+      pathname.startsWith('/permissions') ||
+      pathname.startsWith('/audit')
+    ) {
+      setAdminExpanded(true)
+    }
+  }, [pathname])
 
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
@@ -171,32 +191,71 @@ export function AppShell() {
         ))}
         {navigation.administration.visible ? (
           <>
-            {!navCollapsed ? (
-              <Typography variant="overline" color="text.secondary" sx={{ px: 1.5, pt: 1.25, pb: 0.5, display: 'block' }}>
-                Administration
-              </Typography>
-            ) : null}
-            {navigation.administration.children.map((item) => (
-              <ListItemButton
-                key={item.key}
-                selected={pathname.startsWith(item.path)}
-                onClick={() => {
-                  void navigate({ to: item.path })
-                  setMobileOpen(false)
-                }}
-                sx={{
-                  borderRadius: 2,
-                  mb: 0.5,
-                  justifyContent: navCollapsed ? 'center' : 'flex-start',
-                  px: navCollapsed ? 1 : 2.25,
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>
-                  {navIcons[item.key as keyof typeof navIcons]}
-                </ListItemIcon>
-                {!navCollapsed ? <ListItemText primary={item.label} /> : null}
-              </ListItemButton>
-            ))}
+            <ListItemButton
+              aria-label="Toggle Administration menu"
+              aria-expanded={adminExpanded}
+              onClick={() => setAdminExpanded((current) => !current)}
+              sx={{
+                borderRadius: 2,
+                mb: 0.5,
+                justifyContent: navCollapsed ? 'center' : 'flex-start',
+                px: navCollapsed ? 1 : 1.5,
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>
+                <AdminPanelSettingsRoundedIcon fontSize="small" />
+              </ListItemIcon>
+              {!navCollapsed ? <ListItemText primary="Administration" /> : null}
+              {!navCollapsed ? (adminExpanded ? <ExpandLessRoundedIcon fontSize="small" /> : <ExpandMoreRoundedIcon fontSize="small" />) : null}
+            </ListItemButton>
+            {navCollapsed ? (
+              adminExpanded
+                ? navigation.administration.children.map((item) => (
+                    <ListItemButton
+                      key={item.key}
+                      selected={pathname.startsWith(item.path)}
+                      onClick={() => {
+                        void navigate({ to: item.path })
+                        setMobileOpen(false)
+                      }}
+                      sx={{
+                        borderRadius: 2,
+                        mb: 0.5,
+                        justifyContent: 'center',
+                        px: 1,
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                        {navIcons[item.key as keyof typeof navIcons]}
+                      </ListItemIcon>
+                    </ListItemButton>
+                  ))
+                : null
+            ) : (
+              <Collapse in={adminExpanded} unmountOnExit>
+                {navigation.administration.children.map((item) => (
+                  <ListItemButton
+                    key={item.key}
+                    selected={pathname.startsWith(item.path)}
+                    onClick={() => {
+                      void navigate({ to: item.path })
+                      setMobileOpen(false)
+                    }}
+                    sx={{
+                      borderRadius: 2,
+                      mb: 0.5,
+                      justifyContent: 'flex-start',
+                      px: 2.25,
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 34, justifyContent: 'center' }}>
+                      {navIcons[item.key as keyof typeof navIcons]}
+                    </ListItemIcon>
+                    <ListItemText primary={item.label} />
+                  </ListItemButton>
+                ))}
+              </Collapse>
+            )}
           </>
         ) : null}
       </List>

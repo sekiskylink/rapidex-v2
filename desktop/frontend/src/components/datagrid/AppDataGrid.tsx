@@ -20,6 +20,7 @@ import type { SettingsStore, TablePrefsV1 } from '../../settings/types'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 const EMPTY_STICKY_RIGHT_FIELDS: string[] = []
+const MAX_RIGHT_PINNED_COLUMNS = 2
 
 const defaultTablePrefs: TablePrefsV1 = {
   version: 1,
@@ -101,11 +102,25 @@ function withStickyRightFields(pinnedColumns: TablePrefsV1['pinnedColumns'], sti
   }
   const stickySet = new Set(stickyRightFields)
   const left = pinnedColumns.left.filter((field) => !stickySet.has(field))
-  const right = [...pinnedColumns.right.filter((field) => !stickySet.has(field)), ...stickyRightFields]
+  const right = [...pinnedColumns.right.filter((field) => !stickySet.has(field)), ...stickyRightFields].slice(-MAX_RIGHT_PINNED_COLUMNS)
   return {
     left: Array.from(new Set(left)),
     right: Array.from(new Set(right)),
   }
+}
+
+function resolveStickyRightFields<R extends GridValidRowModel>(
+  columns: GridColDef<R>[],
+  stickyRightFields: string[],
+  shouldPinActions: boolean,
+) {
+  if (!shouldPinActions) {
+    return stickyRightFields
+  }
+  if (stickyRightFields.length > 0) {
+    return stickyRightFields
+  }
+  return columns.some((column) => column.field === 'actions') ? ['actions'] : stickyRightFields
 }
 
 function paginationModelsEqual(a: GridPaginationModel, b: GridPaginationModel) {
@@ -195,7 +210,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
       }
       const persisted = settings.tablePrefs[storageKey] ?? defaultTablePrefs
       const shouldPinActions = pinActionsToRight ?? settings.uiPrefs.pinActionsColumnRight
-      const resolvedStickyFields = shouldPinActions ? stickyFields : EMPTY_STICKY_RIGHT_FIELDS
+      const resolvedStickyFields = resolveStickyRightFields(columns, shouldPinActions ? stickyFields : EMPTY_STICKY_RIGHT_FIELDS, shouldPinActions)
       setEnforcedStickyFields(resolvedStickyFields)
       setPaginationModel((current) => ({
         page: current.page,
@@ -212,7 +227,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
     return () => {
       active = false
     }
-  }, [pinActionsToRight, storageKey, store, stickyFieldsKey])
+  }, [columns, pinActionsToRight, storageKey, store, stickyFieldsKey])
 
   const persistTablePrefs = React.useCallback(
     async (updater: (current: TablePrefsV1) => TablePrefsV1) => {
@@ -364,6 +379,12 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         },
         '& .MuiDataGrid-menu': {
           zIndex: (theme: Theme) => theme.zIndex.modal + 1,
+        },
+        '& .MuiDataGrid-pinnedColumns, & .MuiDataGrid-pinnedColumnHeaders': {
+          bgcolor: 'background.paper',
+        },
+        '& .MuiDataGrid-cell--pinnedRight, & .MuiDataGrid-columnHeader--pinnedRight': {
+          boxShadow: (theme: Theme) => `-1px 0 0 ${theme.palette.divider}`,
         },
       }}
       pinnedColumns={pinnedColumns}

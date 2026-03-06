@@ -3,6 +3,7 @@ import {
   AppBar,
   Avatar,
   Box,
+  Collapse,
   Divider,
   Drawer,
   IconButton,
@@ -28,6 +29,8 @@ import {
   ChevronRightRoundedIcon,
   CloseIcon,
   DashboardRoundedIcon,
+  ExpandLessRoundedIcon,
+  ExpandMoreRoundedIcon,
   FactCheckRoundedIcon,
   GroupRoundedIcon,
   LogoutRoundedArrowIcon,
@@ -73,6 +76,12 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
+  const [adminExpanded, setAdminExpanded] = React.useState(
+    pathname.startsWith('/users') ||
+      pathname.startsWith('/roles') ||
+      pathname.startsWith('/permissions') ||
+      pathname.startsWith('/audit'),
+  )
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
   const firstNavItemRef = React.useRef<HTMLDivElement | null>(null)
@@ -92,6 +101,17 @@ export function AppShell() {
       firstNavItemRef.current?.focus()
     }
   }, [isMobile, mobileOpen])
+
+  React.useEffect(() => {
+    if (
+      pathname.startsWith('/users') ||
+      pathname.startsWith('/roles') ||
+      pathname.startsWith('/permissions') ||
+      pathname.startsWith('/audit')
+    ) {
+      setAdminExpanded(true)
+    }
+  }, [pathname])
 
   const navigation = buildNavigation(user)
   const navIcons = {
@@ -196,56 +216,90 @@ export function AppShell() {
         })}
         {navigation.administration.visible ? (
           <>
-            {!collapsed || isMobile ? (
-              <Typography variant="overline" color="text.secondary" sx={{ px: 1.5, pt: 1.25, pb: 0.5, display: 'block' }}>
-                Administration
-              </Typography>
-            ) : null}
-            {navigation.administration.children.map((item) => {
-              const selected = pathname.startsWith(item.path)
-              const button = (
-                <ListItemButton
-                  key={item.key}
-                  selected={selected}
-                  onClick={() => handleNavItemClick(item.path)}
-                  aria-label={item.label}
-                  sx={{
-                    minHeight: 46,
-                    mb: 0.5,
-                    justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
-                    borderRadius: 1.5,
-                    pl: collapsed && !isMobile ? 1.5 : 2.5,
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
-                    {navIcons[item.key as keyof typeof navIcons]}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      noWrap: true,
-                      fontWeight: selected ? 600 : 500,
-                    }}
-                    sx={{
-                      opacity: collapsed && !isMobile ? 0 : 1,
-                      transition: theme.transitions.create('opacity', {
-                        duration: theme.transitions.duration.shortest,
-                      }),
-                    }}
-                  />
-                </ListItemButton>
-              )
-
-              if (collapsed && !isMobile) {
-                return (
-                  <Tooltip key={item.key} title={item.label} placement="right">
-                    {button}
-                  </Tooltip>
-                )
-              }
-
-              return button
-            })}
+            <ListItemButton
+              aria-label="Toggle Administration menu"
+              aria-expanded={adminExpanded}
+              onClick={() => setAdminExpanded((current) => !current)}
+              sx={{
+                minHeight: 46,
+                mb: 0.5,
+                justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+                borderRadius: 1.5,
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
+                <AdminPanelSettingsRoundedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary="Administration"
+                primaryTypographyProps={{
+                  noWrap: true,
+                  fontWeight: 600,
+                }}
+                sx={{
+                  opacity: collapsed && !isMobile ? 0 : 1,
+                  transition: theme.transitions.create('opacity', {
+                    duration: theme.transitions.duration.shortest,
+                  }),
+                }}
+              />
+              {!collapsed || isMobile ? (adminExpanded ? <ExpandLessRoundedIcon fontSize="small" /> : <ExpandMoreRoundedIcon fontSize="small" />) : null}
+            </ListItemButton>
+            {collapsed && !isMobile ? (
+              adminExpanded
+                ? navigation.administration.children.map((item) => {
+                    const selected = pathname.startsWith(item.path)
+                    return (
+                      <Tooltip key={item.key} title={item.label} placement="right">
+                        <ListItemButton
+                          selected={selected}
+                          onClick={() => handleNavItemClick(item.path)}
+                          aria-label={item.label}
+                          sx={{
+                            minHeight: 46,
+                            mb: 0.5,
+                            justifyContent: 'center',
+                            borderRadius: 1.5,
+                            pl: 1.5,
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 'auto' }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
+                        </ListItemButton>
+                      </Tooltip>
+                    )
+                  })
+                : null
+            ) : (
+              <Collapse in={adminExpanded} unmountOnExit>
+                {navigation.administration.children.map((item) => {
+                  const selected = pathname.startsWith(item.path)
+                  return (
+                    <ListItemButton
+                      key={item.key}
+                      selected={selected}
+                      onClick={() => handleNavItemClick(item.path)}
+                      aria-label={item.label}
+                      sx={{
+                        minHeight: 46,
+                        mb: 0.5,
+                        justifyContent: 'flex-start',
+                        borderRadius: 1.5,
+                        pl: 2.5,
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{
+                          noWrap: true,
+                          fontWeight: selected ? 600 : 500,
+                        }}
+                      />
+                    </ListItemButton>
+                  )
+                })}
+              </Collapse>
+            )}
           </>
         ) : null}
       </List>

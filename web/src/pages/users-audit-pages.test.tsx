@@ -182,6 +182,7 @@ describe('users and audit pages', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create User' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Create User' })
+    expect(within(dialog).getByTestId('web-user-create-form-grid')).toBeInTheDocument()
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Username' }), { target: { value: 'new-user' } })
     const passwordInput = dialog.querySelector('input[type="password"]')
     expect(passwordInput).not.toBeNull()
@@ -257,6 +258,7 @@ describe('users and audit pages', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Edit User' })
+    expect(within(dialog).getByTestId('web-user-edit-form-grid')).toBeInTheDocument()
     const rolesInput = within(dialog).getByRole('combobox', { name: 'Roles' })
     fireEvent.mouseDown(rolesInput)
     fireEvent.change(rolesInput, { target: { value: 'Admin' } })

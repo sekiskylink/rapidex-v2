@@ -446,7 +446,7 @@ export function UsersPage() {
           </Button>
         ) : null}
       </Box>
-      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchUsers}
@@ -457,11 +457,23 @@ export function UsersPage() {
         />
       </Box>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="lg">
         <DialogTitle>Create User</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {createErrorMessage ? <Alert severity="error">{createErrorMessage}</Alert> : null}
+          <Box
+            data-testid="web-user-create-form-grid"
+            sx={{
+              mt: 1,
+              display: 'grid',
+              gap: 2,
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'repeat(2, minmax(0, 1fr))',
+                xl: 'repeat(3, minmax(0, 1fr))',
+              },
+            }}
+          >
+            {createErrorMessage ? <Alert severity="error" sx={{ gridColumn: '1 / -1' }}>{createErrorMessage}</Alert> : null}
             <TextField
               label="Username"
               required
@@ -551,6 +563,7 @@ export function UsersPage() {
               loading={loadingRoleOptions}
               value={createRoles}
               onChange={(_event, value) => setCreateRoles(value)}
+              sx={{ gridColumn: '1 / -1' }}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => <Chip label={option} {...getTagProps({ index })} key={option} size="small" />)
               }
@@ -564,7 +577,7 @@ export function UsersPage() {
                 />
               )}
             />
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ gridColumn: '1 / -1' }}>
               <Typography variant="body2">Active</Typography>
               <Switch
                 checked={createForm.isActive}
@@ -572,7 +585,7 @@ export function UsersPage() {
                 inputProps={{ 'aria-label': 'Active' }}
               />
             </Stack>
-          </Stack>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -586,11 +599,23 @@ export function UsersPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="lg">
         <DialogTitle>Edit User</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {editErrorMessage ? <Alert severity="error">{editErrorMessage}</Alert> : null}
+          <Box
+            data-testid="web-user-edit-form-grid"
+            sx={{
+              mt: 1,
+              display: 'grid',
+              gap: 2,
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'repeat(2, minmax(0, 1fr))',
+                xl: 'repeat(3, minmax(0, 1fr))',
+              },
+            }}
+          >
+            {editErrorMessage ? <Alert severity="error" sx={{ gridColumn: '1 / -1' }}>{editErrorMessage}</Alert> : null}
             <TextField
               label="Username"
               value={editForm.username}
@@ -679,6 +704,7 @@ export function UsersPage() {
               loading={loadingRoleOptions}
               value={editRoles}
               onChange={(_event, value) => setEditRoles(value)}
+              sx={{ gridColumn: '1 / -1' }}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => <Chip label={option} {...getTagProps({ index })} key={option} size="small" />)
               }
@@ -692,7 +718,7 @@ export function UsersPage() {
                 />
               )}
             />
-            <Stack direction="row" alignItems="center" spacing={1}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ gridColumn: '1 / -1' }}>
               <Typography variant="body2">Active</Typography>
               <Switch
                 checked={editForm.isActive}
@@ -700,7 +726,7 @@ export function UsersPage() {
                 inputProps={{ 'aria-label': 'Active' }}
               />
             </Stack>
-          </Stack>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditOpen(false)}>Cancel</Button>

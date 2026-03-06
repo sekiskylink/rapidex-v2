@@ -205,7 +205,7 @@ export function AuditPage() {
         />
       </Stack>
 
-      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchAudit}

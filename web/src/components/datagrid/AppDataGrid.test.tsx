@@ -55,6 +55,7 @@ function renderGrid(fetchData: (params: any) => Promise<any>, storageKey = 'user
         columns={[
           { field: 'id', headerName: 'ID' },
           { field: 'username', headerName: 'Username' },
+          { field: 'actions', headerName: 'Actions' },
         ]}
         fetchData={fetchData}
         enablePinnedColumns={enablePinnedColumns}
@@ -140,7 +141,7 @@ describe('AppDataGrid', () => {
       expect(screen.getByTestId('first-column')).toHaveTextContent('username')
       expect(screen.getByTestId('density')).toHaveTextContent('compact')
       expect(screen.getByTestId('pinned-left')).toHaveTextContent('username')
-      expect(screen.getByTestId('pinned-right')).toHaveTextContent('id')
+      expect(screen.getByTestId('pinned-right')).toHaveTextContent('id,actions')
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'density-comfortable' }))
@@ -155,11 +156,21 @@ describe('AppDataGrid', () => {
       expect(saved.columnVisibility).toEqual(expect.objectContaining({ username: false }))
       expect(saved.columnOrder).toEqual(expect.arrayContaining(['id', 'username']))
       expect(saved.density).toBe('comfortable')
-      expect(saved.pinnedColumns).toEqual({ left: ['username'], right: ['id'] })
+      expect(saved.pinnedColumns).toEqual({ left: ['username'], right: ['id', 'actions'] })
     })
 
     view.unmount()
     renderGrid(fetchData, 'users-table', true)
     await waitFor(() => expect(screen.getByTestId('density')).toHaveTextContent('comfortable'))
+  })
+
+  it('pins actions column to the right by default', async () => {
+    const fetchData = vi.fn(async () => ({ rows: [], total: 0 }))
+    renderGrid(fetchData, 'users-table', true)
+
+    await waitFor(() => {
+      expect(fetchData).toHaveBeenCalled()
+      expect(screen.getByTestId('pinned-right')).toHaveTextContent('actions')
+    })
   })
 })

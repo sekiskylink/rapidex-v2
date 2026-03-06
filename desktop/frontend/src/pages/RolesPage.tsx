@@ -289,7 +289,7 @@ export function RolesPage() {
         </Button>
       </Box>
 
-      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'auto' }}>
+      <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid
           columns={columns}
           fetchData={fetchRoles}

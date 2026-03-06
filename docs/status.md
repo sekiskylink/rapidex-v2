@@ -1,5 +1,50 @@
 # Status
 
+## Milestone E — Administration UX Refinement (Navigation Dropdowns + Multi-Column Forms + Grid Pinning) (Complete)
+
+### What changed
+- Refined desktop and web authenticated shell navigation so `Administration` is an expandable/collapsible grouped menu instead of a static section label.
+- Preserved RBAC-aware visibility in both clients:
+  - hidden child links for unauthorized routes
+  - hidden `Administration` group when no child route is accessible.
+- Added aligned expand/collapse test coverage for desktop and web navigation behavior.
+- Refactored desktop and web users create/edit dialogs to responsive multi-column form grids:
+  - 1 column on narrow overlays
+  - 2 columns on medium widths
+  - 3 columns on wide dialogs
+- Increased users create/edit dialog width (`maxWidth="lg"`) to reduce excessive vertical scrolling while keeping validation helper text and error rendering intact.
+- Strengthened shared DataGrid wrappers in desktop and web:
+  - default right-pin behavior for a standard `actions` column when action pinning is enabled
+  - enforced sticky-right action pinning via wrapper-level resolution (reduces per-page drift)
+  - right-pinned width safeguards (caps pinned-right column count in wrapper merge logic)
+  - pinned header/cell styling tweaks to keep pinned areas visually stable during horizontal scroll.
+- Aligned admin table containers to avoid clipping menus/pinned areas/scrollbars by removing outer `overflow: auto` wrappers and relying on DataGrid scrolling behavior.
+- Added/updated tests for:
+  - admin navigation expand/collapse and visibility
+  - users form layout container presence for create/edit dialogs
+  - default actions-column pinning behavior in shared DataGrid wrappers.
+- Saved prompt copy to `docs/prompts/2026-03-06-milestone-admin-ux-refinement.md` (gitignored).
+
+### Rendering notes (desktop vs web)
+- Both clients now share the same grouped-navigation semantics and permission behavior for `Administration`.
+- Desktop and web differ slightly in responsive interaction details:
+  - desktop mini drawer and web mini drawer/mobile drawer render collapsed labels/tooltips differently
+  - both still preserve equivalent expand/collapse behavior and route grouping intent.
+
+### Tests and verification
+- Backend tests:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Desktop frontend tests:
+  - `cd desktop/frontend && npm test -- --run`
+- Web frontend tests:
+  - `cd web && npm test -- --run`
+
+### Verification summary
+- Backend tests: PASS
+- Desktop frontend tests: PASS
+- Web frontend tests: PASS
+- Known non-blocking jsdom `anchorEl` warnings remain in frontend test output; behavior/tests pass.
+
 ## Milestone D — Web RBAC Administration Parity + Users Multi-Role UX (Complete)
 
 ### What changed

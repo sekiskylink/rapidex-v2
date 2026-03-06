@@ -11,6 +11,7 @@ vi.mock('@mui/x-data-grid', () => {
       <div>
         <div data-testid="page-size">{String(props.paginationModel.pageSize)}</div>
         <div data-testid="username-visibility">{String(props.columnVisibilityModel?.username ?? true)}</div>
+        <div data-testid="pinned-right">{String((props.pinnedColumns?.right ?? []).join(','))}</div>
         <button
           type="button"
           onClick={() =>
@@ -89,7 +90,7 @@ function renderGrid(store: SettingsStore, fetchData: (params: AppDataGridFetchPa
     component: () => (
       <AppDataGrid
         storageKey="users-table"
-        columns={[{ field: 'id' }, { field: 'username' }]}
+        columns={[{ field: 'id' }, { field: 'username' }, { field: 'actions' }]}
         fetchData={fetchData}
       />
     ),
@@ -180,6 +181,17 @@ describe('AppDataGrid', () => {
     await waitFor(() => {
       expect(screen.getByTestId('page-size')).toHaveTextContent('50')
       expect(screen.getByTestId('username-visibility')).toHaveTextContent('false')
+    })
+  })
+
+  it('pins actions column to the right by default when available', async () => {
+    const store = createMockSettingsStore(defaultSettings)
+    const fetchData = vi.fn(async () => ({ rows: [], total: 0 }))
+    renderGrid(store, fetchData)
+
+    await waitFor(() => {
+      expect(fetchData).toHaveBeenCalled()
+      expect(screen.getByTestId('pinned-right')).toHaveTextContent('actions')
     })
   })
 })
