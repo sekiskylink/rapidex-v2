@@ -1,4 +1,5 @@
 import type { SettingsStore } from '../settings/types'
+import { resetEffectiveModuleEnablement } from '../registry/moduleEnablement'
 
 interface SessionData {
   accessToken: string
@@ -59,6 +60,7 @@ export async function clearSession() {
   state.accessToken = undefined
   state.expiresAt = undefined
   state.principal = undefined
+  resetEffectiveModuleEnablement()
   if (settingsStoreRef) {
     await settingsStoreRef.saveSettings({ refreshToken: '' })
   }

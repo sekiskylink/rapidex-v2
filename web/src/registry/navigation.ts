@@ -1,5 +1,6 @@
 import type { AuthUser } from '../auth/state'
 import { hasAnyPermissionForUser } from '../rbac/permissions'
+import { isNavigationItemEnabled, isPathModuleEnabled } from './moduleEnablement'
 import type { PermissionKey } from './permissions'
 
 export type NavigationIconKey = 'dashboard' | 'settings' | 'administration' | 'users' | 'roles' | 'permissions' | 'audit'
@@ -79,6 +80,12 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
 ]
 
 function isVisible(definition: NavigationDefinition, ctx: NavigationVisibilityContext) {
+  if (!isNavigationItemEnabled(definition.id)) {
+    return false
+  }
+  if (definition.path && !isPathModuleEnabled(definition.path)) {
+    return false
+  }
   if (definition.requiredPermissions && definition.requiredPermissions.length > 0) {
     if (!hasAnyPermissionForUser(ctx.user, definition.requiredPermissions)) {
       return false
@@ -108,6 +115,9 @@ export function getRouteLabel(pathname: string) {
 }
 
 export function canAccessNavigationPath(pathname: string, user: AuthUser | null | undefined) {
+  if (!isPathModuleEnabled(pathname)) {
+    return false
+  }
   const ctx: NavigationVisibilityContext = { user }
   for (const item of authenticatedNavigationRegistry) {
     if (item.path && pathname.startsWith(item.path)) {

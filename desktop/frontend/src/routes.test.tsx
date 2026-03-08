@@ -225,6 +225,76 @@ describe('app shell routes', () => {
     expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
   })
 
+  it('hides administration navigation and blocks /users when administration module is disabled', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Admin'],
+              permissions: ['users.read', 'users.write', 'audit.read', 'settings.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/modules/effective')) {
+          return new Response(
+            JSON.stringify({
+              modules: [
+                {
+                  moduleId: 'dashboard',
+                  flagKey: 'modules.dashboard.enabled',
+                  enabled: true,
+                  enabledByDefault: true,
+                  source: 'default',
+                },
+                {
+                  moduleId: 'administration',
+                  flagKey: 'modules.administration.enabled',
+                  enabled: false,
+                  enabledByDefault: true,
+                  source: 'config',
+                },
+                {
+                  moduleId: 'settings',
+                  flagKey: 'modules.settings.enabled',
+                  enabled: true,
+                  enabledByDefault: true,
+                  source: 'default',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/users', store)
+
+    expect(await screen.findByRole('heading', { name: '403', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
+  })
+
   it('renders users list metadata columns and values', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
@@ -685,7 +755,7 @@ describe('app shell routes', () => {
               id: 1,
               username: 'admin',
               roles: ['Admin'],
-              permissions: ['users.read', 'users.write', 'audit.read'],
+              permissions: ['users.read', 'users.write', 'audit.read', 'settings.read'],
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )

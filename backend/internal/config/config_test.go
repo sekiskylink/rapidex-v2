@@ -187,6 +187,19 @@ auth:
 	}
 }
 
+func TestValidateRejectsUnknownModuleFlag(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Modules.Flags = map[string]bool{
+		"modules.unknown.enabled": false,
+	}
+
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected unknown module flag key to fail validation")
+	}
+}
+
 func TestHotReloadRejectsInvalidCorsAndKeepsPrevious(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")

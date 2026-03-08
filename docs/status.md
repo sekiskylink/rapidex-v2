@@ -1,31 +1,86 @@
 # Status
 
-## Milestone — Feature Flags / Module Enablement Registry (Planned)
+## Milestone — Feature Flags / Module Enablement Registry (Implementation) (Complete)
 
-### Planned scope
-- Define a typed module-enablement registry/contract that complements existing module, navigation, and permission registries.
-- Define explicit flag scopes:
+### What changed
+- Added a typed backend module-enablement registry and contract:
+  - `backend/internal/moduleenablement/registry.go`
+  - `backend/internal/moduleenablement/handler.go`
+- Added backend-served effective module config endpoint for clients:
+  - `GET /api/v1/modules/effective`
+  - router wiring in `backend/cmd/api/router.go`
+- Added backend config support as the source-of-truth override surface:
+  - `modules.flags` in `backend/internal/config/config.go`
+  - sample config section in `backend/config/config.yaml`
+  - validation for unknown module-flag keys
+- Added backend module-disable guards (where practical) for module-owned routes:
+  - new middleware `backend/internal/middleware/module_enablement.go`
+  - guarded Administration routes (`/users`, `/audit`, `/admin/roles`, `/admin/permissions`)
+  - guarded Settings routes (including `/settings/public/login-branding`)
+- Added typed module enablement registries and local effective-state handling in both clients:
+  - `desktop/frontend/src/registry/moduleEnablement.ts`
+  - `web/src/registry/moduleEnablement.ts`
+- Connected desktop/web nav and route access checks to effective module enablement:
+  - `desktop/frontend/src/registry/navigation.ts`
+  - `web/src/registry/navigation.ts`
+  - route-guard updates in `desktop/frontend/src/routes.tsx` and `web/src/routes.tsx`
+- Desktop and web now consume backend effective module enablement during authenticated bootstrap:
+  - desktop via API client + authenticated gate
+  - web via `AuthProvider` refresh/login bootstrap
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-07-feature-flags-module-enablement-registry.md` (gitignored, not for commit)
+
+### Source of truth decision
+- Implemented: **backend-determined effective module enablement**.
+- Registry defaults live in code (backend + clients) for bootstrapping/documentation.
+- Runtime effective state is served by backend `/api/v1/modules/effective` using:
+  - typed registry defaults
+  - optional `modules.flags` config overrides.
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+- Web frontend:
+  - `cd web && npm test -- --run` -> PASS
+- Web production build:
+  - `cd web && npm run build` -> PASS
+
+### Added/updated targeted tests
+- Backend:
+  - `backend/internal/moduleenablement/registry_test.go`
+  - `backend/cmd/api/router_module_enablement_test.go`
+  - `backend/internal/config/config_test.go` (module flag key validation)
+- Desktop:
+  - `desktop/frontend/src/registry/registry.test.ts` (enablement defaults + disabled-module checks)
+  - `desktop/frontend/src/routes.test.tsx` (disabled-module navigation/route behavior)
+- Web:
+  - `web/src/registry/registry.test.ts` (enablement defaults + disabled-module checks)
+  - `web/src/routes.test.tsx` (disabled-module navigation/route behavior)
+
+### Remaining follow-ups
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in frontend test logs.
+- Existing non-blocking Vite warnings for third-party `'use client'` directives and chunk-size notices remain in web build output.
+
+## Milestone — Feature Flags / Module Enablement Registry (Documentation) (Complete)
+
+### Scope completed
+- Defined typed module-enablement registry/contract expectations aligned to module, navigation, and permission registries.
+- Defined flag scope taxonomy:
   - backend
   - desktop
   - web
   - full-stack
-- Define safe-disable behavior expectations for:
+- Defined safe-disable expectations for:
   - navigation visibility
   - route/page access
   - backend API availability/guarding
   - permission exposure behavior
 
-### Planned architecture targets
-- Backend:
-  - provide a backend-served effective feature/module enablement config contract for runtime consumption.
-- Desktop and web:
-  - consume effective enablement config to guard navigation and direct route access consistently.
-- Cross-layer:
-  - preserve registry-first wiring and avoid ad-hoc feature checks scattered across pages/handlers.
-
-### Planned delivery notes
-- This is documentation/design-first planning; no runtime code implementation is included in this milestone entry.
-- Implementation milestone must include backend + desktop + web test coverage for both enabled and disabled states.
+### Delivery notes
+- This milestone was documentation/design-first planning only.
+- Runtime implementation is captured in the implementation milestone above.
 
 ## Milestone — Registry-First Module Extension Workflow (Documentation) (Complete)
 

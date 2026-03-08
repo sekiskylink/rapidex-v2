@@ -8,6 +8,7 @@ import (
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/middleware"
+	"basepro/backend/internal/moduleenablement"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/users"
@@ -30,6 +31,8 @@ type AppDeps struct {
 	AuditHandler        *audit.Handler
 	UsersHandler        *users.Handler
 	SettingsHandler     *settings.Handler
+	ModuleFlagsHandler  *moduleenablement.Handler
+	ModuleFlagsProvider func() map[string]bool
 	APITokenHeaderName  string
 	APITokenAllowBearer bool
 }
@@ -75,6 +78,10 @@ func newRouter(deps AppDeps) *gin.Engine {
 		})
 	})
 
+	if deps.ModuleFlagsHandler != nil {
+		api.GET("/modules/effective", deps.ModuleFlagsHandler.GetEffective)
+	}
+
 	if deps.AuthHandler != nil && deps.JWTManager != nil {
 		authRateLimiter := middleware.NewAuthRateLimiter(deps.RateLimitConfig)
 		authGroup := api.Group("/auth")
@@ -94,7 +101,12 @@ func newRouter(deps AppDeps) *gin.Engine {
 
 	if deps.UsersHandler != nil {
 		usersGroup := api.Group("/users")
-		usersGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
+		usersGroup.Use(
+			middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "administration"),
+			middleware.ResolveJWTPrincipal(deps.JWTManager),
+			middleware.RequireAuth(),
+			middleware.RequireJWTUser(),
+		)
 		usersGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.UsersHandler.List)
 		usersGroup.GET("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.UsersHandler.Get)
 		usersGroup.POST("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.UsersHandler.Create)
@@ -105,13 +117,22 @@ func newRouter(deps AppDeps) *gin.Engine {
 
 	if deps.AuditHandler != nil {
 		auditGroup := api.Group("/audit")
-		auditGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth())
+		auditGroup.Use(
+			middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "administration"),
+			middleware.ResolveJWTPrincipal(deps.JWTManager),
+			middleware.RequireAuth(),
+		)
 		auditGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionAuditRead), deps.AuditHandler.List)
 	}
 
 	if deps.RBACAdminHandler != nil {
 		rolesGroup := api.Group("/admin/roles")
-		rolesGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
+		rolesGroup.Use(
+			middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "administration"),
+			middleware.ResolveJWTPrincipal(deps.JWTManager),
+			middleware.RequireAuth(),
+			middleware.RequireJWTUser(),
+		)
 		rolesGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.RBACAdminHandler.ListRoles)
 		rolesGroup.POST("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.RBACAdminHandler.CreateRole)
 		rolesGroup.GET("/:id", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.RBACAdminHandler.GetRole)
@@ -120,15 +141,25 @@ func newRouter(deps AppDeps) *gin.Engine {
 		rolesGroup.PUT("/:id/permissions", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersWrite), deps.RBACAdminHandler.UpdateRolePermissions)
 
 		permissionsGroup := api.Group("/admin/permissions")
-		permissionsGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
+		permissionsGroup.Use(
+			middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "administration"),
+			middleware.ResolveJWTPrincipal(deps.JWTManager),
+			middleware.RequireAuth(),
+			middleware.RequireJWTUser(),
+		)
 		permissionsGroup.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionUsersRead), deps.RBACAdminHandler.ListPermissions)
 	}
 
 	if deps.SettingsHandler != nil {
-		api.GET("/settings/public/login-branding", deps.SettingsHandler.GetPublicLoginBranding)
+		api.GET("/settings/public/login-branding", middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "settings"), deps.SettingsHandler.GetPublicLoginBranding)
 
 		settingsGroup := api.Group("/settings")
-		settingsGroup.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
+		settingsGroup.Use(
+			middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "settings"),
+			middleware.ResolveJWTPrincipal(deps.JWTManager),
+			middleware.RequireAuth(),
+			middleware.RequireJWTUser(),
+		)
 		settingsGroup.GET("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetLoginBranding)
 		settingsGroup.PUT("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite), deps.SettingsHandler.UpdateLoginBranding)
 	}

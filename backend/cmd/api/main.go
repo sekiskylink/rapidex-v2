@@ -18,6 +18,7 @@ import (
 	"basepro/backend/internal/logging"
 	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/migrate"
+	"basepro/backend/internal/moduleenablement"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/users"
@@ -148,14 +149,20 @@ func run() error {
 				RequestsPerSecond: cfg.Security.RateLimit.RequestsPerSecond,
 				Burst:             cfg.Security.RateLimit.Burst,
 			},
-			AuthHandler:         auth.NewHandler(authService),
-			AuthService:         authService,
-			JWTManager:          jwtManager,
-			RBACService:         rbacService,
-			RBACAdminHandler:    rbac.NewAdminHandler(rbacAdminService),
-			AuditHandler:        audit.NewHandler(auditService),
-			UsersHandler:        users.NewHandler(usersService),
-			SettingsHandler:     settings.NewHandler(settingsService),
+			AuthHandler:      auth.NewHandler(authService),
+			AuthService:      authService,
+			JWTManager:       jwtManager,
+			RBACService:      rbacService,
+			RBACAdminHandler: rbac.NewAdminHandler(rbacAdminService),
+			AuditHandler:     audit.NewHandler(auditService),
+			UsersHandler:     users.NewHandler(usersService),
+			SettingsHandler:  settings.NewHandler(settingsService),
+			ModuleFlagsHandler: moduleenablement.NewHandler(func() map[string]bool {
+				return config.Get().Modules.Flags
+			}),
+			ModuleFlagsProvider: func() map[string]bool {
+				return config.Get().Modules.Flags
+			},
 			APITokenHeaderName:  cfg.Auth.APITokenHeaderName,
 			APITokenAllowBearer: cfg.Auth.APITokenAllowBearer,
 		}),

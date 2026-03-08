@@ -27,6 +27,7 @@ import { SetupPage } from './pages/SetupPage'
 import { UsersPage } from './pages/UsersPage'
 import { settingsStore } from './settings/store'
 import type { SettingsStore } from './settings/types'
+import { applyEffectiveModuleEnablement } from './registry/moduleEnablement'
 
 interface RouterContext {
   settingsStore: SettingsStore
@@ -226,6 +227,16 @@ function AuthenticatedGatePage() {
         }
       }
 
+      try {
+        const effectiveModules = await apiClient.getEffectiveModuleEnablement()
+        if (!active) {
+          return
+        }
+        applyEffectiveModuleEnablement(effectiveModules)
+      } catch {
+        // Keep static defaults when effective config cannot be loaded.
+      }
+
       setReady(true)
     })
 
@@ -245,6 +256,14 @@ function UsersRoutePage() {
   const principal = useSessionPrincipal()
   if (canAccessRoute(principal, '/users')) {
     return <UsersPage />
+  }
+  return <ForbiddenPage />
+}
+
+function DashboardRoutePage() {
+  const principal = useSessionPrincipal()
+  if (canAccessRoute(principal, '/dashboard')) {
+    return <DashboardPage />
   }
   return <ForbiddenPage />
 }
@@ -269,6 +288,14 @@ function AuditRoutePage() {
   const principal = useSessionPrincipal()
   if (canAccessRoute(principal, '/audit')) {
     return <AuditPage />
+  }
+  return <ForbiddenPage />
+}
+
+function SettingsRoutePage() {
+  const principal = useSessionPrincipal()
+  if (canAccessRoute(principal, '/settings')) {
+    return <SettingsPage />
   }
   return <ForbiddenPage />
 }
@@ -312,13 +339,13 @@ const authenticatedRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/dashboard',
-  component: DashboardPage,
+  component: DashboardRoutePage,
 })
 
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/settings',
-  component: SettingsPage,
+  component: SettingsRoutePage,
 })
 
 const usersRoute = createRoute({

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthSnapshot, persistRefreshToken, setAuthSnapshot } from './auth/state'
 import { API_BASE_URL_OVERRIDE_STORAGE_KEY } from './lib/apiBaseUrl'
 import { apiRequest } from './lib/api'
+import { applyEffectiveModuleEnablement, resetEffectiveModuleEnablement } from './registry/moduleEnablement'
 import { createAppRouter } from './routes'
 import { SnackbarProvider } from './ui/snackbar'
 import { UI_PREFERENCES_STORAGE_KEY } from './ui/preferences'
@@ -46,6 +47,7 @@ function renderWithRouter(initialPath: string) {
 beforeEach(() => {
   window.localStorage.clear()
   clearAuthSnapshot()
+  resetEffectiveModuleEnablement()
   mockViewport(false)
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1')
   window.localStorage.setItem(API_BASE_URL_OVERRIDE_STORAGE_KEY, 'http://localhost:8080/api/v1')
@@ -59,6 +61,7 @@ afterEach(() => {
   cleanup()
   window.localStorage.clear()
   clearAuthSnapshot()
+  resetEffectiveModuleEnablement()
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
 })
@@ -378,6 +381,51 @@ describe('web RBAC navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('You do not have permission to access this page.')).toBeInTheDocument()
+  })
+
+  it('hides administration navigation and blocks /users when administration module is disabled', async () => {
+    applyEffectiveModuleEnablement({
+      modules: [
+        {
+          moduleId: 'dashboard',
+          flagKey: 'modules.dashboard.enabled',
+          enabled: true,
+          enabledByDefault: true,
+          source: 'default',
+        },
+        {
+          moduleId: 'administration',
+          flagKey: 'modules.administration.enabled',
+          enabled: false,
+          enabledByDefault: true,
+          source: 'config',
+        },
+        {
+          moduleId: 'settings',
+          flagKey: 'modules.settings.enabled',
+          enabled: true,
+          enabledByDefault: true,
+          source: 'default',
+        },
+      ],
+    })
+
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 4,
+        username: 'admin',
+        roles: ['Admin'],
+        permissions: ['settings.read', 'users.read', 'users.write'],
+      },
+    })
+
+    renderWithRouter('/users')
+
+    expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument()
   })
 })
 

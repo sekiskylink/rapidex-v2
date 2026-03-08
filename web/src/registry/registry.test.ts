@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AuthUser } from '../auth/state'
+import { applyEffectiveModuleEnablement, isPathModuleEnabled, moduleEnablementRegistry, resetEffectiveModuleEnablement } from './moduleEnablement'
 import { canAccessNavigationPath, authenticatedNavigationRegistry } from './navigation'
 import { moduleRegistry } from './modules'
 import { permissionRegistry } from './permissions'
@@ -14,6 +15,11 @@ function userWith(permissions: string[]): AuthUser {
 }
 
 describe('web registries', () => {
+  it('defines module enablement defaults for baseline platform modules', () => {
+    expect(moduleEnablementRegistry.map((item) => item.moduleId)).toEqual(['dashboard', 'administration', 'settings'])
+    expect(moduleEnablementRegistry.every((item) => item.enabledByDefault)).toBe(true)
+  })
+
   it('defines unique permission keys and includes baseline platform permissions', () => {
     const keys = permissionRegistry.map((item) => item.key)
     expect(new Set(keys).size).toBe(keys.length)
@@ -47,5 +53,37 @@ describe('web registries', () => {
     expect(canAccessNavigationPath('/users', usersReader)).toBe(true)
     expect(canAccessNavigationPath('/audit', usersReader)).toBe(false)
   })
-})
 
+  it('blocks module paths when effective config disables a module', () => {
+    resetEffectiveModuleEnablement()
+    applyEffectiveModuleEnablement({
+      modules: [
+        {
+          moduleId: 'dashboard',
+          flagKey: 'modules.dashboard.enabled',
+          enabled: true,
+          enabledByDefault: true,
+          source: 'default',
+        },
+        {
+          moduleId: 'administration',
+          flagKey: 'modules.administration.enabled',
+          enabled: false,
+          enabledByDefault: true,
+          source: 'config',
+        },
+        {
+          moduleId: 'settings',
+          flagKey: 'modules.settings.enabled',
+          enabled: true,
+          enabledByDefault: true,
+          source: 'default',
+        },
+      ],
+    })
+
+    expect(isPathModuleEnabled('/users')).toBe(false)
+    expect(canAccessNavigationPath('/users', userWith(['users.read']))).toBe(false)
+    resetEffectiveModuleEnablement()
+  })
+})

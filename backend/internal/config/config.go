@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"basepro/backend/internal/logging"
+	"basepro/backend/internal/moduleenablement"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
@@ -60,6 +61,9 @@ type Config struct {
 	Seed struct {
 		EnableDevBootstrap bool `mapstructure:"enable_dev_bootstrap"`
 	} `mapstructure:"seed"`
+	Modules struct {
+		Flags map[string]bool `mapstructure:"flags"`
+	} `mapstructure:"modules"`
 }
 
 type Options struct {
@@ -169,6 +173,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.cors.allowed_headers", []string{"Authorization", "Content-Type", "X-API-Token", "X-Request-Id"})
 	v.SetDefault("security.cors.allow_credentials", false)
 	v.SetDefault("seed.enable_dev_bootstrap", false)
+	v.SetDefault("modules.flags", map[string]bool{})
 }
 
 func defaultConfig() Config {
@@ -203,6 +208,7 @@ func defaultConfig() Config {
 	cfg.Security.CORS.AllowedHeaders = []string{"Authorization", "Content-Type", "X-API-Token", "X-Request-Id"}
 	cfg.Security.CORS.AllowCredentials = false
 	cfg.Seed.EnableDevBootstrap = false
+	cfg.Modules.Flags = map[string]bool{}
 	return cfg
 }
 
@@ -296,6 +302,9 @@ func validate(cfg Config) error {
 				return errors.New("security.cors.allowed_origins must not contain wildcards when allow_credentials is true")
 			}
 		}
+	}
+	if err := moduleenablement.ValidateOverrides(cfg.Modules.Flags); err != nil {
+		return err
 	}
 	return nil
 }

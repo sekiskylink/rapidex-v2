@@ -56,3 +56,6 @@ security:
 
 seed:
   enable_dev_bootstrap: false
+
+modules:
+  flags: {}

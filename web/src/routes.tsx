@@ -90,7 +90,7 @@ const authenticatedRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/dashboard',
-  component: DashboardPage,
+  component: () => (canAccessRoute('/dashboard') ? <DashboardPage /> : <NotAuthorizedPage />),
 })
 
 const usersRoute = createRoute({

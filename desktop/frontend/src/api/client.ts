@@ -7,6 +7,7 @@ import {
   setSession,
 } from '../auth/session'
 import type { LoginRequest, LoginResponse, MeResponse, RefreshRequest, RefreshResponse } from '../auth/types'
+import type { ModuleEnablementApiResponse } from '../registry/moduleEnablement'
 import type { AppSettings } from '../settings/types'
 
 interface ApiClientDeps {
@@ -288,6 +289,23 @@ export function createApiClient(deps: ApiClientDeps) {
         throw new Error(`Version check failed: HTTP ${response.status}`)
       }
       return (await response.json()) as VersionResponse
+    },
+
+    async getEffectiveModuleEnablement() {
+      const settings = await deps.getSettings()
+      const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
+      if (!baseUrl) {
+        throw new Error('API base URL is required')
+      }
+
+      const response = await fetchWithTimeout(`${baseUrl}/api/v1/modules/effective`, {
+        method: 'GET',
+      })
+      if (!response.ok) {
+        throw await parseApiError(response)
+      }
+
+      return (await response.json()) as ModuleEnablementApiResponse
     },
 
     async getPublicLoginBranding() {

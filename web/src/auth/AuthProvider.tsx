@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { apiRequest, configureApiClient, type ApiError } from '../lib/api'
 import { useAppNotify } from '../notifications/facade'
+import { applyEffectiveModuleEnablement, resetEffectiveModuleEnablement, type ModuleEnablementApiResponse } from '../registry/moduleEnablement'
 import { rememberIntendedDestination } from './sessionExpiry'
 import {
   clearAuthSnapshot,
@@ -46,6 +47,15 @@ function toAuthUser(payload: MeResponse): AuthUser {
   }
 }
 
+async function fetchEffectiveModuleEnablement() {
+  try {
+    const response = await apiRequest<ModuleEnablementApiResponse>('/modules/effective', { method: 'GET' })
+    applyEffectiveModuleEnablement(response)
+  } catch {
+    resetEffectiveModuleEnablement()
+  }
+}
+
 export function AuthProvider({ children }: React.PropsWithChildren) {
   const navigate = useNavigate()
   const notify = useAppNotify()
@@ -70,6 +80,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
 
   const clearSession = React.useCallback(() => {
     clearAuthSnapshot()
+    resetEffectiveModuleEnablement()
   }, [])
 
   const refresh = React.useCallback(async (): Promise<boolean> => {
@@ -95,6 +106,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         )
 
         const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' }, { retryOnUnauthorized: false })
+        await fetchEffectiveModuleEnablement()
         applySession(tokens, toAuthUser(me))
         return true
       } catch {
@@ -147,6 +159,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
 
       try {
         const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' })
+        await fetchEffectiveModuleEnablement()
         setAuthSnapshot({
           ...getAuthSnapshot(),
           user: toAuthUser(me),
