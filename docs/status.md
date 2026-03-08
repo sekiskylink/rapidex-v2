@@ -1,5 +1,32 @@
 # Status
 
+## Planned Milestone — Server-Driven Bootstrap Config + Settings Authorization Contract (Upcoming)
+
+### Planned scope
+- Add backend bootstrap runtime contract endpoint to serve typed effective startup config for shared clients.
+- Add desktop and web bootstrap consumption flow based on backend contract (no ad-hoc client-only startup assumptions).
+- Add offline-aware cached bootstrap startup behavior:
+  - fetch fresh bootstrap first
+  - fallback to last valid cached bootstrap when backend is unreachable
+  - expose stale/offline-aware runtime state clearly
+- Protect Settings route/page access in desktop and web using:
+  - `admin` role
+  - or `settings.write` permission
+- Enforce backend-authoritative authorization for protected Settings APIs with typed unauthorized errors.
+
+### Planned validation expectations
+- Backend tests for bootstrap endpoint contract shape and registry-aligned derivation behavior.
+- Desktop/web tests for bootstrap startup consumption and offline cache fallback behavior.
+- Desktop/web route guard tests for Settings authorization (`admin` or `settings.write`) and unauthorized handling.
+- Full milestone gate remains:
+  - `go test ./...` (backend)
+  - desktop/frontend route/smoke tests
+  - web/frontend route/smoke tests
+  - `docs/status.md` completion evidence and parity notes
+
+### Notes
+- This is a planned milestone entry only; no runtime implementation is claimed in this update.
+
 ## Milestone — Module Enablement Admin UX (Complete)
 
 ### What changed

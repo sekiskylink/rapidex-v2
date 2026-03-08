@@ -544,4 +544,56 @@ Feature/module enablement changes must include tests for:
 Do not consider a flag complete without testing both sides of the toggle.
 
 
+---
+
+## 23) Server-Driven Bootstrap + Settings Security Contract
+
+This contract governs runtime bootstrap behavior and Settings authorization for the reusable skeleton.
+
+### 23.1 Server-driven bootstrap contract
+Agents must treat bootstrap runtime config as backend-served contract data.
+
+Rules:
+- define/update backend bootstrap contract first
+- keep payload typed, additive, and version-aware
+- keep desktop/web bootstrap consumption aligned to the same backend contract
+- avoid introducing a large dynamic configuration platform for this baseline
+
+### 23.2 Offline-aware bootstrap rule
+Bootstrap consumption must support offline-aware startup behavior.
+
+Rules:
+- attempt fresh bootstrap from backend first
+- when backend is unreachable, allow using last known valid cached bootstrap
+- surface stale/offline-aware runtime state clearly to users
+- do not fabricate new bootstrap values when neither backend nor cache is available
+
+### 23.3 Settings security contract
+Settings is a privileged administrative surface.
+
+Rules:
+- Settings route/page access intent in clients must require `admin` or `settings.write`
+- backend authorization for Settings APIs is mandatory and authoritative
+- UI checks are UX-only and must not be treated as security enforcement
+- unauthorized settings actions must return typed authorization errors
+- never log secret/sensitive settings values
+
+### 23.4 Bootstrap + registry discipline
+Bootstrap and registries must remain coherent.
+
+Rules:
+- registries remain canonical static definitions (modules/navigation/permissions/defaults)
+- bootstrap runtime payload must be derived from registry-aligned keys plus allowed overrides
+- avoid scattered hardcoded constants that diverge from registry/bootstrap contract
+- document temporary parity gaps in `docs/status.md` with follow-up scope
+
+### 23.5 Runtime config rule
+Agents must distinguish runtime bootstrap config from persisted/static config.
+
+Rules:
+- treat bootstrap cache as non-secret runtime state only
+- never cache tokens, passwords, or secret material in bootstrap cache
+- keep cache schema versioned and invalidate incompatible payload versions
+- runtime bootstrap state must not bypass backend authorization decisions
+
 ## END

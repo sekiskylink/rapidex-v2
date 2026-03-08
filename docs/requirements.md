@@ -885,4 +885,116 @@ Navigation hiding alone is insufficient.
   - web/frontend route/smoke tests passing
   - `docs/status.md` updated with parity notes and verification
 
+---
+
+## 17. Upcoming Milestone — Server-Driven Bootstrap Config + Settings Authorization Contract
+
+This milestone defines a small, typed runtime bootstrap contract served by backend and consumed by desktop/web.
+The goal is to provide consistent startup behavior and permission-safe Settings access without introducing a dynamic configuration platform.
+
+### 17.1 Purpose of Server-Driven Bootstrap Config
+- Provide a single backend endpoint that returns runtime UI/API context required at app startup.
+- Ensure desktop and web derive effective startup behavior from backend contract rather than ad-hoc client defaults.
+- Keep bootstrap contract additive, versioned, and typed so clients can safely evolve.
+
+### 17.2 Representative Bootstrap Payload Structure
+Bootstrap payload should remain compact and predictable. A representative shape:
+
+```json
+{
+  "version": "1",
+  "generatedAt": "2026-03-08T00:00:00Z",
+  "modules": {
+    "dashboard": { "enabled": true },
+    "administration": { "enabled": true },
+    "settings": { "enabled": true }
+  },
+  "navigation": {
+    "groups": [
+      { "key": "dashboard", "enabled": true },
+      { "key": "administration", "enabled": true },
+      { "key": "settings", "enabled": true }
+    ]
+  },
+  "authz": {
+    "settingsAccess": {
+      "allowed": true,
+      "requiresAny": ["admin", "settings.write"]
+    }
+  },
+  "ui": {
+    "theme": {
+      "defaultMode": "system",
+      "defaultPreset": "base"
+    }
+  }
+}
+```
+
+This example is representative only; implementation may add fields but must keep typed compatibility and backward-safe evolution.
+
+### 17.3 Relationship Between Registries and Bootstrap Runtime Config
+- Registries remain the canonical static definitions for modules, navigation, permissions, and defaults.
+- Bootstrap payload represents backend-resolved runtime state derived from registries plus runtime/config overrides.
+- Clients should use registries for local typing/fallback and bootstrap payload for effective runtime behavior.
+- Registry keys and bootstrap keys must stay aligned; avoid disconnected constants.
+
+### 17.4 Offline-Aware Bootstrap Caching Behavior
+- Desktop and web should cache the last valid bootstrap payload with timestamp metadata.
+- On startup:
+  - attempt fresh bootstrap fetch first
+  - if fetch fails due to network/unreachable backend, use cached bootstrap when available
+  - mark runtime state as degraded/offline-aware so UI can communicate stale config state
+- Cache usage must be deterministic and safe; do not silently fabricate new bootstrap values when both network and cache are unavailable.
+
+### 17.5 Bootstrap Cache Boundaries
+- Bootstrap cache must include only non-secret runtime configuration needed for startup gating/visibility.
+- Bootstrap cache must not include:
+  - passwords
+  - JWT access tokens
+  - refresh tokens
+  - API tokens
+  - sensitive secret material
+- Cache should be versioned and invalidated when payload schema version is incompatible.
+- Bootstrap cache is a startup/runtime aid and must not replace backend authorization.
+
+### 17.6 Settings Page Access Control
+- Settings route/page visibility in clients must require either:
+  - `admin` role
+  - or `settings.write` permission
+- Backend remains authoritative:
+  - all protected Settings APIs must enforce authorization server-side
+  - client-side checks are UX-level only and must not be treated as security controls
+- Unauthorized Settings API access must return typed authorization errors.
+
+### 17.7 Settings Scope and Security Expectations
+- Settings surface is an administrative capability and must be treated as privileged.
+- Separate read vs write behavior clearly:
+  - `settings.read` for viewing administrative settings where applicable
+  - `settings.write` for modifying settings
+- Security-sensitive values should be masked/redacted in logs and responses where needed.
+- Settings updates must be auditable with clear actor/action metadata.
+
+### 17.8 Desktop/Web Parity Expectations
+- Desktop and web must consume the same bootstrap API contract and apply equivalent Settings route protection logic.
+- Differences in rendering/responsiveness are allowed, but runtime decisions (module visibility, Settings access intent) must align.
+- Any temporary parity gap must be documented in `docs/status.md` with follow-up scope.
+
+### 17.9 Required Tests for Milestone Completion
+- Backend:
+  - bootstrap endpoint contract/shape tests
+  - bootstrap derivation tests from registry/default + override sources
+  - Settings API authorization tests (`admin` or `settings.write` rules)
+  - typed error tests for unauthorized access
+- Desktop and web:
+  - bootstrap fetch + startup consumption tests
+  - offline cache fallback tests (fresh vs cached behavior)
+  - Settings route-guard tests for authorized and unauthorized principals
+  - navigation visibility tests consistent with bootstrap effective state
+- Milestone completion still requires:
+  - backend tests passing (`go test ./...`)
+  - desktop/frontend route/smoke tests passing
+  - web/frontend route/smoke tests passing
+  - `docs/status.md` updated with verification and parity notes
+
 # END (Authoritative)
