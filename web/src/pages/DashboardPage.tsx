@@ -1,7 +1,7 @@
 import React from 'react'
 import { Button, Paper, Stack, Typography } from '@mui/material'
 import { useNavigate } from '@tanstack/react-router'
-import { hasPermission } from '../rbac/permissions'
+import { hasPermission, hasRole } from '../rbac/permissions'
 import { canAccessRoute } from '../navigation'
 
 export function DashboardPage() {
@@ -31,7 +31,7 @@ export function DashboardPage() {
     {
       label: 'Settings',
       path: '/settings',
-      enabled: (hasPermission('settings.read') || hasPermission('settings.write')) && canAccessRoute('/settings'),
+      enabled: (hasRole('admin') || hasPermission('settings.write')) && canAccessRoute('/settings'),
     },
   ].filter((action) => action.enabled)
 

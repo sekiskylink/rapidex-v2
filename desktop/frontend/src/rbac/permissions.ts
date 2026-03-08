@@ -4,6 +4,18 @@ function normalize(value: string) {
   return value.trim().toLowerCase()
 }
 
+export function hasRole(principal: SessionPrincipal | null | undefined, role: string) {
+  const target = normalize(role)
+  if (!target || !principal) {
+    return false
+  }
+  return principal.roles.some((candidate) => normalize(candidate) === target)
+}
+
+export function hasAdminRole(principal: SessionPrincipal | null | undefined) {
+  return hasRole(principal, 'admin')
+}
+
 export function hasPermission(principal: SessionPrincipal | null | undefined, permission: string) {
   const target = normalize(permission)
   if (!target || !principal) {

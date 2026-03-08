@@ -254,32 +254,21 @@ describe('app shell routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        if (url.includes('/api/v1/modules/effective')) {
+        if (url.includes('/api/v1/bootstrap')) {
           return new Response(
             JSON.stringify({
+              version: 1,
+              generatedAt: '2026-03-08T00:00:00Z',
+              app: { version: '1.0.0', commit: 'abc123', buildDate: '2026-03-08T00:00:00Z' },
+              branding: { applicationDisplayName: 'BasePro Desktop', loginImageUrl: null },
               modules: [
-                {
-                  moduleId: 'dashboard',
-                  flagKey: 'modules.dashboard.enabled',
-                  enabled: true,
-                  enabledByDefault: true,
-                  source: 'default',
-                },
-                {
-                  moduleId: 'administration',
-                  flagKey: 'modules.administration.enabled',
-                  enabled: false,
-                  enabledByDefault: true,
-                  source: 'config',
-                },
-                {
-                  moduleId: 'settings',
-                  flagKey: 'modules.settings.enabled',
-                  enabled: true,
-                  enabledByDefault: true,
-                  source: 'default',
-                },
+                { moduleId: 'dashboard', flagKey: 'modules.dashboard.enabled', enabled: true, enabledByDefault: true, source: 'default' },
+                { moduleId: 'administration', flagKey: 'modules.administration.enabled', enabled: false, enabledByDefault: true, source: 'config' },
+                { moduleId: 'settings', flagKey: 'modules.settings.enabled', enabled: true, enabledByDefault: true, source: 'default' },
               ],
+              capabilities: { canAccessSettings: true, settings: { canRead: true, canWrite: true } },
+              cache: { maxStaleSeconds: 300, schemaVersion: 1, cacheable: true, offlineSafePayload: true, containsSecrets: false },
+              principal: { type: 'user', userId: 5, username: 'alice', roles: ['Admin'], permissions: ['users.read', 'users.write', 'audit.read', 'settings.read'] },
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -294,6 +283,45 @@ describe('app shell routes', () => {
     expect(screen.getByText('Administration is unavailable')).toBeInTheDocument()
     expect(screen.queryByText('Administration')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
+  })
+
+  it('denies /settings for non-admin users without settings.write', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 9,
+              username: 'viewer',
+              roles: ['Viewer'],
+              permissions: ['settings.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings', store)
+
+    expect(await screen.findByRole('heading', { name: '403', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Forbidden')).toBeInTheDocument()
   })
 
   it('renders users list metadata columns and values', async () => {

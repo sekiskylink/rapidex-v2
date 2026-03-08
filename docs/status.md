@@ -1,5 +1,63 @@
 # Status
 
+## Milestone — Desktop/Web Bootstrap Consumption + Settings Access Guard (Complete)
+
+### What changed
+- Added typed client bootstrap runtime containers in both clients:
+  - desktop: `desktop/frontend/src/bootstrap/state.ts`
+  - web: `web/src/bootstrap/state.ts`
+- Added authenticated bootstrap consumption from backend `GET /api/v1/bootstrap`:
+  - desktop authenticated gate now:
+    - hydrates cached bootstrap first (if available)
+    - refreshes live bootstrap when reachable
+    - applies effective module state from bootstrap payload
+    - uses bootstrap principal when available, with `/auth/me` fallback
+  - web auth provider now:
+    - fetches bootstrap after login and refresh
+    - applies effective module state from bootstrap payload
+    - uses bootstrap principal when available, with `/auth/me` fallback
+- Added offline-aware bootstrap cache behavior in both clients:
+  - persist last successful bootstrap payload in local storage
+  - hydrate cached payload on startup/refresh attempt before network refresh
+  - continue app startup/auth flow when bootstrap refresh fails (fallback to cached/default + existing auth/me flow)
+- Added bootstrap-driven UI shaping in both clients:
+  - app shell branding display name now reads from bootstrap branding payload with existing static fallback
+  - effective module visibility remains driven by backend payload, now consumed via bootstrap for parity
+- Tightened Settings access policy in both clients to match contract intent:
+  - Settings navigation visibility and direct route access now require:
+    - `admin` role OR
+    - `settings.write` permission
+  - users with only `settings.read` are denied Settings route access (forbidden/not-authorized fallback per client pattern)
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-08-client-bootstrap-consumption-settings-guard.md` (gitignored; not for commit)
+
+### Added/updated targeted tests
+- Desktop:
+  - `desktop/frontend/src/bootstrap/state.test.ts` (live cache write, cache hydrate/stale, clear/reset behavior)
+  - `desktop/frontend/src/registry/registry.test.ts` (Settings nav access now admin-or-settings.write)
+  - `desktop/frontend/src/routes.test.tsx`:
+    - module-disable flow switched to bootstrap payload source
+    - added Settings denial test for non-admin user without `settings.write`
+- Web:
+  - `web/src/bootstrap/state.test.ts` (live cache write, cache hydrate/stale, clear/reset behavior)
+  - `web/src/registry/registry.test.ts` (Settings nav access now admin-or-settings.write)
+  - `web/src/routes.test.tsx`:
+    - adjusted staff Settings access fixture to `settings.write`
+    - added Settings denial test for non-admin user without `settings.write`
+
+### Tests and verification
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+- Web frontend:
+  - `cd web && npm test -- --run` -> PASS
+- Web production build:
+  - `cd web && npm run build` -> PASS
+
+### Remaining follow-ups
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in frontend test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web build output.
+- Bootstrap cache freshness is tracked (`stale` state) internally; optional future UX could surface explicit stale/offline status indicators in shell/header.
+
 ## Milestone — Server-Driven Bootstrap Config + Settings Authorization Contract (Complete)
 
 ### What changed

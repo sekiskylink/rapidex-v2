@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
+import { useBootstrapSnapshot } from '../bootstrap/state'
 import { appName } from '../lib/env'
 import { buildNavigation, canAccessRoute } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
@@ -49,6 +50,7 @@ const miniDrawerWidth = 80
 export function AppShell() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
+  const bootstrap = useBootstrapSnapshot()
   const { prefs, setCollapseNavByDefault } = useUiPreferences()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const [collapsed, setCollapsed] = React.useState(prefs.collapseNavByDefault)
@@ -94,6 +96,7 @@ export function AppShell() {
 
   const navigation = buildNavigation(user)
   const canAccessSettings = canAccessRoute('/settings', user)
+  const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || appName
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
@@ -134,7 +137,7 @@ export function AppShell() {
       <Toolbar sx={{ justifyContent: collapsed ? 'center' : 'space-between', px: 1.5 }}>
         {!collapsed ? (
           <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>
-            {appName}
+            {displayName}
           </Typography>
         ) : null}
         {!isMobile ? (
@@ -448,7 +451,7 @@ export function AppShell() {
               }}
             >
               <Typography variant="body2" color="text.secondary">
-                {appName} v0.1.0
+                {displayName} v0.1.0
               </Typography>
             </Box>
           ) : null}

@@ -35,6 +35,7 @@ import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
+import { useBootstrapSnapshot } from '../bootstrap/state'
 import { buildNavigation, canAccessRoute } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import { clearSession } from '../auth/session'
@@ -57,6 +58,7 @@ export function AppShell() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const { prefs, setNavCollapsed } = useThemePreferences()
   const principal = useSessionPrincipal()
+  const bootstrap = useBootstrapSnapshot()
 
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
@@ -73,6 +75,7 @@ export function AppShell() {
 
   const navigation = buildNavigation(principal)
   const canAccessSettings = canAccessRoute(principal, '/settings')
+  const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || 'BasePro'
 
   React.useEffect(() => {
     if (
@@ -133,7 +136,7 @@ export function AppShell() {
       >
         {!navCollapsed ? (
           <Typography variant="h6" noWrap>
-            BasePro
+            {displayName}
           </Typography>
         ) : null}
         {!isMobile ? (
@@ -252,7 +255,7 @@ export function AppShell() {
         >
           {!navCollapsed ? (
             <Typography variant="caption" fontWeight={700}>
-              BasePro Shell
+              {displayName} Shell
             </Typography>
           ) : (
             <Typography variant="caption" fontWeight={700}>
@@ -386,7 +389,7 @@ export function AppShell() {
           }}
         >
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 1280, mx: 'auto' }}>
-            BasePro Desktop v0.1.0
+            {displayName} Desktop v0.1.0
           </Typography>
         </Box>
       </Box>

@@ -351,7 +351,7 @@ describe('web RBAC navigation', () => {
         id: 2,
         username: 'staff-user',
         roles: ['Staff'],
-        permissions: ['settings.read'],
+        permissions: ['settings.write'],
       },
     })
 
@@ -362,6 +362,25 @@ describe('web RBAC navigation', () => {
     expect(screen.queryByText('Users')).not.toBeInTheDocument()
     expect(screen.queryByText('Roles')).not.toBeInTheDocument()
     expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
+  })
+
+  it('denies /settings for non-admin users without settings.write', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 22,
+        username: 'read-only-staff',
+        roles: ['Staff'],
+        permissions: ['settings.read'],
+      },
+    })
+
+    renderWithRouter('/settings')
+
+    expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('You do not have permission to access this page.')).toBeInTheDocument()
   })
 
   it('unauthorized route navigation shows Not Authorized page', async () => {

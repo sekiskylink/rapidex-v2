@@ -7,6 +7,7 @@ import {
   setSession,
 } from '../auth/session'
 import type { LoginRequest, LoginResponse, MeResponse, RefreshRequest, RefreshResponse } from '../auth/types'
+import type { BootstrapPayload } from '../bootstrap/state'
 import type { ModuleEnablementApiResponse } from '../registry/moduleEnablement'
 import type { AppSettings } from '../settings/types'
 
@@ -313,6 +314,12 @@ export function createApiClient(deps: ApiClientDeps) {
       }
 
       return (await response.json()) as ModuleEnablementApiResponse
+    },
+
+    async getBootstrap() {
+      return authorizedRequest<BootstrapPayload>('/api/v1/bootstrap', {
+        method: 'GET',
+      })
     },
 
     async getPublicLoginBranding() {

@@ -1,5 +1,5 @@
 import type { AuthUser } from '../auth/state'
-import { hasAnyPermissionForUser } from '../rbac/permissions'
+import { hasAdminRoleForUser, hasAnyPermissionForUser, hasPermissionForUser } from '../rbac/permissions'
 import { isNavigationItemEnabled, isPathModuleEnabled } from './moduleEnablement'
 import type { PermissionKey } from './permissions'
 
@@ -75,7 +75,7 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
     icon: 'settings',
     path: '/settings',
     group: 'settings',
-    requiredPermissions: ['settings.read', 'settings.write'],
+    visibleWhen: ({ user }) => hasAdminRoleForUser(user) || hasPermissionForUser(user, 'settings.write'),
   },
 ]
 

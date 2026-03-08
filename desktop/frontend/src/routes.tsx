@@ -27,7 +27,8 @@ import { SetupPage } from './pages/SetupPage'
 import { UsersPage } from './pages/UsersPage'
 import { settingsStore } from './settings/store'
 import type { SettingsStore } from './settings/types'
-import { applyEffectiveModuleEnablement, getModuleLabelForPath } from './registry/moduleEnablement'
+import { getModuleLabelForPath } from './registry/moduleEnablement'
+import { applyBootstrap, hydrateBootstrapFromCache } from './bootstrap/state'
 import { getRouteAccessState } from './registry/navigation'
 
 interface RouterContext {
@@ -207,6 +208,26 @@ function AuthenticatedGatePage() {
         return
       }
 
+      hydrateBootstrapFromCache()
+
+      try {
+        const bootstrap = await apiClient.getBootstrap()
+        if (!active) {
+          return
+        }
+        applyBootstrap(bootstrap, 'live')
+        if (bootstrap.principal?.type === 'user' && bootstrap.principal.userId && bootstrap.principal.username) {
+          setSessionPrincipal({
+            id: bootstrap.principal.userId,
+            username: bootstrap.principal.username,
+            roles: bootstrap.principal.roles ?? [],
+            permissions: bootstrap.principal.permissions ?? [],
+          })
+        }
+      } catch {
+        // Keep cached bootstrap/default module state when refresh fails.
+      }
+
       if (!getSessionPrincipal()) {
         try {
           const me = await apiClient.me()
@@ -226,16 +247,6 @@ function AuthenticatedGatePage() {
           void navigate({ to: '/login', replace: true })
           return
         }
-      }
-
-      try {
-        const effectiveModules = await apiClient.getEffectiveModuleEnablement()
-        if (!active) {
-          return
-        }
-        applyEffectiveModuleEnablement(effectiveModules)
-      } catch {
-        // Keep static defaults when effective config cannot be loaded.
       }
 
       setReady(true)

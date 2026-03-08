@@ -5,11 +5,11 @@ import { canAccessNavigationPath, authenticatedNavigationRegistry } from './navi
 import { moduleRegistry } from './modules'
 import { permissionRegistry } from './permissions'
 
-function principalWith(permissions: string[]): SessionPrincipal {
+function principalWith(permissions: string[], roles: string[] = ['Admin']): SessionPrincipal {
   return {
     id: 1,
     username: 'tester',
-    roles: ['Admin'],
+    roles,
     permissions,
   }
 }
@@ -45,8 +45,10 @@ describe('desktop registries', () => {
   })
 
   it('enforces navigation access from required permissions', () => {
-    const settingsOnly = principalWith(['settings.read'])
-    expect(canAccessNavigationPath(settingsOnly, '/settings')).toBe(true)
+    const settingsOnly = principalWith(['settings.read'], ['Staff'])
+    expect(canAccessNavigationPath(settingsOnly, '/settings')).toBe(false)
+    const settingsWriter = principalWith(['settings.write'], ['Staff'])
+    expect(canAccessNavigationPath(settingsWriter, '/settings')).toBe(true)
     expect(canAccessNavigationPath(settingsOnly, '/users')).toBe(false)
 
     const usersReader = principalWith(['users.read'])

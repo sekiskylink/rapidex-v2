@@ -5,17 +5,24 @@ function normalize(value: string) {
 }
 
 export function hasRole(role: string) {
+  return hasRoleForUser(getAuthSnapshot().user, role)
+}
+
+export function hasRoleForUser(user: AuthUser | null | undefined, role: string) {
   const target = normalize(role)
   if (!target) {
     return false
   }
 
-  const user = getAuthSnapshot().user
   if (!user) {
     return false
   }
 
   return user.roles.some((candidate) => normalize(candidate) === target)
+}
+
+export function hasAdminRoleForUser(user: AuthUser | null | undefined) {
+  return hasRoleForUser(user, 'admin')
 }
 
 export function hasPermission(permission: string) {

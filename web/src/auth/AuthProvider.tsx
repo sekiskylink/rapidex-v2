@@ -2,7 +2,7 @@ import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { apiRequest, configureApiClient, type ApiError } from '../lib/api'
 import { useAppNotify } from '../notifications/facade'
-import { applyEffectiveModuleEnablement, resetEffectiveModuleEnablement, type ModuleEnablementApiResponse } from '../registry/moduleEnablement'
+import { applyBootstrap, clearBootstrap, hydrateBootstrapFromCache, type BootstrapPayload } from '../bootstrap/state'
 import { rememberIntendedDestination } from './sessionExpiry'
 import {
   clearAuthSnapshot,
@@ -47,12 +47,15 @@ function toAuthUser(payload: MeResponse): AuthUser {
   }
 }
 
-async function fetchEffectiveModuleEnablement() {
-  try {
-    const response = await apiRequest<ModuleEnablementApiResponse>('/modules/effective', { method: 'GET' })
-    applyEffectiveModuleEnablement(response)
-  } catch {
-    resetEffectiveModuleEnablement()
+function toAuthUserFromBootstrap(payload: BootstrapPayload | null | undefined): AuthUser | null {
+  if (!payload?.principal || payload.principal.type !== 'user' || !payload.principal.userId || !payload.principal.username) {
+    return null
+  }
+  return {
+    id: payload.principal.userId,
+    username: payload.principal.username,
+    roles: payload.principal.roles ?? [],
+    permissions: payload.principal.permissions ?? [],
   }
 }
 
@@ -80,7 +83,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
 
   const clearSession = React.useCallback(() => {
     clearAuthSnapshot()
-    resetEffectiveModuleEnablement()
+    clearBootstrap()
   }, [])
 
   const refresh = React.useCallback(async (): Promise<boolean> => {
@@ -105,9 +108,20 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
           { withAuth: false, retryOnUnauthorized: false },
         )
 
-        const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' }, { retryOnUnauthorized: false })
-        await fetchEffectiveModuleEnablement()
-        applySession(tokens, toAuthUser(me))
+        applySession(tokens, getAuthSnapshot().user)
+        let user: AuthUser | null = null
+        const bootstrap = await apiRequest<BootstrapPayload>('/bootstrap', { method: 'GET' }, { retryOnUnauthorized: false }).catch(() => null)
+        if (bootstrap) {
+          applyBootstrap(bootstrap, 'live')
+          user = toAuthUserFromBootstrap(bootstrap)
+        } else {
+          hydrateBootstrapFromCache()
+        }
+        if (!user) {
+          const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' }, { retryOnUnauthorized: false })
+          user = toAuthUser(me)
+        }
+        applySession(tokens, user)
         return true
       } catch {
         clearSession()
@@ -158,11 +172,19 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
       applySession(tokens, null)
 
       try {
-        const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' })
-        await fetchEffectiveModuleEnablement()
+        let user: AuthUser | null = null
+        const bootstrap = await apiRequest<BootstrapPayload>('/bootstrap', { method: 'GET' }, { retryOnUnauthorized: false }).catch(() => null)
+        if (bootstrap) {
+          applyBootstrap(bootstrap, 'live')
+          user = toAuthUserFromBootstrap(bootstrap)
+        }
+        if (!user) {
+          const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' })
+          user = toAuthUser(me)
+        }
         setAuthSnapshot({
           ...getAuthSnapshot(),
-          user: toAuthUser(me),
+          user,
           isAuthenticated: true,
         })
       } catch (error) {
@@ -203,6 +225,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
       return
     }
 
+    hydrateBootstrapFromCache()
     void refresh()
   }, [refresh, snapshot.isAuthenticated])
 

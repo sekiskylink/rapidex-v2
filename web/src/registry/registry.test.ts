@@ -5,11 +5,11 @@ import { canAccessNavigationPath, authenticatedNavigationRegistry } from './navi
 import { moduleRegistry } from './modules'
 import { permissionRegistry } from './permissions'
 
-function userWith(permissions: string[]): AuthUser {
+function userWith(permissions: string[], roles: string[] = ['Admin']): AuthUser {
   return {
     id: 1,
     username: 'tester',
-    roles: ['Admin'],
+    roles,
     permissions,
   }
 }
@@ -45,8 +45,10 @@ describe('web registries', () => {
   })
 
   it('enforces navigation access from required permissions', () => {
-    const settingsOnly = userWith(['settings.read'])
-    expect(canAccessNavigationPath('/settings', settingsOnly)).toBe(true)
+    const settingsOnly = userWith(['settings.read'], ['Staff'])
+    expect(canAccessNavigationPath('/settings', settingsOnly)).toBe(false)
+    const settingsWriter = userWith(['settings.write'], ['Staff'])
+    expect(canAccessNavigationPath('/settings', settingsWriter)).toBe(true)
     expect(canAccessNavigationPath('/users', settingsOnly)).toBe(false)
 
     const usersReader = userWith(['users.read'])
