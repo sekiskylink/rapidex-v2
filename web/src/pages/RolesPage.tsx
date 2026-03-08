@@ -319,6 +319,8 @@ export function RolesPage() {
         sx={{ maxWidth: 360 }}
       />
 
+      <Alert severity="info">Permission assignment options exclude permissions from disabled modules.</Alert>
+
       <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid
           columns={columns}

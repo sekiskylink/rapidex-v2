@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
@@ -291,6 +292,8 @@ export function RolesPage() {
         onChange={(event) => setSearchInput(event.target.value)}
         sx={{ maxWidth: 360 }}
       />
+
+      <Alert severity="info">Permission assignment options exclude permissions from disabled modules.</Alert>
 
       <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid

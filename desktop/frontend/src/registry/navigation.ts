@@ -133,3 +133,12 @@ export function canAccessNavigationPath(principal: SessionPrincipal | null | und
   }
   return true
 }
+
+export type RouteAccessState = 'allowed' | 'forbidden' | 'module-disabled'
+
+export function getRouteAccessState(principal: SessionPrincipal | null | undefined, pathname: string): RouteAccessState {
+  if (!isPathModuleEnabled(pathname)) {
+    return 'module-disabled'
+  }
+  return canAccessNavigationPath(principal, pathname) ? 'allowed' : 'forbidden'
+}

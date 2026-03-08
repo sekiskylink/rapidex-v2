@@ -116,3 +116,14 @@ func BaseModuleRegistry() []ModuleDefinition {
 		},
 	}
 }
+
+func ModuleIDForPermission(permission string) (string, bool) {
+	switch permission {
+	case PermissionUsersRead, PermissionUsersWrite, PermissionAuditRead, PermissionAPITokensRead, PermissionAPITokensWrite:
+		return "administration", true
+	case PermissionSettingsRead, PermissionSettingsWrite:
+		return "settings", true
+	default:
+		return "", false
+	}
+}

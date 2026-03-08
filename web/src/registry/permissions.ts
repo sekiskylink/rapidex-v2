@@ -1,9 +1,12 @@
+import { isModuleEnabled, type ModuleId } from './moduleEnablement'
+
 export interface PermissionDefinition {
   key: string
   label: string
   description: string
   module: string
   category?: string
+  moduleEnablementId?: ModuleId
 }
 
 export const permissionRegistry: readonly PermissionDefinition[] = [
@@ -13,6 +16,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'View users and administration listings that depend on user read access.',
     module: 'users',
     category: 'Administration',
+    moduleEnablementId: 'administration',
   },
   {
     key: 'users.write',
@@ -20,6 +24,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'Create and update users, roles, and role-permission mappings.',
     module: 'users',
     category: 'Administration',
+    moduleEnablementId: 'administration',
   },
   {
     key: 'audit.read',
@@ -27,6 +32,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'View audit log entries and related metadata.',
     module: 'audit',
     category: 'Administration',
+    moduleEnablementId: 'administration',
   },
   {
     key: 'settings.read',
@@ -34,6 +40,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'View platform settings such as login branding and configuration.',
     module: 'settings',
     category: 'Settings',
+    moduleEnablementId: 'settings',
   },
   {
     key: 'settings.write',
@@ -41,6 +48,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'Update platform settings such as login branding and configuration.',
     module: 'settings',
     category: 'Settings',
+    moduleEnablementId: 'settings',
   },
   {
     key: 'api_tokens.read',
@@ -48,6 +56,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'View API token records.',
     module: 'api_tokens',
     category: 'Administration',
+    moduleEnablementId: 'administration',
   },
   {
     key: 'api_tokens.write',
@@ -55,6 +64,7 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     description: 'Create and revoke API tokens.',
     module: 'api_tokens',
     category: 'Administration',
+    moduleEnablementId: 'administration',
   },
 ]
 
@@ -64,4 +74,12 @@ const permissionMap = new Map<string, PermissionDefinition>(permissionRegistry.m
 
 export function getPermissionDefinition(key: string) {
   return permissionMap.get(key)
+}
+
+export function isPermissionDefinitionEnabled(key: string) {
+  const definition = getPermissionDefinition(key)
+  if (!definition?.moduleEnablementId) {
+    return true
+  }
+  return isModuleEnabled(definition.moduleEnablementId)
 }

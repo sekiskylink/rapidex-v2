@@ -11,11 +11,11 @@ import {
 import App from './App'
 import { getAuthSnapshot } from './auth/state'
 import { AppShell } from './components/AppShell'
-import { canAccessRoute } from './navigation'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
+import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
 import { NotAuthorizedPage } from './pages/NotAuthorizedPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PermissionsPage } from './pages/PermissionsPage'
@@ -24,6 +24,8 @@ import { RolesPage } from './pages/RolesPage'
 import { RouteErrorPage } from './pages/RouteErrorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
+import { getModuleLabelForPath } from './registry/moduleEnablement'
+import { getRouteAccessState } from './registry/navigation'
 
 const rootRoute = createRootRoute({
   component: App,
@@ -90,37 +92,91 @@ const authenticatedRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/dashboard',
-  component: () => (canAccessRoute('/dashboard') ? <DashboardPage /> : <NotAuthorizedPage />),
+  component: () => {
+    const state = getRouteAccessState('/dashboard', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <DashboardPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/dashboard') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
 })
 
 const usersRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/users',
-  component: () => (canAccessRoute('/users') ? <UsersPage /> : <NotAuthorizedPage />),
+  component: () => {
+    const state = getRouteAccessState('/users', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <UsersPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/users') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
 })
 
 const rolesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/roles',
-  component: () => (canAccessRoute('/roles') ? <RolesPage /> : <NotAuthorizedPage />),
+  component: () => {
+    const state = getRouteAccessState('/roles', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <RolesPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/roles') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
 })
 
 const permissionsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/permissions',
-  component: () => (canAccessRoute('/permissions') ? <PermissionsPage /> : <NotAuthorizedPage />),
+  component: () => {
+    const state = getRouteAccessState('/permissions', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <PermissionsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/permissions') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
 })
 
 const auditRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/audit',
-  component: () => (canAccessRoute('/audit') ? <AuditPage /> : <NotAuthorizedPage />),
+  component: () => {
+    const state = getRouteAccessState('/audit', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <AuditPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/audit') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
 })
 
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/settings',
-  component: () => (canAccessRoute('/settings') ? <SettingsPage /> : <NotAuthorizedPage />),
+  component: () => {
+    const state = getRouteAccessState('/settings', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SettingsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
 })
 
 const routeTree = rootRoute.addChildren([

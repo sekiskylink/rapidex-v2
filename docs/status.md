@@ -1,5 +1,58 @@
 # Status
 
+## Milestone — Module Enablement Enforcement Hardening (Complete)
+
+### What changed
+- Strengthened module-disabled route/page behavior in both clients:
+  - desktop and web now render an explicit `Module Disabled` fallback page for disabled-module direct route access.
+  - preserved permission-based unauthorized handling separately for enabled modules.
+- Tightened discovery-surface behavior:
+  - side navigation remains module-aware (existing).
+  - user-menu `Settings` entry now hides when the settings module is disabled (desktop + web).
+  - web dashboard shortcut cards now only include currently enabled and routable platform modules.
+- Hardened backend module-disabled API behavior:
+  - module guard middleware now emits standardized typed app errors via shared error writer (`MODULE_DISABLED`) instead of ad-hoc JSON.
+  - guarded API groups remain unchanged in scope (`users`, `audit`, `admin/roles`, `admin/permissions`, `settings`, and public login-branding settings endpoint).
+- Implemented deliberate permission-exposure behavior for disabled modules:
+  - chosen behavior: **hide disabled-module permissions from default admin listing and assignment flows**.
+  - backend RBAC admin service now filters permission list responses based on effective module enablement.
+  - backend role create/update now rejects disabled-module permission assignment with typed validation.
+  - role detail responses filter disabled-module permissions.
+  - desktop/web roles + permissions pages now show explicit info messages clarifying hidden disabled-module permissions.
+- Added prompt traceability copy:
+  - `docs/prompts/2026-03-08-module-enablement-enforcement.md` (gitignored; not for commit).
+
+### Behavior decisions
+- Disabled route handling (desktop + web):
+  - direct navigation to a disabled module route renders `Module Disabled` fallback (no broken rendering).
+  - enabled route without required permission still renders `Forbidden` / `Not Authorized` as before.
+- Disabled permission behavior:
+  - disabled-module permissions are hidden from normal admin permission listing and role assignment options.
+  - direct attempts to assign disabled permissions are rejected server-side with validation error.
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+- Web frontend:
+  - `cd web && npm test -- --run` -> PASS
+- Web build:
+  - `cd web && npm run build` -> PASS
+
+### Added/updated targeted tests
+- Backend:
+  - `backend/internal/middleware/module_enablement_test.go` (typed module-disabled middleware behavior)
+  - `backend/internal/rbac/admin_test.go` (permission exposure filtering + disabled-permission assignment rejection)
+- Desktop:
+  - updated `desktop/frontend/src/routes.test.tsx` disabled-module route assertions for `Module Disabled` fallback behavior
+- Web:
+  - updated `web/src/routes.test.tsx` disabled-module route assertions for `Module Disabled` fallback behavior
+
+### Remaining follow-ups
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in desktop/web frontend test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web build output.
+
 ## Milestone — Feature Flags / Module Enablement Registry (Implementation) (Complete)
 
 ### What changed

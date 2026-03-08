@@ -1,8 +1,7 @@
 package middleware
 
 import (
-	"net/http"
-
+	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/moduleenablement"
 	"github.com/gin-gonic/gin"
 )
@@ -18,12 +17,7 @@ func RequireModuleEnabled(getOverrides func() map[string]bool, moduleID string) 
 			return
 		}
 
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": gin.H{
-				"code":    "MODULE_DISABLED",
-				"message": "Module is disabled",
-				"details": gin.H{"moduleId": moduleID},
-			},
-		})
+		apperror.Write(c, apperror.ModuleDisabled(moduleID))
+		c.Abort()
 	}
 }

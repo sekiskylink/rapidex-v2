@@ -18,6 +18,7 @@ const (
 	CodeAuthRefreshBad   = "AUTH_REFRESH_INVALID"
 	CodeValidationFailed = "VALIDATION_ERROR"
 	CodeRateLimited      = "RATE_LIMITED"
+	CodeModuleDisabled   = "MODULE_DISABLED"
 )
 
 type AppError struct {
@@ -101,6 +102,17 @@ func ValidationWithDetails(message string, details map[string]any) *AppError {
 
 func RateLimited(message string) *AppError {
 	return &AppError{HTTPStatus: http.StatusTooManyRequests, Code: CodeRateLimited, Message: message, Details: map[string]any{}}
+}
+
+func ModuleDisabled(moduleID string) *AppError {
+	return &AppError{
+		HTTPStatus: http.StatusNotFound,
+		Code:       CodeModuleDisabled,
+		Message:    "Module is disabled",
+		Details: map[string]any{
+			"moduleId": moduleID,
+		},
+	}
 }
 
 func requestIDFromContext(c *gin.Context) string {

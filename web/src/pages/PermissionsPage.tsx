@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import { getAuthSnapshot } from '../auth/state'
 import { hasAnyPermissionForUser } from '../rbac/permissions'
@@ -146,6 +146,8 @@ export function PermissionsPage() {
           sx={{ minWidth: 220 }}
         />
       </Stack>
+
+      <Alert severity="info">Permissions for disabled modules are hidden from default administration listings.</Alert>
 
       <Box sx={{ height: 620, width: '100%', minWidth: 0, overflow: 'hidden' }}>
         <AppDataGrid

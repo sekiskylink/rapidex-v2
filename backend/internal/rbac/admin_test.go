@@ -104,7 +104,18 @@ func (f *fakeAdminRepo) ListRoleUsers(_ context.Context, roleID int64) ([]RoleUs
 
 func (f *fakeAdminRepo) ListPermissions(_ context.Context, query PermissionListQuery) (PermissionListResult, error) {
 	items := []PermissionRecord{}
+	allowed := map[string]struct{}{}
+	if query.FilterToAllowed {
+		for _, name := range query.AllowedNames {
+			allowed[name] = struct{}{}
+		}
+	}
 	for _, permission := range f.permissionsByName {
+		if query.FilterToAllowed {
+			if _, ok := allowed[permission.Name]; !ok {
+				continue
+			}
+		}
 		if query.Query != "" && !strings.Contains(strings.ToLower(permission.Name), strings.ToLower(query.Query)) {
 			continue
 		}
@@ -231,6 +242,70 @@ func TestAdminHandlerListPermissions(t *testing.T) {
 	items, ok := body["items"].([]any)
 	if !ok || len(items) == 0 {
 		t.Fatalf("expected list items in response")
+	}
+}
+
+func TestAdminServiceListPermissionsFiltersDisabledModulePermissions(t *testing.T) {
+	repo := newFakeAdminRepo()
+	repo.permissionsByName["settings.read"] = PermissionRecord{ID: 12, Name: "settings.read", CreatedAt: time.Now().UTC()}
+	service := NewAdminService(
+		repo,
+		audit.NewService(&fakeAuditRepo{}),
+		WithPermissionEnablementFilter(func(permissionName string) bool {
+			moduleID, ok := ModuleIDForPermission(permissionName)
+			if !ok {
+				return true
+			}
+			return moduleID != "administration"
+		}),
+	)
+
+	result, err := service.ListPermissions(context.Background(), PermissionListQuery{
+		Page:     1,
+		PageSize: 25,
+	})
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+
+	for _, item := range result.Items {
+		if item.Name == "users.read" || item.Name == "users.write" {
+			t.Fatalf("expected administration permissions filtered out, got %s", item.Name)
+		}
+	}
+	if len(result.Items) != 1 || result.Items[0].Name != "settings.read" {
+		t.Fatalf("expected only settings.read visible, got %+v", result.Items)
+	}
+}
+
+func TestAdminServiceRejectsDisabledModulePermissionsOnUpdate(t *testing.T) {
+	repo := newFakeAdminRepo()
+	service := NewAdminService(
+		repo,
+		audit.NewService(&fakeAuditRepo{}),
+		WithPermissionEnablementFilter(func(permissionName string) bool {
+			moduleID, ok := ModuleIDForPermission(permissionName)
+			if !ok {
+				return true
+			}
+			return moduleID != "administration"
+		}),
+	)
+
+	_, err := service.UpdateRole(context.Background(), RoleUpdateInput{
+		RoleID:      1,
+		Permissions: &[]string{"users.read"},
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	var appErr *apperror.AppError
+	if !errorsAs(err, &appErr) {
+		t.Fatalf("expected AppError, got %T", err)
+	}
+	if appErr.Code != apperror.CodeValidationFailed {
+		t.Fatalf("expected validation code, got %s", appErr.Code)
 	}
 }
 

@@ -101,7 +101,17 @@ func run() error {
 		cfg.Auth.PasswordHashCost,
 	)
 	usersService := users.NewService(users.NewSQLRepository(database), rbacService, auditService, cfg.Auth.PasswordHashCost)
-	rbacAdminService := rbac.NewAdminService(rbac.NewSQLRepository(database), auditService)
+	rbacAdminService := rbac.NewAdminService(
+		rbac.NewSQLRepository(database),
+		auditService,
+		rbac.WithPermissionEnablementFilter(func(permissionName string) bool {
+			moduleID, hasModule := rbac.ModuleIDForPermission(permissionName)
+			if !hasModule {
+				return true
+			}
+			return moduleenablement.IsModuleEnabled(moduleID, config.Get().Modules.Flags)
+		}),
+	)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
 
 	seedRBAC := cfg.Seed.EnableDevBootstrap || flags.seedDevAdmin

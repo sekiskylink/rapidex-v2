@@ -12,12 +12,12 @@ import { createApiClient } from './api/client'
 import { useSessionPrincipal } from './auth/hooks'
 import { configureSessionStorage, getSessionPrincipal, isAuthenticated, setSessionPrincipal } from './auth/session'
 import { AppShell } from './components/AppShell'
-import { canAccessRoute } from './navigation'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ForbiddenPage } from './pages/ForbiddenPage'
 import { LoginPage } from './pages/LoginPage'
+import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PermissionsPage } from './pages/PermissionsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -27,7 +27,8 @@ import { SetupPage } from './pages/SetupPage'
 import { UsersPage } from './pages/UsersPage'
 import { settingsStore } from './settings/store'
 import type { SettingsStore } from './settings/types'
-import { applyEffectiveModuleEnablement } from './registry/moduleEnablement'
+import { applyEffectiveModuleEnablement, getModuleLabelForPath } from './registry/moduleEnablement'
+import { getRouteAccessState } from './registry/navigation'
 
 interface RouterContext {
   settingsStore: SettingsStore
@@ -254,48 +255,72 @@ function AuthenticatedGatePage() {
 
 function UsersRoutePage() {
   const principal = useSessionPrincipal()
-  if (canAccessRoute(principal, '/users')) {
+  const accessState = getRouteAccessState(principal, '/users')
+  if (accessState === 'allowed') {
     return <UsersPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/users') ?? undefined} />
   }
   return <ForbiddenPage />
 }
 
 function DashboardRoutePage() {
   const principal = useSessionPrincipal()
-  if (canAccessRoute(principal, '/dashboard')) {
+  const accessState = getRouteAccessState(principal, '/dashboard')
+  if (accessState === 'allowed') {
     return <DashboardPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/dashboard') ?? undefined} />
   }
   return <ForbiddenPage />
 }
 
 function RolesRoutePage() {
   const principal = useSessionPrincipal()
-  if (canAccessRoute(principal, '/roles')) {
+  const accessState = getRouteAccessState(principal, '/roles')
+  if (accessState === 'allowed') {
     return <RolesPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/roles') ?? undefined} />
   }
   return <ForbiddenPage />
 }
 
 function PermissionsRoutePage() {
   const principal = useSessionPrincipal()
-  if (canAccessRoute(principal, '/permissions')) {
+  const accessState = getRouteAccessState(principal, '/permissions')
+  if (accessState === 'allowed') {
     return <PermissionsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/permissions') ?? undefined} />
   }
   return <ForbiddenPage />
 }
 
 function AuditRoutePage() {
   const principal = useSessionPrincipal()
-  if (canAccessRoute(principal, '/audit')) {
+  const accessState = getRouteAccessState(principal, '/audit')
+  if (accessState === 'allowed') {
     return <AuditPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/audit') ?? undefined} />
   }
   return <ForbiddenPage />
 }
 
 function SettingsRoutePage() {
   const principal = useSessionPrincipal()
-  if (canAccessRoute(principal, '/settings')) {
+  const accessState = getRouteAccessState(principal, '/settings')
+  if (accessState === 'allowed') {
     return <SettingsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings') ?? undefined} />
   }
   return <ForbiddenPage />
 }

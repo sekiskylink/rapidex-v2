@@ -225,7 +225,7 @@ describe('app shell routes', () => {
     expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
   })
 
-  it('hides administration navigation and blocks /users when administration module is disabled', async () => {
+  it('hides administration navigation and shows module-disabled state when administration module is disabled', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -290,7 +290,8 @@ describe('app shell routes', () => {
 
     renderWithRouter('/users', store)
 
-    expect(await screen.findByRole('heading', { name: '403', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Module Disabled', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Administration is unavailable')).toBeInTheDocument()
     expect(screen.queryByText('Administration')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
   })

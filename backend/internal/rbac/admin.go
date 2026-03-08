@@ -56,12 +56,14 @@ type RoleListQuery struct {
 }
 
 type PermissionListQuery struct {
-	Page        int
-	PageSize    int
-	SortField   string
-	SortOrder   string
-	Query       string
-	ModuleScope *string
+	Page            int
+	PageSize        int
+	SortField       string
+	SortOrder       string
+	Query           string
+	ModuleScope     *string
+	AllowedNames    []string
+	FilterToAllowed bool
 }
 
 type RoleListResult struct {
@@ -158,12 +160,14 @@ func normalizePermissionListQuery(query PermissionListQuery) PermissionListQuery
 		}
 	}
 	return PermissionListQuery{
-		Page:        page,
-		PageSize:    pageSize,
-		SortField:   sortField,
-		SortOrder:   sortOrder,
-		Query:       strings.TrimSpace(query.Query),
-		ModuleScope: moduleScope,
+		Page:            page,
+		PageSize:        pageSize,
+		SortField:       sortField,
+		SortOrder:       sortOrder,
+		Query:           strings.TrimSpace(query.Query),
+		ModuleScope:     moduleScope,
+		AllowedNames:    uniqueStrings(query.AllowedNames),
+		FilterToAllowed: query.FilterToAllowed,
 	}
 }
 
@@ -288,6 +292,15 @@ func (r *SQLRepository) ListRoleUsers(ctx context.Context, roleID int64) ([]Role
 
 func (r *SQLRepository) ListPermissions(ctx context.Context, query PermissionListQuery) (PermissionListResult, error) {
 	q := normalizePermissionListQuery(query)
+	if q.FilterToAllowed && len(q.AllowedNames) == 0 {
+		return PermissionListResult{
+			Items:    []PermissionRecord{},
+			Total:    0,
+			Page:     q.Page,
+			PageSize: q.PageSize,
+		}, nil
+	}
+
 	offset := (q.Page - 1) * q.PageSize
 
 	conditions := []string{}
@@ -300,6 +313,14 @@ func (r *SQLRepository) ListPermissions(ctx context.Context, query PermissionLis
 	if q.ModuleScope != nil {
 		args = append(args, *q.ModuleScope)
 		conditions = append(conditions, fmt.Sprintf("p.module_scope = $%d", len(args)))
+	}
+	if q.FilterToAllowed {
+		placeholders := make([]string, 0, len(q.AllowedNames))
+		for _, name := range q.AllowedNames {
+			args = append(args, name)
+			placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
+		}
+		conditions = append(conditions, fmt.Sprintf("p.name IN (%s)", strings.Join(placeholders, ", ")))
 	}
 
 	where := ""
@@ -384,12 +405,34 @@ func (r *SQLRepository) ReplaceRolePermissions(ctx context.Context, roleID int64
 }
 
 type AdminService struct {
-	repo         AdminRepository
-	auditService *audit.Service
+	repo                AdminRepository
+	auditService        *audit.Service
+	isPermissionEnabled func(permissionName string) bool
 }
 
-func NewAdminService(repo AdminRepository, auditService *audit.Service) *AdminService {
-	return &AdminService{repo: repo, auditService: auditService}
+type AdminServiceOption func(*AdminService)
+
+func WithPermissionEnablementFilter(filter func(permissionName string) bool) AdminServiceOption {
+	return func(service *AdminService) {
+		if filter == nil {
+			return
+		}
+		service.isPermissionEnabled = filter
+	}
+}
+
+func NewAdminService(repo AdminRepository, auditService *audit.Service, opts ...AdminServiceOption) *AdminService {
+	service := &AdminService{
+		repo:         repo,
+		auditService: auditService,
+		isPermissionEnabled: func(_ string) bool {
+			return true
+		},
+	}
+	for _, opt := range opts {
+		opt(service)
+	}
+	return service
 }
 
 func (s *AdminService) ListRoles(ctx context.Context, query RoleListQuery) (RoleListResult, error) {
@@ -409,6 +452,7 @@ func (s *AdminService) GetRoleDetail(ctx context.Context, roleID int64, includeU
 	if err != nil {
 		return RoleDetail{}, err
 	}
+	permissions = s.filterPermissionRecords(permissions)
 
 	detail := RoleDetail{
 		RoleRecord:  role,
@@ -453,6 +497,7 @@ func (s *AdminService) CreateRole(ctx context.Context, in RoleCreateInput) (Role
 	if err != nil {
 		return RoleDetail{}, err
 	}
+	permissions = s.filterPermissionRecords(permissions)
 
 	s.logAudit(ctx, audit.Event{
 		Action:      "roles.create",
@@ -517,6 +562,7 @@ func (s *AdminService) UpdateRole(ctx context.Context, in RoleUpdateInput) (Role
 	if err != nil {
 		return RoleDetail{}, err
 	}
+	permissions = s.filterPermissionRecords(permissions)
 	detail := RoleDetail{
 		RoleRecord:  role,
 		Permissions: permissions,
@@ -537,11 +583,24 @@ func (s *AdminService) UpdateRole(ctx context.Context, in RoleUpdateInput) (Role
 }
 
 func (s *AdminService) ListPermissions(ctx context.Context, query PermissionListQuery) (PermissionListResult, error) {
+	query.AllowedNames = s.allowedPermissionNames()
+	query.FilterToAllowed = true
 	return s.repo.ListPermissions(ctx, query)
 }
 
 func (s *AdminService) resolvePermissionNames(ctx context.Context, names []string) ([]string, []int64, error) {
 	clean := uniqueStrings(names)
+	if len(clean) > 0 {
+		allowed := map[string]struct{}{}
+		for _, name := range s.allowedPermissionNames() {
+			allowed[name] = struct{}{}
+		}
+		for _, requested := range clean {
+			if _, ok := allowed[requested]; !ok {
+				return nil, nil, apperror.ValidationWithDetails("validation failed", map[string]any{"permissions": []string{"one or more permissions are invalid"}})
+			}
+		}
+	}
 	permissions, err := s.repo.GetPermissionsByNames(ctx, clean)
 	if err != nil {
 		return nil, nil, err
@@ -561,6 +620,30 @@ func (s *AdminService) logAudit(ctx context.Context, event audit.Event) {
 		return
 	}
 	_ = s.auditService.Log(ctx, event)
+}
+
+func (s *AdminService) allowedPermissionNames() []string {
+	definitions := BasePermissionRegistry()
+	names := make([]string, 0, len(definitions))
+	for _, definition := range definitions {
+		if s.isPermissionEnabled(definition.Key) {
+			names = append(names, definition.Key)
+		}
+	}
+	return names
+}
+
+func (s *AdminService) filterPermissionRecords(items []PermissionRecord) []PermissionRecord {
+	if len(items) == 0 {
+		return items
+	}
+	filtered := make([]PermissionRecord, 0, len(items))
+	for _, item := range items {
+		if s.isPermissionEnabled(item.Name) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func mapRoleConstraintError(err error) *apperror.AppError {

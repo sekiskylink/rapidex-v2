@@ -383,7 +383,7 @@ describe('web RBAC navigation', () => {
     expect(screen.getByText('You do not have permission to access this page.')).toBeInTheDocument()
   })
 
-  it('hides administration navigation and blocks /users when administration module is disabled', async () => {
+  it('hides administration navigation and shows module-disabled state when administration module is disabled', async () => {
     applyEffectiveModuleEnablement({
       modules: [
         {
@@ -424,7 +424,8 @@ describe('web RBAC navigation', () => {
 
     renderWithRouter('/users')
 
-    expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Module Disabled', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Administration is currently disabled by platform configuration.')).toBeInTheDocument()
     expect(screen.queryByText('Administration')).not.toBeInTheDocument()
   })
 })

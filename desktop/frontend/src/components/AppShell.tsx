@@ -35,7 +35,7 @@ import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
-import { buildNavigation } from '../navigation'
+import { buildNavigation, canAccessRoute } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
@@ -72,6 +72,7 @@ export function AppShell() {
   const drawerWidth = navCollapsed ? MINI_DRAWER_WIDTH : DRAWER_WIDTH
 
   const navigation = buildNavigation(principal)
+  const canAccessSettings = canAccessRoute(principal, '/settings')
 
   React.useEffect(() => {
     if (
@@ -300,17 +301,19 @@ export function AppShell() {
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
           >
-            <MenuItem
-              onClick={() => {
-                closeMenus()
-                void navigate({ to: '/settings' })
-              }}
-            >
-              <ListItemIcon>
-                <SettingsRoundedIcon fontSize="small" />
-              </ListItemIcon>
-              Settings
-            </MenuItem>
+            {canAccessSettings ? (
+              <MenuItem
+                onClick={() => {
+                  closeMenus()
+                  void navigate({ to: '/settings' })
+                }}
+              >
+                <ListItemIcon>
+                  <SettingsRoundedIcon fontSize="small" />
+                </ListItemIcon>
+                Settings
+              </MenuItem>
+            ) : null}
             <MenuItem
               onClick={() => {
                 closeMenus()

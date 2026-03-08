@@ -121,6 +121,15 @@ export function findModuleForPath(pathname: string): ModuleId | null {
   return winner
 }
 
+export function getModuleLabelForPath(pathname: string) {
+  const moduleId = findModuleForPath(pathname)
+  if (!moduleId) {
+    return null
+  }
+  const definition = moduleRegistry.find((item) => item.id === moduleId)
+  return definition?.label ?? null
+}
+
 export function isPathModuleEnabled(pathname: string, moduleSnapshot: ModuleEnablementSnapshot = snapshot) {
   const moduleId = findModuleForPath(pathname)
   if (!moduleId) {

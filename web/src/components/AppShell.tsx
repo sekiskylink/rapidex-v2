@@ -22,7 +22,7 @@ import {
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { appName } from '../lib/env'
-import { buildNavigation } from '../navigation'
+import { buildNavigation, canAccessRoute } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import {
   AdminPanelSettingsRoundedIcon,
@@ -93,6 +93,7 @@ export function AppShell() {
   }, [pathname])
 
   const navigation = buildNavigation(user)
+  const canAccessSettings = canAccessRoute('/settings', user)
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
@@ -331,17 +332,19 @@ export function AppShell() {
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
           >
-            <MenuItem
-              onClick={() => {
-                closeMenus()
-                void navigate({ to: '/settings' })
-              }}
-            >
-              <ListItemIcon>
-                <SettingsRoundedIcon fontSize="small" />
-              </ListItemIcon>
-              Settings
-            </MenuItem>
+            {canAccessSettings ? (
+              <MenuItem
+                onClick={() => {
+                  closeMenus()
+                  void navigate({ to: '/settings' })
+                }}
+              >
+                <ListItemIcon>
+                  <SettingsRoundedIcon fontSize="small" />
+                </ListItemIcon>
+                Settings
+              </MenuItem>
+            ) : null}
             <MenuItem
               onClick={() => {
                 closeMenus()
