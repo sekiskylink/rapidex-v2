@@ -291,6 +291,62 @@ describe('app shell routes', () => {
     expect(screen.queryByRole('button', { name: 'Servers' })).not.toBeInTheDocument()
   })
 
+  it('renders Sukumad deliveries route and navigation when permission is granted', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 14,
+              username: 'delivery-operator',
+              roles: ['Staff'],
+              permissions: ['deliveries.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/deliveries?')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/deliveries', store)
+
+    expect(await screen.findByRole('heading', { name: 'Deliveries', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Deliveries' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Servers' })).not.toBeInTheDocument()
+  })
+
   it('hides Administration group when no admin route permission is granted', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

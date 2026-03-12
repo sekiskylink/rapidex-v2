@@ -124,8 +124,8 @@ func run() error {
 	)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
-	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
-	sukumadDeliveryService := delivery.NewService(delivery.NewRepository())
+	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService)
+	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService).WithDeliveryService(sukumadDeliveryService)
 	sukumadWorkerService := worker.NewService(worker.NewRepository())
 	sukumadObservabilityService := observability.NewService(observability.NewRepository())
 	bootstrapService := bootstrap.NewService(

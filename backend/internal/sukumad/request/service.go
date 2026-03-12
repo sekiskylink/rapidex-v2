@@ -11,12 +11,16 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/delivery"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Service struct {
 	repo         Repository
 	auditService *audit.Service
+	deliverySvc  interface {
+		CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
+	}
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -25,6 +29,13 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 		auditSvc = auditService[0]
 	}
 	return &Service{repo: repository, auditService: auditSvc}
+}
+
+func (s *Service) WithDeliveryService(deliverySvc interface {
+	CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
+}) *Service {
+	s.deliverySvc = deliverySvc
+	return s
 }
 
 func (s *Service) ListRequests(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -67,6 +78,16 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 			return Record{}, mapped
 		}
 		return Record{}, err
+	}
+
+	if s.deliverySvc != nil {
+		if _, err := s.deliverySvc.CreatePendingDelivery(ctx, delivery.CreateInput{
+			RequestID: created.ID,
+			ServerID:  created.DestinationServerID,
+			ActorID:   input.ActorID,
+		}); err != nil {
+			return Record{}, err
+		}
 	}
 
 	s.logAudit(ctx, audit.Event{

@@ -26,7 +26,7 @@ type RouteDeps struct {
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerServerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ServerHandler)
 	registerRequestRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.RequestHandler)
-	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "deliveries", "/deliveries", rbac.PermissionDeliveriesRead, deps.DeliveryHandler.List)
+	registerDeliveryRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DeliveryHandler)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "jobs", "/jobs", rbac.PermissionJobsRead, deps.WorkerHandler.List)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "observability", "/observability", rbac.PermissionObservabilityRead, deps.ObservabilityHandler.List)
 }
@@ -101,4 +101,27 @@ func registerListRoute(
 		middleware.RequireJWTUser(),
 	)
 	group.GET("", middleware.RequirePermission(rbacService, permission), handler)
+}
+
+func registerDeliveryRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *delivery.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/deliveries")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "deliveries"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.List)
+	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.Get)
+	group.POST("/:id/retry", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesWrite), handler.Retry)
 }

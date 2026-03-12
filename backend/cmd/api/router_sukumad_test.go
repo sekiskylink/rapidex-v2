@@ -122,16 +122,18 @@ func TestRequestRoutesCreateListAndGet(t *testing.T) {
 		95: {
 			rbac.PermissionRequestsRead,
 			rbac.PermissionRequestsWrite,
+			rbac.PermissionDeliveriesRead,
 		},
 	})
-	requestHandler := requests.NewHandler(requests.NewService(requests.NewRepository(), audit.NewService(&fakeAuditRepo{})))
+	deliveryService := delivery.NewService(delivery.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	requestHandler := requests.NewHandler(requests.NewService(requests.NewRepository(), audit.NewService(&fakeAuditRepo{})).WithDeliveryService(deliveryService))
 
 	router := newRouter(AppDeps{
 		JWTManager:           jwt,
 		RBACService:          rbacService,
 		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
 		RequestHandler:       requestHandler,
-		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
+		DeliveryHandler:      delivery.NewHandler(deliveryService),
 		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
 		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
 	})
@@ -180,6 +182,76 @@ func TestRequestRoutesCreateListAndGet(t *testing.T) {
 	if getW.Code != http.StatusOK {
 		t.Fatalf("expected 200 from get, got %d body=%s", getW.Code, getW.Body.String())
 	}
+
+	deliveryListReq := httptest.NewRequest(http.MethodGet, "/api/v1/deliveries?page=1&pageSize=25", nil)
+	deliveryListReq.Header.Set("Authorization", "Bearer "+token)
+	deliveryListW := httptest.NewRecorder()
+	router.ServeHTTP(deliveryListW, deliveryListReq)
+	if deliveryListW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from delivery list, got %d body=%s", deliveryListW.Code, deliveryListW.Body.String())
+	}
+}
+
+func TestDeliveryRoutesListGetAndRetry(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(97, "delivery-operator", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		97: {
+			rbac.PermissionDeliveriesRead,
+			rbac.PermissionDeliveriesWrite,
+		},
+	})
+	deliveryService := delivery.NewService(delivery.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	created, err := deliveryService.CreatePendingDelivery(nil, delivery.CreateInput{
+		RequestID: 11,
+		ServerID:  7,
+	})
+	if err != nil {
+		t.Fatalf("seed delivery: %v", err)
+	}
+	if _, err := deliveryService.MarkRunning(nil, created.ID); err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	if _, err := deliveryService.MarkFailed(nil, delivery.CompletionInput{
+		ID:           created.ID,
+		ErrorMessage: "timeout",
+	}); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	router := newRouter(AppDeps{
+		JWTManager:           jwt,
+		RBACService:          rbacService,
+		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
+		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
+		DeliveryHandler:      delivery.NewHandler(deliveryService),
+		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
+		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
+	})
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/deliveries?page=1&pageSize=25", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listW := httptest.NewRecorder()
+	router.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from delivery list, got %d body=%s", listW.Code, listW.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/deliveries/1", nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getW := httptest.NewRecorder()
+	router.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from delivery get, got %d body=%s", getW.Code, getW.Body.String())
+	}
+
+	retryReq := httptest.NewRequest(http.MethodPost, "/api/v1/deliveries/1/retry", nil)
+	retryReq.Header.Set("Authorization", "Bearer "+token)
+	retryW := httptest.NewRecorder()
+	router.ServeHTTP(retryW, retryReq)
+	if retryW.Code != http.StatusCreated {
+		t.Fatalf("expected 201 from retry, got %d body=%s", retryW.Code, retryW.Body.String())
+	}
 }
 
 func TestSukumadRoutesRequireMatchingReadPermission(t *testing.T) {
@@ -206,6 +278,50 @@ func TestSukumadRoutesRequireMatchingReadPermission(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for missing requests.read permission, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestDeliveryRoutesRequireWritePermissionForRetry(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(98, "delivery-reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		98: {rbac.PermissionDeliveriesRead},
+	})
+	deliveryService := delivery.NewService(delivery.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	created, err := deliveryService.CreatePendingDelivery(nil, delivery.CreateInput{
+		RequestID: 2,
+		ServerID:  4,
+	})
+	if err != nil {
+		t.Fatalf("seed delivery: %v", err)
+	}
+	if _, err := deliveryService.MarkRunning(nil, created.ID); err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	if _, err := deliveryService.MarkFailed(nil, delivery.CompletionInput{
+		ID:           created.ID,
+		ErrorMessage: "failed",
+	}); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	router := newRouter(AppDeps{
+		JWTManager:           jwt,
+		RBACService:          rbacService,
+		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
+		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
+		DeliveryHandler:      delivery.NewHandler(deliveryService),
+		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
+		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/deliveries/1/retry", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for missing deliveries.write permission, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

@@ -1,5 +1,59 @@
 # Status
 
+## Milestone — Delivery Engine & Retry Control (Complete)
+
+### What changed
+- Added the `delivery_attempts` migration in [backend/migrations/000015_create_delivery_attempts.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000015_create_delivery_attempts.up.sql) and [backend/migrations/000015_create_delivery_attempts.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000015_create_delivery_attempts.down.sql).
+- Replaced the Sukumad delivery placeholder backend with a real repository/service/handler implementation under [backend/internal/sukumad/delivery](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery):
+  - paginated delivery listing with status, server, date, search, and sort support
+  - delivery detail lookup enriched with request UID and server name
+  - delivery lifecycle operations for `pending`, `running`, `succeeded`, `failed`, and `retrying`
+  - retry scheduling through `POST /api/v1/deliveries/:id/retry` for failed deliveries only
+  - audit logging for `delivery.created`, `delivery.succeeded`, `delivery.failed`, and `delivery.retry`
+- Updated Sukumad route registration so `/api/v1/deliveries` is a full RBAC-enforced surface with:
+  - `GET /api/v1/deliveries`
+  - `GET /api/v1/deliveries/:id`
+  - `POST /api/v1/deliveries/:id/retry`
+- Wired request creation to seed the initial pending delivery attempt so new exchange requests now enter the delivery engine immediately using the shared Sukumad delivery service.
+- Replaced the web Deliveries placeholder with a real inspection and retry UI in [web/src/pages/DeliveriesPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DeliveriesPage.tsx) and [web/src/pages/DeliveryDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DeliveryDetailPage.tsx):
+  - delivery grid for delivery UID, request UID, server, status, attempt number, started time, and finished time
+  - filters for status, server, and date
+  - detail dialog showing request reference, server, attempt number, status, response body, error message, and timestamps
+  - permission-aware retry control for failed deliveries
+- Replaced the desktop Deliveries placeholder with matching API-backed functionality in [desktop/frontend/src/pages/DeliveriesPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DeliveriesPage.tsx) and [desktop/frontend/src/pages/DeliveryDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DeliveryDetailPage.tsx), preserving web/desktop parity and backend-only data access.
+- Added a delivery-engine architecture note in [docs/notes/sukumad-delivery-engine.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-delivery-engine.md).
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-12-milestone-4-delivery-engine-retry-control.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/delivery/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository_test.go)
+  - added [backend/internal/sukumad/delivery/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service_test.go)
+  - added [backend/internal/sukumad/delivery/handler_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/handler_test.go)
+  - updated [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go) for delivery list/detail/retry flows and permission coverage
+- Web:
+  - added [web/src/pages/deliveries-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/deliveries-page.test.tsx)
+  - updated [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx)
+- Desktop:
+  - added [desktop/frontend/src/pages/deliveries-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/deliveries-page.test.tsx)
+  - updated [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx)
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && npm test -- --run` -> PASS
+  - `cd web && npm run build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+  - `cd desktop/frontend && npm run build` -> PASS
+
+### Remaining follow-ups
+- Delivery retries are scheduled in the database with `retrying` status and `retry_at`, but worker pickup/execution remains a later milestone.
+- Request creation now seeds an initial pending delivery attempt; deeper transactional orchestration between request and delivery persistence can be tightened further if later milestones require strict atomicity across both records.
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in frontend test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web and desktop build output.
+
 ## Milestone — Request Lifecycle (Complete)
 
 ### What changed

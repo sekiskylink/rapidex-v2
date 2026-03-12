@@ -295,6 +295,47 @@ describe('web auth routes', () => {
     expect(screen.queryByRole('button', { name: 'Servers' })).not.toBeInTheDocument()
   })
 
+  it('renders Sukumad deliveries route and navigation when permission is granted', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 13,
+        username: 'delivery-operator',
+        roles: ['Staff'],
+        permissions: ['deliveries.read'],
+      },
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/deliveries?')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/deliveries')
+
+    expect(await screen.findByRole('heading', { name: 'Deliveries', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Deliveries' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Servers' })).not.toBeInTheDocument()
+  })
+
   it('renders branding display name from backend on login page', async () => {
     vi.stubGlobal(
       'fetch',
