@@ -27,6 +27,11 @@ import GroupRoundedIcon from '@mui/icons-material/GroupRounded'
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded'
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
 import VpnKeyRoundedIcon from '@mui/icons-material/VpnKeyRounded'
+import DnsRoundedIcon from '@mui/icons-material/DnsRounded'
+import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
+import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
+import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded'
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded'
@@ -95,6 +100,11 @@ export function AppShell() {
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     permissions: <VpnKeyRoundedIcon fontSize="small" />,
     audit: <FactCheckRoundedIcon fontSize="small" />,
+    servers: <DnsRoundedIcon fontSize="small" />,
+    requests: <ReceiptLongRoundedIcon fontSize="small" />,
+    deliveries: <LocalShippingRoundedIcon fontSize="small" />,
+    jobs: <WorkOutlineRoundedIcon fontSize="small" />,
+    observability: <VisibilityRoundedIcon fontSize="small" />,
   }
 
   const closeMenus = () => {

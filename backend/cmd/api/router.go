@@ -12,31 +12,42 @@ import (
 	"basepro/backend/internal/moduleenablement"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
+	"basepro/backend/internal/sukumad"
+	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/observability"
+	requests "basepro/backend/internal/sukumad/request"
+	"basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/worker"
 	"basepro/backend/internal/users"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
 
 type AppDeps struct {
-	DB                  *sqlx.DB
-	Version             string
-	Commit              string
-	BuildDate           string
-	CORSConfig          middleware.CORSConfig
-	RateLimitConfig     middleware.RateLimitConfig
-	AuthHandler         *auth.Handler
-	AuthService         *auth.Service
-	JWTManager          *auth.JWTManager
-	RBACService         *rbac.Service
-	RBACAdminHandler    *rbac.AdminHandler
-	AuditHandler        *audit.Handler
-	UsersHandler        *users.Handler
-	SettingsHandler     *settings.Handler
-	BootstrapHandler    *bootstrap.Handler
-	ModuleFlagsHandler  *moduleenablement.Handler
-	ModuleFlagsProvider func() map[string]bool
-	APITokenHeaderName  string
-	APITokenAllowBearer bool
+	DB                   *sqlx.DB
+	Version              string
+	Commit               string
+	BuildDate            string
+	CORSConfig           middleware.CORSConfig
+	RateLimitConfig      middleware.RateLimitConfig
+	AuthHandler          *auth.Handler
+	AuthService          *auth.Service
+	JWTManager           *auth.JWTManager
+	RBACService          *rbac.Service
+	RBACAdminHandler     *rbac.AdminHandler
+	AuditHandler         *audit.Handler
+	UsersHandler         *users.Handler
+	SettingsHandler      *settings.Handler
+	BootstrapHandler     *bootstrap.Handler
+	ModuleFlagsHandler   *moduleenablement.Handler
+	ModuleFlagsProvider  func() map[string]bool
+	APITokenHeaderName   string
+	APITokenAllowBearer  bool
+	ServerHandler        *server.Handler
+	RequestHandler       *requests.Handler
+	DeliveryHandler      *delivery.Handler
+	WorkerHandler        *worker.Handler
+	ObservabilityHandler *observability.Handler
 }
 
 func newRouter(deps AppDeps) *gin.Engine {
@@ -178,6 +189,17 @@ func newRouter(deps AppDeps) *gin.Engine {
 			settingsGroup.PUT("/module-enablement", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.ModuleFlagsHandler.UpdateRuntimeOverrides)
 		}
 	}
+
+	sukumad.RegisterRoutes(api, sukumad.RouteDeps{
+		JWTManager:           deps.JWTManager,
+		RBACService:          deps.RBACService,
+		ModuleFlagsProvider:  deps.ModuleFlagsProvider,
+		ServerHandler:        deps.ServerHandler,
+		RequestHandler:       deps.RequestHandler,
+		DeliveryHandler:      deps.DeliveryHandler,
+		WorkerHandler:        deps.WorkerHandler,
+		ObservabilityHandler: deps.ObservabilityHandler,
+	})
 
 	return r
 }

@@ -52,6 +52,41 @@ export const moduleEnablementRegistry = [
     description: 'System configuration and branding surfaces.',
     scope: 'full-stack',
   },
+  {
+    moduleId: 'servers',
+    flagKey: 'modules.servers.enabled',
+    enabledByDefault: true,
+    description: 'Sukumad integration server management surfaces.',
+    scope: 'full-stack',
+  },
+  {
+    moduleId: 'requests',
+    flagKey: 'modules.requests.enabled',
+    enabledByDefault: true,
+    description: 'Sukumad request lifecycle surfaces.',
+    scope: 'full-stack',
+  },
+  {
+    moduleId: 'deliveries',
+    flagKey: 'modules.deliveries.enabled',
+    enabledByDefault: true,
+    description: 'Sukumad delivery monitoring surfaces.',
+    scope: 'full-stack',
+  },
+  {
+    moduleId: 'jobs',
+    flagKey: 'modules.jobs.enabled',
+    enabledByDefault: true,
+    description: 'Sukumad worker and job monitoring surfaces.',
+    scope: 'full-stack',
+  },
+  {
+    moduleId: 'observability',
+    flagKey: 'modules.observability.enabled',
+    enabledByDefault: true,
+    description: 'Sukumad observability surfaces.',
+    scope: 'full-stack',
+  },
 ] as const satisfies readonly ModuleEnablementDefinition[]
 
 interface ModuleEnablementSnapshot {

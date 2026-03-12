@@ -22,6 +22,11 @@ import (
 	"basepro/backend/internal/moduleenablement"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
+	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/observability"
+	requests "basepro/backend/internal/sukumad/request"
+	"basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/worker"
 	"basepro/backend/internal/users"
 )
 
@@ -118,6 +123,11 @@ func run() error {
 		}),
 	)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
+	sukumadServerService := server.NewService(server.NewRepository())
+	sukumadRequestService := requests.NewService(requests.NewRepository())
+	sukumadDeliveryService := delivery.NewService(delivery.NewRepository())
+	sukumadWorkerService := worker.NewService(worker.NewRepository())
+	sukumadObservabilityService := observability.NewService(observability.NewRepository())
 	bootstrapService := bootstrap.NewService(
 		bootstrap.AppInfo{
 			Version:   Version,
@@ -201,8 +211,13 @@ func run() error {
 			ModuleFlagsProvider: func() map[string]bool {
 				return moduleEnablementService.EffectiveOverrideMap(config.Get().Modules.Flags)
 			},
-			APITokenHeaderName:  cfg.Auth.APITokenHeaderName,
-			APITokenAllowBearer: cfg.Auth.APITokenAllowBearer,
+			APITokenHeaderName:   cfg.Auth.APITokenHeaderName,
+			APITokenAllowBearer:  cfg.Auth.APITokenAllowBearer,
+			ServerHandler:        server.NewHandler(sukumadServerService),
+			RequestHandler:       requests.NewHandler(sukumadRequestService),
+			DeliveryHandler:      delivery.NewHandler(sukumadDeliveryService),
+			WorkerHandler:        worker.NewHandler(sukumadWorkerService),
+			ObservabilityHandler: observability.NewHandler(sukumadObservabilityService),
 		}),
 	}
 

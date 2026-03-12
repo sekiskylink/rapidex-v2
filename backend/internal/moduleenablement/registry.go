@@ -67,6 +67,46 @@ var registry = []Definition{
 		Scope:            ScopeFullStack,
 		AdminControl:     AdminControlStatic,
 	},
+	{
+		ModuleID:         "servers",
+		FlagKey:          "modules.servers.enabled",
+		EnabledByDefault: true,
+		Description:      "Sukumad integration server management surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlStatic,
+	},
+	{
+		ModuleID:         "requests",
+		FlagKey:          "modules.requests.enabled",
+		EnabledByDefault: true,
+		Description:      "Sukumad request lifecycle surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlStatic,
+	},
+	{
+		ModuleID:         "deliveries",
+		FlagKey:          "modules.deliveries.enabled",
+		EnabledByDefault: true,
+		Description:      "Sukumad delivery monitoring surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlStatic,
+	},
+	{
+		ModuleID:         "jobs",
+		FlagKey:          "modules.jobs.enabled",
+		EnabledByDefault: true,
+		Description:      "Sukumad worker and job monitoring surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlStatic,
+	},
+	{
+		ModuleID:         "observability",
+		FlagKey:          "modules.observability.enabled",
+		EnabledByDefault: true,
+		Description:      "Sukumad observability surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlStatic,
+	},
 }
 
 func Definitions() []Definition {

@@ -18,10 +18,15 @@ import { LoginPage } from './pages/LoginPage'
 import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
 import { NotAuthorizedPage } from './pages/NotAuthorizedPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { ObservabilityPage } from './pages/ObservabilityPage'
 import { PermissionsPage } from './pages/PermissionsPage'
+import { DeliveriesPage } from './pages/DeliveriesPage'
+import { JobsPage } from './pages/JobsPage'
+import { RequestsPage } from './pages/RequestsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { RolesPage } from './pages/RolesPage'
 import { RouteErrorPage } from './pages/RouteErrorPage'
+import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
 import { getModuleLabelForPath } from './registry/moduleEnablement'
@@ -179,6 +184,81 @@ const settingsRoute = createRoute({
   },
 })
 
+const serversRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/servers',
+  component: () => {
+    const state = getRouteAccessState('/servers', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <ServersPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/servers') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const requestsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/requests',
+  component: () => {
+    const state = getRouteAccessState('/requests', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <RequestsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/requests') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const deliveriesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/deliveries',
+  component: () => {
+    const state = getRouteAccessState('/deliveries', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <DeliveriesPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/deliveries') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const jobsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/jobs',
+  component: () => {
+    const state = getRouteAccessState('/jobs', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <JobsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/jobs') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const observabilityRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/observability',
+  component: () => {
+    const state = getRouteAccessState('/observability', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <ObservabilityPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/observability') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -190,6 +270,11 @@ const routeTree = rootRoute.addChildren([
     rolesRoute,
     permissionsRoute,
     auditRoute,
+    serversRoute,
+    requestsRoute,
+    deliveriesRoute,
+    jobsRoute,
+    observabilityRoute,
     settingsRoute,
   ]),
 ])

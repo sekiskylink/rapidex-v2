@@ -182,6 +182,46 @@ describe('app shell routes', () => {
     expect(screen.getByText('Forbidden')).toBeInTheDocument()
   })
 
+  it('renders Sukumad servers route and navigation when permission is granted', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 15,
+              username: 'operator',
+              roles: ['Staff'],
+              permissions: ['servers.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/servers', store)
+
+    expect(await screen.findByRole('heading', { name: 'Sukumad - Servers', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Servers' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Requests' })).not.toBeInTheDocument()
+  })
+
   it('hides Administration group when no admin route permission is granted', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

@@ -1,5 +1,76 @@
 # Status
 
+## Milestone - SukumadPro Bootstrap (Complete)
+
+### What changed
+- Added Sukumad backend scaffolding under `backend/internal/sukumad`:
+  - `server`
+  - `request`
+  - `delivery`
+  - `async`
+  - `ratelimit`
+  - `worker`
+  - `dhis2`
+  - `observability`
+- Added placeholder handler/service/repository/types files for the new Sukumad module tree without introducing any new top-level backend platform modules.
+- Added placeholder authenticated backend endpoints using the existing API router and middleware stack:
+  - `GET /api/v1/servers`
+  - `GET /api/v1/requests`
+  - `GET /api/v1/deliveries`
+  - `GET /api/v1/jobs`
+  - `GET /api/v1/observability`
+- Added initial Sukumad RBAC permissions to the existing backend/client registries:
+  - `servers.read`, `servers.write`
+  - `requests.read`, `requests.write`
+  - `deliveries.read`, `deliveries.write`
+  - `jobs.read`, `jobs.write`
+  - `observability.read`
+- Extended backend and client module-enablement registries for:
+  - `servers`
+  - `requests`
+  - `deliveries`
+  - `jobs`
+  - `observability`
+- Added web placeholder pages, authenticated routes, page labels, shell navigation icons, and permission-aware visibility for:
+  - `/servers`
+  - `/requests`
+  - `/deliveries`
+  - `/jobs`
+  - `/observability`
+- Added desktop placeholder pages, authenticated routes, route labels, shell navigation icons, and registry-driven permission visibility for the same Sukumad areas.
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-12-sukumad-bootstrap.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - `backend/cmd/api/router_sukumad_test.go`
+  - updated Sukumad-related permission/module registry coverage in:
+    - `backend/internal/rbac/registry_test.go`
+    - `backend/internal/moduleenablement/registry_test.go`
+    - `backend/internal/moduleenablement/service_test.go`
+    - `backend/cmd/api/router_module_enablement_test.go`
+- Web:
+  - updated `web/src/registry/registry.test.ts`
+  - updated `web/src/routes.test.tsx` with Sukumad route/navigation smoke coverage
+- Desktop:
+  - updated `desktop/frontend/src/registry/registry.test.ts`
+  - updated `desktop/frontend/src/routes.test.tsx` with Sukumad route/navigation smoke coverage
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && npm test -- --run` -> PASS
+  - `cd web && npm run build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+  - `cd desktop/frontend && npm run build` -> PASS
+
+### Remaining follow-ups
+- Sukumad endpoints currently return placeholder `{ "message": "not implemented" }` responses until later milestones add repository-backed business logic.
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in web and desktop test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web and desktop build output.
+
 ## Milestone — Desktop/Web Bootstrap Consumption + Settings Access Guard (Complete)
 
 ### What changed

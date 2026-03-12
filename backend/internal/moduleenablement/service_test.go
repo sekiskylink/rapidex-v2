@@ -62,8 +62,8 @@ func TestUpdateRuntimeOverridesPersistsAndLogsAudit(t *testing.T) {
 		t.Fatalf("update runtime overrides: %v", err)
 	}
 
-	if len(modules) != 3 {
-		t.Fatalf("expected 3 modules, got %d", len(modules))
+	if len(modules) != 8 {
+		t.Fatalf("expected 8 modules, got %d", len(modules))
 	}
 	if len(auditRepo.events) != 1 {
 		t.Fatalf("expected 1 audit event, got %d", len(auditRepo.events))

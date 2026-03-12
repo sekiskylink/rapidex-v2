@@ -213,6 +213,26 @@ describe('web auth routes', () => {
     expect(await screen.findByRole('heading', { name: 'BasePro Web', level: 1 })).toBeInTheDocument()
   })
 
+  it('renders Sukumad servers route and navigation when permission is granted', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 11,
+        username: 'operator',
+        roles: ['Staff'],
+        permissions: ['servers.read'],
+      },
+    })
+
+    renderWithRouter('/servers')
+
+    expect(await screen.findByRole('heading', { name: 'Sukumad - Servers', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Servers' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Requests' })).not.toBeInTheDocument()
+  })
+
   it('renders branding display name from backend on login page', async () => {
     vi.stubGlobal(
       'fetch',

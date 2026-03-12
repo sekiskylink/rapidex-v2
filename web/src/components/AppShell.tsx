@@ -35,10 +35,14 @@ import {
   ExpandMoreRoundedIcon,
   FactCheckRoundedIcon,
   GroupRoundedIcon,
+  AccountBalanceWalletRoundedIcon,
   LogoutRoundedArrowIcon,
   MenuIcon,
   PaletteRoundedIcon,
   SettingsRoundedIcon,
+  BadgeRoundedIcon,
+  EventAvailableRoundedIcon,
+  VisibilityRoundedIcon,
   VpnKeyRoundedIcon,
 } from '../ui/icons'
 import { PalettePresetPicker } from '../ui/theme/PalettePresetPicker'
@@ -104,6 +108,11 @@ export function AppShell() {
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     permissions: <VpnKeyRoundedIcon fontSize="small" />,
     audit: <FactCheckRoundedIcon fontSize="small" />,
+    servers: <AccountBalanceWalletRoundedIcon fontSize="small" />,
+    requests: <BadgeRoundedIcon fontSize="small" />,
+    deliveries: <EventAvailableRoundedIcon fontSize="small" />,
+    jobs: <AdminPanelSettingsRoundedIcon fontSize="small" />,
+    observability: <VisibilityRoundedIcon fontSize="small" />,
   }
   const activeDrawerWidth = collapsed ? miniDrawerWidth : drawerWidth
 

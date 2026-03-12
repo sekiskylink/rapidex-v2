@@ -50,5 +50,59 @@ export const moduleRegistry = [
       description: 'System and branding configuration.',
     },
   },
+  {
+    id: 'servers',
+    label: 'Servers',
+    navGroup: 'dashboard',
+    basePath: '/servers',
+    permissions: ['servers.read', 'servers.write'],
+    navItems: ['servers'],
+    metadata: {
+      description: 'Sukumad integration server placeholders.',
+    },
+  },
+  {
+    id: 'requests',
+    label: 'Requests',
+    navGroup: 'dashboard',
+    basePath: '/requests',
+    permissions: ['requests.read', 'requests.write'],
+    navItems: ['requests'],
+    metadata: {
+      description: 'Sukumad request placeholders.',
+    },
+  },
+  {
+    id: 'deliveries',
+    label: 'Deliveries',
+    navGroup: 'dashboard',
+    basePath: '/deliveries',
+    permissions: ['deliveries.read', 'deliveries.write'],
+    navItems: ['deliveries'],
+    metadata: {
+      description: 'Sukumad delivery placeholders.',
+    },
+  },
+  {
+    id: 'jobs',
+    label: 'Jobs',
+    navGroup: 'dashboard',
+    basePath: '/jobs',
+    permissions: ['jobs.read', 'jobs.write'],
+    navItems: ['jobs'],
+    metadata: {
+      description: 'Sukumad worker job placeholders.',
+    },
+  },
+  {
+    id: 'observability',
+    label: 'Observability',
+    navGroup: 'dashboard',
+    basePath: '/observability',
+    permissions: ['observability.read'],
+    navItems: ['observability'],
+    metadata: {
+      description: 'Sukumad observability placeholders.',
+    },
+  },
 ] as const satisfies readonly ModuleDefinition[]
-

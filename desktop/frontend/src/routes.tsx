@@ -19,9 +19,14 @@ import { ForbiddenPage } from './pages/ForbiddenPage'
 import { LoginPage } from './pages/LoginPage'
 import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { ObservabilityPage } from './pages/ObservabilityPage'
 import { PermissionsPage } from './pages/PermissionsPage'
+import { DeliveriesPage } from './pages/DeliveriesPage'
+import { JobsPage } from './pages/JobsPage'
+import { RequestsPage } from './pages/RequestsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { RolesPage } from './pages/RolesPage'
+import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SetupPage } from './pages/SetupPage'
 import { UsersPage } from './pages/UsersPage'
@@ -336,6 +341,66 @@ function SettingsRoutePage() {
   return <ForbiddenPage />
 }
 
+function ServersRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/servers')
+  if (accessState === 'allowed') {
+    return <ServersPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/servers') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function RequestsRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/requests')
+  if (accessState === 'allowed') {
+    return <RequestsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/requests') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function DeliveriesRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/deliveries')
+  if (accessState === 'allowed') {
+    return <DeliveriesPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/deliveries') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function JobsRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/jobs')
+  if (accessState === 'allowed') {
+    return <JobsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/jobs') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function ObservabilityRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/observability')
+  if (accessState === 'allowed') {
+    return <ObservabilityPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/observability') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -408,13 +473,55 @@ const auditRoute = createRoute({
   component: AuditRoutePage,
 })
 
+const serversRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/servers',
+  component: ServersRoutePage,
+})
+
+const requestsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/requests',
+  component: RequestsRoutePage,
+})
+
+const deliveriesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/deliveries',
+  component: DeliveriesRoutePage,
+})
+
+const jobsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/jobs',
+  component: JobsRoutePage,
+})
+
+const observabilityRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/observability',
+  component: ObservabilityRoutePage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
   loginRoute,
   forgotPasswordRoute,
   resetPasswordRoute,
-  authenticatedRoute.addChildren([dashboardRoute, settingsRoute, usersRoute, rolesRoute, permissionsRoute, auditRoute]),
+  authenticatedRoute.addChildren([
+    dashboardRoute,
+    settingsRoute,
+    usersRoute,
+    rolesRoute,
+    permissionsRoute,
+    auditRoute,
+    serversRoute,
+    requestsRoute,
+    deliveriesRoute,
+    jobsRoute,
+    observabilityRoute,
+  ]),
 ])
 
 export function createAppRouter(

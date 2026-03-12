@@ -1,13 +1,22 @@
 package rbac
 
 const (
-	PermissionUsersRead      = "users.read"
-	PermissionUsersWrite     = "users.write"
-	PermissionAuditRead      = "audit.read"
-	PermissionSettingsRead   = "settings.read"
-	PermissionSettingsWrite  = "settings.write"
-	PermissionAPITokensRead  = "api_tokens.read"
-	PermissionAPITokensWrite = "api_tokens.write"
+	PermissionUsersRead         = "users.read"
+	PermissionUsersWrite        = "users.write"
+	PermissionAuditRead         = "audit.read"
+	PermissionSettingsRead      = "settings.read"
+	PermissionSettingsWrite     = "settings.write"
+	PermissionAPITokensRead     = "api_tokens.read"
+	PermissionAPITokensWrite    = "api_tokens.write"
+	PermissionServersRead       = "servers.read"
+	PermissionServersWrite      = "servers.write"
+	PermissionRequestsRead      = "requests.read"
+	PermissionRequestsWrite     = "requests.write"
+	PermissionDeliveriesRead    = "deliveries.read"
+	PermissionDeliveriesWrite   = "deliveries.write"
+	PermissionJobsRead          = "jobs.read"
+	PermissionJobsWrite         = "jobs.write"
+	PermissionObservabilityRead = "observability.read"
 )
 
 type PermissionDefinition struct {
@@ -78,6 +87,69 @@ func BasePermissionRegistry() []PermissionDefinition {
 			Module:      "api_tokens",
 			Category:    "Administration",
 		},
+		{
+			Key:         PermissionServersRead,
+			Label:       "Servers: Read",
+			Description: "View Sukumad integration servers.",
+			Module:      "servers",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionServersWrite,
+			Label:       "Servers: Write",
+			Description: "Create and update Sukumad integration servers.",
+			Module:      "servers",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionRequestsRead,
+			Label:       "Requests: Read",
+			Description: "View Sukumad exchange requests.",
+			Module:      "requests",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionRequestsWrite,
+			Label:       "Requests: Write",
+			Description: "Create and update Sukumad exchange requests.",
+			Module:      "requests",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionDeliveriesRead,
+			Label:       "Deliveries: Read",
+			Description: "View Sukumad delivery attempts and histories.",
+			Module:      "deliveries",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionDeliveriesWrite,
+			Label:       "Deliveries: Write",
+			Description: "Manage Sukumad delivery retries and operations.",
+			Module:      "deliveries",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionJobsRead,
+			Label:       "Jobs: Read",
+			Description: "View Sukumad worker jobs and background processing status.",
+			Module:      "jobs",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionJobsWrite,
+			Label:       "Jobs: Write",
+			Description: "Manage Sukumad worker jobs and background processing.",
+			Module:      "jobs",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionObservabilityRead,
+			Label:       "Observability: Read",
+			Description: "View Sukumad operational observability surfaces.",
+			Module:      "observability",
+			Category:    "Sukumad",
+		},
 	}
 }
 
@@ -114,6 +186,60 @@ func BaseModuleRegistry() []ModuleDefinition {
 			},
 			NavItems: []string{"settings"},
 		},
+		{
+			ID:       "servers",
+			Label:    "Servers",
+			NavGroup: "sukumad",
+			BasePath: "/servers",
+			Permissions: []string{
+				PermissionServersRead,
+				PermissionServersWrite,
+			},
+			NavItems: []string{"servers"},
+		},
+		{
+			ID:       "requests",
+			Label:    "Requests",
+			NavGroup: "sukumad",
+			BasePath: "/requests",
+			Permissions: []string{
+				PermissionRequestsRead,
+				PermissionRequestsWrite,
+			},
+			NavItems: []string{"requests"},
+		},
+		{
+			ID:       "deliveries",
+			Label:    "Deliveries",
+			NavGroup: "sukumad",
+			BasePath: "/deliveries",
+			Permissions: []string{
+				PermissionDeliveriesRead,
+				PermissionDeliveriesWrite,
+			},
+			NavItems: []string{"deliveries"},
+		},
+		{
+			ID:       "jobs",
+			Label:    "Jobs",
+			NavGroup: "sukumad",
+			BasePath: "/jobs",
+			Permissions: []string{
+				PermissionJobsRead,
+				PermissionJobsWrite,
+			},
+			NavItems: []string{"jobs"},
+		},
+		{
+			ID:       "observability",
+			Label:    "Observability",
+			NavGroup: "sukumad",
+			BasePath: "/observability",
+			Permissions: []string{
+				PermissionObservabilityRead,
+			},
+			NavItems: []string{"observability"},
+		},
 	}
 }
 
@@ -123,6 +249,16 @@ func ModuleIDForPermission(permission string) (string, bool) {
 		return "administration", true
 	case PermissionSettingsRead, PermissionSettingsWrite:
 		return "settings", true
+	case PermissionServersRead, PermissionServersWrite:
+		return "servers", true
+	case PermissionRequestsRead, PermissionRequestsWrite:
+		return "requests", true
+	case PermissionDeliveriesRead, PermissionDeliveriesWrite:
+		return "deliveries", true
+	case PermissionJobsRead, PermissionJobsWrite:
+		return "jobs", true
+	case PermissionObservabilityRead:
+		return "observability", true
 	default:
 		return "", false
 	}

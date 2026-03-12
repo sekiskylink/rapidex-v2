@@ -27,6 +27,15 @@ func TestBasePermissionRegistry(t *testing.T) {
 		PermissionAuditRead,
 		PermissionSettingsRead,
 		PermissionSettingsWrite,
+		PermissionServersRead,
+		PermissionServersWrite,
+		PermissionRequestsRead,
+		PermissionRequestsWrite,
+		PermissionDeliveriesRead,
+		PermissionDeliveriesWrite,
+		PermissionJobsRead,
+		PermissionJobsWrite,
+		PermissionObservabilityRead,
 	}
 	for _, key := range required {
 		if _, exists := seen[key]; !exists {
@@ -37,8 +46,8 @@ func TestBasePermissionRegistry(t *testing.T) {
 
 func TestBaseModuleRegistry(t *testing.T) {
 	modules := BaseModuleRegistry()
-	if len(modules) != 3 {
-		t.Fatalf("expected 3 base modules, got %d", len(modules))
+	if len(modules) != 8 {
+		t.Fatalf("expected 8 base modules, got %d", len(modules))
 	}
 
 	ids := map[string]struct{}{}
@@ -54,5 +63,8 @@ func TestBaseModuleRegistry(t *testing.T) {
 
 	if _, ok := ids["administration"]; !ok {
 		t.Fatalf("expected administration module")
+	}
+	if _, ok := ids["servers"]; !ok {
+		t.Fatalf("expected servers module")
 	}
 }
