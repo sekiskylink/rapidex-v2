@@ -12,12 +12,29 @@ import (
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/rbac"
+	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
 )
+
+func newSukumadTestAppDeps(jwt *auth.JWTManager, rbacService *rbac.Service) AppDeps {
+	asyncService := asyncjobs.NewService(asyncjobs.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	workerService := worker.NewService(worker.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	rateLimitService := ratelimit.NewService(ratelimit.NewRepository())
+	return AppDeps{
+		JWTManager:           jwt,
+		RBACService:          rbacService,
+		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
+		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
+		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
+		AsyncHandler:         asyncjobs.NewHandler(asyncService),
+		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository(workerService, rateLimitService))),
+	}
+}
 
 func TestServerRoutesCRUD(t *testing.T) {
 	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
@@ -30,15 +47,9 @@ func TestServerRoutesCRUD(t *testing.T) {
 	})
 	serverHandler := server.NewHandler(server.NewService(server.NewRepository(), audit.NewService(&fakeAuditRepo{})))
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        serverHandler,
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.ServerHandler = serverHandler
+	router := newRouter(deps)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader([]byte(`{
 		"name":"DHIS2 Production",
@@ -128,15 +139,10 @@ func TestRequestRoutesCreateListAndGet(t *testing.T) {
 	deliveryService := delivery.NewService(delivery.NewRepository(), audit.NewService(&fakeAuditRepo{}))
 	requestHandler := requests.NewHandler(requests.NewService(requests.NewRepository(), audit.NewService(&fakeAuditRepo{})).WithDeliveryService(deliveryService))
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requestHandler,
-		DeliveryHandler:      delivery.NewHandler(deliveryService),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.RequestHandler = requestHandler
+	deps.DeliveryHandler = delivery.NewHandler(deliveryService)
+	router := newRouter(deps)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/requests", bytes.NewReader([]byte(`{
 		"sourceSystem":"emr",
@@ -219,15 +225,9 @@ func TestDeliveryRoutesListGetAndRetry(t *testing.T) {
 		t.Fatalf("mark failed: %v", err)
 	}
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(deliveryService),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.DeliveryHandler = delivery.NewHandler(deliveryService)
+	router := newRouter(deps)
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/deliveries?page=1&pageSize=25", nil)
 	listReq.Header.Set("Authorization", "Bearer "+token)
@@ -254,6 +254,74 @@ func TestDeliveryRoutesListGetAndRetry(t *testing.T) {
 	}
 }
 
+func TestJobsAndObservabilityRoutes(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(99, "ops-reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		99: {
+			rbac.PermissionJobsRead,
+			rbac.PermissionObservabilityRead,
+		},
+	})
+
+	asyncService := asyncjobs.NewService(asyncjobs.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	workerService := worker.NewService(worker.NewRepository(), audit.NewService(&fakeAuditRepo{}))
+	rateLimitService := ratelimit.NewService(ratelimit.NewRepository())
+
+	job, err := asyncService.CreateTask(nil, asyncjobs.CreateInput{
+		DeliveryAttemptID: 21,
+		RemoteJobID:       "remote-21",
+		RemoteStatus:      asyncjobs.StatePolling,
+	})
+	if err != nil {
+		t.Fatalf("seed async task: %v", err)
+	}
+	if _, err := asyncService.RecordPoll(nil, asyncjobs.RecordPollInput{
+		AsyncTaskID:  job.ID,
+		RemoteStatus: asyncjobs.StatePolling,
+		ResponseBody: `{"state":"processing"}`,
+	}); err != nil {
+		t.Fatalf("seed poll: %v", err)
+	}
+
+	if _, err := workerService.StartRun(nil, worker.Definition{Type: worker.TypePoll, Name: "poll-worker"}); err != nil {
+		t.Fatalf("seed worker run: %v", err)
+	}
+	if _, err := rateLimitService.CreatePolicy(nil, ratelimit.CreateParams{
+		Name:           "Global",
+		ScopeType:      "global",
+		RPS:            10,
+		Burst:          20,
+		MaxConcurrency: 2,
+		TimeoutMS:      500,
+		IsActive:       true,
+	}); err != nil {
+		t.Fatalf("seed rate limit: %v", err)
+	}
+
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.AsyncHandler = asyncjobs.NewHandler(asyncService)
+	deps.ObservabilityHandler = observability.NewHandler(observability.NewService(observability.NewRepository(workerService, rateLimitService)))
+	router := newRouter(deps)
+
+	for _, path := range []string{
+		"/api/v1/jobs?page=1&pageSize=25",
+		"/api/v1/jobs/1",
+		"/api/v1/jobs/1/polls?page=1&pageSize=25",
+		"/api/v1/observability/workers?page=1&pageSize=25",
+		"/api/v1/observability/workers/1",
+		"/api/v1/observability/rate-limits?page=1&pageSize=25",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestSukumadRoutesRequireMatchingReadPermission(t *testing.T) {
 	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
 	token, _, _ := jwt.GenerateAccessToken(92, "limited-reader", time.Now().UTC())
@@ -261,15 +329,7 @@ func TestSukumadRoutesRequireMatchingReadPermission(t *testing.T) {
 		92: {rbac.PermissionServersRead},
 	})
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -305,15 +365,9 @@ func TestDeliveryRoutesRequireWritePermissionForRetry(t *testing.T) {
 		t.Fatalf("mark failed: %v", err)
 	}
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(deliveryService),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.DeliveryHandler = delivery.NewHandler(deliveryService)
+	router := newRouter(deps)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/deliveries/1/retry", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -325,6 +379,26 @@ func TestDeliveryRoutesRequireWritePermissionForRetry(t *testing.T) {
 	}
 }
 
+func TestJobsAndObservabilityRoutesRequireReadPermissions(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(100, "limited-ops", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		100: {rbac.PermissionServersRead},
+	})
+
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
+
+	for _, path := range []string{"/api/v1/jobs", "/api/v1/observability/workers", "/api/v1/observability/rate-limits"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 for %s, got %d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestServerRoutesRequireWritePermissionForMutation(t *testing.T) {
 	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
 	token, _, _ := jwt.GenerateAccessToken(93, "server-reader", time.Now().UTC())
@@ -332,15 +406,7 @@ func TestServerRoutesRequireWritePermissionForMutation(t *testing.T) {
 		93: {rbac.PermissionServersRead},
 	})
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -360,15 +426,7 @@ func TestRequestRoutesRequireWritePermissionForMutation(t *testing.T) {
 		96: {rbac.PermissionRequestsRead},
 	})
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests", bytes.NewReader([]byte(`{"destinationServerId":1,"payload":{}}`)))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -388,15 +446,7 @@ func TestServerRoutesReturnValidationErrors(t *testing.T) {
 		94: {rbac.PermissionServersRead, rbac.PermissionServersWrite},
 	})
 
-	router := newRouter(AppDeps{
-		JWTManager:           jwt,
-		RBACService:          rbacService,
-		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
-		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
-		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
-		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
-	})
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader([]byte(`{
 		"name":"",

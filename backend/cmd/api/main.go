@@ -22,8 +22,10 @@ import (
 	"basepro/backend/internal/moduleenablement"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
+	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
@@ -126,8 +128,16 @@ func run() error {
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService).WithDeliveryService(sukumadDeliveryService)
-	sukumadWorkerService := worker.NewService(worker.NewRepository())
-	sukumadObservabilityService := observability.NewService(observability.NewRepository())
+	sukumadAsyncService := asyncjobs.NewService(asyncjobs.NewRepository(database), auditService)
+	sukumadRateLimitService := ratelimit.NewService(ratelimit.NewRepository(database))
+	sukumadWorkerService := worker.NewService(worker.NewRepository(database), auditService)
+	sukumadObservabilityService := observability.NewService(observability.NewRepository(sukumadWorkerService, sukumadRateLimitService))
+	_ = worker.NewBootstrap(
+		sukumadWorkerService,
+		worker.NewSendDefinition(nil),
+		worker.NewPollDefinition(sukumadAsyncService, asyncjobs.StaticPoller{}, 10),
+		worker.NewRetryDefinition(nil),
+	)
 	bootstrapService := bootstrap.NewService(
 		bootstrap.AppInfo{
 			Version:   Version,
@@ -216,7 +226,7 @@ func run() error {
 			ServerHandler:        server.NewHandler(sukumadServerService),
 			RequestHandler:       requests.NewHandler(sukumadRequestService),
 			DeliveryHandler:      delivery.NewHandler(sukumadDeliveryService),
-			WorkerHandler:        worker.NewHandler(sukumadWorkerService),
+			AsyncHandler:         asyncjobs.NewHandler(sukumadAsyncService),
 			ObservabilityHandler: observability.NewHandler(sukumadObservabilityService),
 		}),
 	}

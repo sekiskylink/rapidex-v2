@@ -13,11 +13,11 @@ import (
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad"
+	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
-	"basepro/backend/internal/sukumad/worker"
 	"basepro/backend/internal/users"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -46,7 +46,7 @@ type AppDeps struct {
 	ServerHandler        *server.Handler
 	RequestHandler       *requests.Handler
 	DeliveryHandler      *delivery.Handler
-	WorkerHandler        *worker.Handler
+	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
 }
 
@@ -197,7 +197,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		ServerHandler:        deps.ServerHandler,
 		RequestHandler:       deps.RequestHandler,
 		DeliveryHandler:      deps.DeliveryHandler,
-		WorkerHandler:        deps.WorkerHandler,
+		AsyncHandler:         deps.AsyncHandler,
 		ObservabilityHandler: deps.ObservabilityHandler,
 	})
 

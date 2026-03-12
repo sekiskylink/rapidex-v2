@@ -1,5 +1,80 @@
 # Status
 
+## Milestone — Workers, Async Tasks, and Rate Limiting (Complete)
+
+### What changed
+- Added the async-processing schema in [backend/migrations/000016_create_async_and_worker_tables.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000016_create_async_and_worker_tables.up.sql) and [backend/migrations/000016_create_async_and_worker_tables.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000016_create_async_and_worker_tables.down.sql):
+  - `async_tasks`
+  - `async_task_polls`
+  - `rate_limit_policies`
+  - `worker_runs`
+- Replaced the Sukumad async placeholder module with a real implementation under [backend/internal/sukumad/async](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async):
+  - async task create/list/detail support linked to delivery attempts and request references
+  - poll history recording and list/detail visibility
+  - status updates for `pending`, `polling`, `succeeded`, and `failed`
+  - generic due-task polling abstraction through `poller.go`
+  - audit events for `async_task.created`, `async_task.completed`, and `async_task.failed`
+- Replaced the worker placeholder module with a real lifecycle implementation under [backend/internal/sukumad/worker](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker):
+  - persistent worker-run registration
+  - heartbeat updates
+  - clean status transitions
+  - context-cancelled shutdown support
+  - bootstrap seam and production-shaped send/poll/retry worker definitions
+- Replaced the rate-limit placeholder module with a real implementation under [backend/internal/sukumad/ratelimit](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/ratelimit):
+  - policy persistence and listing
+  - active-policy resolution by scope
+  - in-process limiter with pacing and concurrency gating hooks
+- Replaced the observability placeholder module with real read APIs under [backend/internal/sukumad/observability](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/observability):
+  - worker list/detail visibility
+  - rate-limit visibility
+- Updated Sukumad backend routing so the authenticated RBAC-enforced API surface now includes:
+  - `GET /api/v1/jobs`
+  - `GET /api/v1/jobs/:id`
+  - `GET /api/v1/jobs/:id/polls`
+  - `GET /api/v1/observability/workers`
+  - `GET /api/v1/observability/workers/:id`
+  - `GET /api/v1/observability/rate-limits`
+- Replaced the web placeholders with real jobs and observability pages in [web/src/pages/JobsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/JobsPage.tsx), [web/src/pages/JobDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/JobDetailPage.tsx), and [web/src/pages/ObservabilityPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/ObservabilityPage.tsx):
+  - jobs grid with state filtering, sorting, and detail inspection
+  - poll-history visibility inside the job detail dialog
+  - read-only worker and rate-limit observability grids
+- Replaced the desktop placeholders with matching API-backed functionality in [desktop/frontend/src/pages/JobsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/JobsPage.tsx), [desktop/frontend/src/pages/JobDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/JobDetailPage.tsx), and [desktop/frontend/src/pages/ObservabilityPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/ObservabilityPage.tsx), preserving backend-only data access and parity with web.
+- Added an architecture note for the async/worker layer in [docs/notes/sukumad-workers-async.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers-async.md).
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-12-milestone-5-workers-async-rate-limiting.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/async/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository_test.go)
+  - added [backend/internal/sukumad/async/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/service_test.go)
+  - added [backend/internal/sukumad/async/handler_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/handler_test.go)
+  - added [backend/internal/sukumad/worker/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/service_test.go)
+  - added [backend/internal/sukumad/ratelimit/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/ratelimit/service_test.go)
+  - updated [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go) for jobs, observability, and permission coverage
+- Web:
+  - added [web/src/pages/jobs-observability-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/jobs-observability-page.test.tsx)
+  - updated [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx) for `/jobs` and `/observability` route coverage
+- Desktop:
+  - added [desktop/frontend/src/pages/jobs-observability-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/jobs-observability-page.test.tsx)
+  - updated [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx) for `/jobs` and `/observability` route coverage
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go run ./cmd/migrate up -config ./config/config.yaml` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Worker definitions and bootstrap seams are now production-shaped, but real startup scheduling remains a controlled hook rather than an always-on runtime path.
+- Poll execution is currently generic and abstraction-driven; deeper DHIS2-specific remote polling behavior still belongs to later milestones.
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in frontend test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web and desktop build output.
+
 ## Milestone — Delivery Engine & Retry Control (Complete)
 
 ### What changed

@@ -4,11 +4,11 @@ import (
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/rbac"
+	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
-	"basepro/backend/internal/sukumad/worker"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,7 +19,7 @@ type RouteDeps struct {
 	ServerHandler        *server.Handler
 	RequestHandler       *requests.Handler
 	DeliveryHandler      *delivery.Handler
-	WorkerHandler        *worker.Handler
+	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
 }
 
@@ -27,8 +27,8 @@ func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerServerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ServerHandler)
 	registerRequestRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.RequestHandler)
 	registerDeliveryRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DeliveryHandler)
-	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "jobs", "/jobs", rbac.PermissionJobsRead, deps.WorkerHandler.List)
-	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "observability", "/observability", rbac.PermissionObservabilityRead, deps.ObservabilityHandler.List)
+	registerAsyncRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.AsyncHandler)
+	registerObservabilityRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ObservabilityHandler)
 }
 
 func registerServerRoutes(
@@ -79,28 +79,27 @@ func registerRequestRoutes(
 	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.Create)
 }
 
-func registerListRoute(
+func registerAsyncRoutes(
 	api *gin.RouterGroup,
 	moduleFlagsProvider func() map[string]bool,
 	jwtManager *auth.JWTManager,
 	rbacService *rbac.Service,
-	moduleID string,
-	path string,
-	permission string,
-	handler func(*gin.Context),
+	handler *asyncjobs.Handler,
 ) {
 	if handler == nil {
 		return
 	}
 
-	group := api.Group(path)
+	group := api.Group("/jobs")
 	group.Use(
-		middleware.RequireModuleEnabled(moduleFlagsProvider, moduleID),
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "jobs"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
 		middleware.RequireJWTUser(),
 	)
-	group.GET("", middleware.RequirePermission(rbacService, permission), handler)
+	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.List)
+	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.Get)
+	group.GET("/:id/polls", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.ListPolls)
 }
 
 func registerDeliveryRoutes(
@@ -124,4 +123,27 @@ func registerDeliveryRoutes(
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.Get)
 	group.POST("/:id/retry", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesWrite), handler.Retry)
+}
+
+func registerObservabilityRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *observability.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/observability")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "observability"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("/workers", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListWorkers)
+	group.GET("/workers/:id", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetWorker)
+	group.GET("/rate-limits", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListRateLimits)
 }
