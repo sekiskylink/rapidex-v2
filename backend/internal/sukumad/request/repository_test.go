@@ -33,7 +33,7 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		FROM exchange_requests r
 		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
 		 WHERE (
-			r.uid ILIKE $1 OR
+			r.uid::text ILIKE $1 OR
 			COALESCE(r.source_system, '') ILIKE $1 OR
 			COALESCE(r.correlation_id, '') ILIKE $1 OR
 			COALESCE(r.batch_id, '') ILIKE $1 OR
@@ -45,7 +45,7 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		WithArgs("%dhis%", "pending").
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT r.id, r.uid, r.source_system, r.destination_server_id,
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,
@@ -53,7 +53,7 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		FROM exchange_requests r
 		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
 		 WHERE (
-			r.uid ILIKE $1 OR
+			r.uid::text ILIKE $1 OR
 			COALESCE(r.source_system, '') ILIKE $1 OR
 			COALESCE(r.correlation_id, '') ILIKE $1 OR
 			COALESCE(r.batch_id, '') ILIKE $1 OR
@@ -96,7 +96,7 @@ func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT r.id, r.uid, r.source_system, r.destination_server_id,
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,
@@ -148,7 +148,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(15))
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT r.id, r.uid, r.source_system, r.destination_server_id,
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,

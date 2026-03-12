@@ -1,13 +1,16 @@
 package apperror_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"basepro/backend/internal/apperror"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
@@ -74,6 +77,14 @@ func TestValidationErrorShapeHasPopulatedDetails(t *testing.T) {
 
 func TestInternalErrorShapeSafeMessageAndRequestIDHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	defer func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	}()
+
 	r := gin.New()
 	r.Use(middleware.RequestID())
 	r.GET("/boom", func(c *gin.Context) {
@@ -103,5 +114,13 @@ func TestInternalErrorShapeSafeMessageAndRequestIDHeader(t *testing.T) {
 	}
 	if details, ok := body["error"]["details"].(map[string]any); !ok || len(details) != 0 {
 		t.Fatalf("expected empty details object, got %T %v", body["error"]["details"], body["error"]["details"])
+	}
+
+	logLine := logOutput.String()
+	if strings.Count(logLine, `"request_id"`) != 1 {
+		t.Fatalf("expected one request_id in log output, got %q", logLine)
+	}
+	if !strings.Contains(logLine, `"error":"db timeout"`) {
+		t.Fatalf("expected internal error text in log output, got %q", logLine)
 	}
 }

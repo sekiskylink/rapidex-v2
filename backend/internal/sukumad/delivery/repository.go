@@ -94,8 +94,8 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 		args = append(args, "%"+q.Filter+"%")
 		needle := fmt.Sprintf("$%d", len(args))
 		conditions = append(conditions, `(
-			d.uid ILIKE `+needle+` OR
-			COALESCE(r.uid, '') ILIKE `+needle+` OR
+			d.uid::text ILIKE `+needle+` OR
+			COALESCE(r.uid::text, '') ILIKE `+needle+` OR
 			COALESCE(s.name, '') ILIKE `+needle+` OR
 			COALESCE(s.code, '') ILIKE `+needle+` OR
 			COALESCE(d.error_message, '') ILIKE `+needle+`
@@ -139,7 +139,7 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 	selectArgs := append([]any{}, args...)
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
-		SELECT d.id, d.uid, d.request_id, COALESCE(r.uid, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
 		       d.server_id, COALESCE(s.name, '') AS server_name,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
@@ -172,7 +172,7 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 func (r *SQLRepository) GetDeliveryByID(ctx context.Context, id int64) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
-		SELECT d.id, d.uid, d.request_id, COALESCE(r.uid, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
 		       d.server_id, COALESCE(s.name, '') AS server_name,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at

@@ -33,7 +33,7 @@ func TestSQLRepositoryListServers(t *testing.T) {
 		WithArgs("%dhis%").
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 	 WHERE name ILIKE $1 OR code ILIKE $1 OR system_type ILIKE $1 OR base_url ILIKE $1 ORDER BY name ASC LIMIT $2 OFFSET $3`)).
@@ -68,7 +68,7 @@ func TestSQLRepositoryGetServerByIDNotFound(t *testing.T) {
 
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 		WHERE id = $1
@@ -104,7 +104,7 @@ func TestSQLRepositoryCreateServer(t *testing.T) {
 			use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, NOW(), NOW(), $13)
-		RETURNING id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		RETURNING id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		          use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 	`)).
 		WithArgs("11111111-1111-1111-1111-111111111111", "OpenHIM", "openhim", "api", "https://openhim.example.com", "http", "POST", false, true, `{"X-Api-Key":"abc"}`, `{}`, false, int64(3)).

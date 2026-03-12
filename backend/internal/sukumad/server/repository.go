@@ -99,7 +99,7 @@ func (r *SQLRepository) ListServers(ctx context.Context, query ListQuery) (ListR
 
 	rows := []recordRow{}
 	selectQuery := `
-		SELECT id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 	` + whereClause + fmt.Sprintf(" ORDER BY %s %s", q.SortField, strings.ToUpper(q.SortOrder))
@@ -126,7 +126,7 @@ func (r *SQLRepository) ListServers(ctx context.Context, query ListQuery) (ListR
 func (r *SQLRepository) GetServerByID(ctx context.Context, id int64) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
-		SELECT id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 		WHERE id = $1
@@ -156,7 +156,7 @@ func (r *SQLRepository) CreateServer(ctx context.Context, params CreateParams) (
 			use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, NOW(), NOW(), $13)
-		RETURNING id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		RETURNING id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		          use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 	`,
 		params.UID,
@@ -205,7 +205,7 @@ func (r *SQLRepository) UpdateServer(ctx context.Context, params UpdateParams) (
 		    suspended = $12,
 		    updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, uid, name, code, system_type, base_url, endpoint_type, http_method,
+		RETURNING id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
 		          use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
 	`,
 		params.ID,

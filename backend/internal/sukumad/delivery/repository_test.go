@@ -34,8 +34,8 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
 		 WHERE (
-			d.uid ILIKE $1 OR
-			COALESCE(r.uid, '') ILIKE $1 OR
+			d.uid::text ILIKE $1 OR
+			COALESCE(r.uid::text, '') ILIKE $1 OR
 			COALESCE(s.name, '') ILIKE $1 OR
 			COALESCE(s.code, '') ILIKE $1 OR
 			COALESCE(d.error_message, '') ILIKE $1
@@ -43,7 +43,7 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 		WithArgs("%dhis%", StatusFailed, "%dhis%", now.Format("2006-01-02")).
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid, d.request_id, COALESCE(r.uid, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
 		       d.server_id, COALESCE(s.name, '') AS server_name,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
@@ -52,8 +52,8 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
 		 WHERE (
-			d.uid ILIKE $1 OR
-			COALESCE(r.uid, '') ILIKE $1 OR
+			d.uid::text ILIKE $1 OR
+			COALESCE(r.uid::text, '') ILIKE $1 OR
 			COALESCE(s.name, '') ILIKE $1 OR
 			COALESCE(s.code, '') ILIKE $1 OR
 			COALESCE(d.error_message, '') ILIKE $1
@@ -91,7 +91,7 @@ func TestSQLRepositoryGetDeliveryByIDNotFound(t *testing.T) {
 
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid, d.request_id, COALESCE(r.uid, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
 		       d.server_id, COALESCE(s.name, '') AS server_name,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
@@ -132,7 +132,7 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		WithArgs("delivery-uid", int64(4), int64(8), 1, StatusPending, nil, "", "", nil, nil, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid, d.request_id, COALESCE(r.uid, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
 		       d.server_id, COALESCE(s.name, '') AS server_name,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
@@ -182,7 +182,7 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		WithArgs(int64(10), StatusSucceeded, &httpStatus, `{"status":"ok"}`, "", &started, &finished, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid, d.request_id, COALESCE(r.uid, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
 		       d.server_id, COALESCE(s.name, '') AS server_name,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at

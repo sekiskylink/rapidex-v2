@@ -92,7 +92,7 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 		args = append(args, "%"+q.Filter+"%")
 		needle := fmt.Sprintf("$%d", len(args))
 		conditions = append(conditions, `(
-			r.uid ILIKE `+needle+` OR
+			r.uid::text ILIKE `+needle+` OR
 			COALESCE(r.source_system, '') ILIKE `+needle+` OR
 			COALESCE(r.correlation_id, '') ILIKE `+needle+` OR
 			COALESCE(r.batch_id, '') ILIKE `+needle+` OR
@@ -126,7 +126,7 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 	selectArgs := append([]any{}, args...)
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
-		SELECT r.id, r.uid, r.source_system, r.destination_server_id,
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,
@@ -160,7 +160,7 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
-		SELECT r.id, r.uid, r.source_system, r.destination_server_id,
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,

@@ -39,7 +39,6 @@ func Write(c *gin.Context, err error) {
 			appErr.Details = map[string]any{}
 		}
 		logging.ForContext(c.Request.Context()).Warn("request_failed",
-			slog.String("request_id", requestIDFromContext(c)),
 			slog.String("code", appErr.Code),
 			slog.String("message", appErr.Message),
 			slog.Int("status", appErr.HTTPStatus),
@@ -55,10 +54,10 @@ func Write(c *gin.Context, err error) {
 	}
 
 	logging.ForContext(c.Request.Context()).Error("request_failed",
-		slog.String("request_id", requestIDFromContext(c)),
 		slog.String("code", "INTERNAL_ERROR"),
 		slog.Int("status", http.StatusInternalServerError),
 		slog.String("error_type", fmt.Sprintf("%T", err)),
+		slog.String("error", err.Error()),
 	)
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"error": gin.H{
