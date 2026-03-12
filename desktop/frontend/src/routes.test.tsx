@@ -211,13 +211,26 @@ describe('app shell routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.includes('/api/v1/servers?')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
       }),
     )
 
     renderWithRouter('/servers', store)
 
-    expect(await screen.findByRole('heading', { name: 'Sukumad - Servers', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Servers', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
     expect(screen.getByRole('button', { name: 'Servers' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Requests' })).not.toBeInTheDocument()
   })

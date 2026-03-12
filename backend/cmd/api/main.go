@@ -123,7 +123,7 @@ func run() error {
 		}),
 	)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
-	sukumadServerService := server.NewService(server.NewRepository())
+	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	sukumadRequestService := requests.NewService(requests.NewRepository())
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository())
 	sukumadWorkerService := worker.NewService(worker.NewRepository())

@@ -67,6 +67,13 @@ export function AppShell() {
       pathname.startsWith('/permissions') ||
       pathname.startsWith('/audit'),
   )
+  const [sukumadExpanded, setSukumadExpanded] = React.useState(
+    pathname.startsWith('/servers') ||
+      pathname.startsWith('/requests') ||
+      pathname.startsWith('/deliveries') ||
+      pathname.startsWith('/jobs') ||
+      pathname.startsWith('/observability'),
+  )
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
   const firstNavItemRef = React.useRef<HTMLDivElement | null>(null)
@@ -96,6 +103,15 @@ export function AppShell() {
     ) {
       setAdminExpanded(true)
     }
+    if (
+      pathname.startsWith('/servers') ||
+      pathname.startsWith('/requests') ||
+      pathname.startsWith('/deliveries') ||
+      pathname.startsWith('/jobs') ||
+      pathname.startsWith('/observability')
+    ) {
+      setSukumadExpanded(true)
+    }
   }, [pathname])
 
   const navigation = buildNavigation(user)
@@ -104,6 +120,7 @@ export function AppShell() {
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
+    sukumad: <AccountBalanceWalletRoundedIcon fontSize="small" />,
     users: <GroupRoundedIcon fontSize="small" />,
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     permissions: <VpnKeyRoundedIcon fontSize="small" />,
@@ -206,6 +223,94 @@ export function AppShell() {
 
           return button
         })}
+        {navigation.sukumad.visible ? (
+          <>
+            <ListItemButton
+              aria-label="Toggle Sukumad menu"
+              aria-expanded={sukumadExpanded}
+              onClick={() => setSukumadExpanded((current) => !current)}
+              sx={{
+                minHeight: 46,
+                mb: 0.5,
+                justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+                borderRadius: 1.5,
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
+                {navIcons.sukumad}
+              </ListItemIcon>
+              <ListItemText
+                primary="Sukumad"
+                primaryTypographyProps={{
+                  noWrap: true,
+                  fontWeight: 600,
+                }}
+                sx={{
+                  opacity: collapsed && !isMobile ? 0 : 1,
+                  transition: theme.transitions.create('opacity', {
+                    duration: theme.transitions.duration.shortest,
+                  }),
+                }}
+              />
+              {!collapsed || isMobile ? (sukumadExpanded ? <ExpandLessRoundedIcon fontSize="small" /> : <ExpandMoreRoundedIcon fontSize="small" />) : null}
+            </ListItemButton>
+            {collapsed && !isMobile ? (
+              sukumadExpanded
+                ? navigation.sukumad.children.map((item) => {
+                    const selected = pathname.startsWith(item.path)
+                    return (
+                      <Tooltip key={item.key} title={item.label} placement="right">
+                        <ListItemButton
+                          selected={selected}
+                          onClick={() => handleNavItemClick(item.path)}
+                          aria-label={item.label}
+                          sx={{
+                            minHeight: 46,
+                            mb: 0.5,
+                            justifyContent: 'center',
+                            borderRadius: 1.5,
+                            pl: 1.5,
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 'auto' }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
+                        </ListItemButton>
+                      </Tooltip>
+                    )
+                  })
+                : null
+            ) : (
+              <Collapse in={sukumadExpanded} unmountOnExit>
+                {navigation.sukumad.children.map((item) => {
+                  const selected = pathname.startsWith(item.path)
+                  return (
+                    <ListItemButton
+                      key={item.key}
+                      selected={selected}
+                      onClick={() => handleNavItemClick(item.path)}
+                      aria-label={item.label}
+                      sx={{
+                        minHeight: 46,
+                        mb: 0.5,
+                        justifyContent: 'flex-start',
+                        borderRadius: 1.5,
+                        pl: 2.5,
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{
+                          noWrap: true,
+                          fontWeight: selected ? 600 : 500,
+                        }}
+                      />
+                    </ListItemButton>
+                  )
+                })}
+              </Collapse>
+            )}
+          </>
+        ) : null}
         {navigation.administration.visible ? (
           <>
             <ListItemButton

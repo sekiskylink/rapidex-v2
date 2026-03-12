@@ -24,11 +24,36 @@ type RouteDeps struct {
 }
 
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
-	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "servers", "/servers", rbac.PermissionServersRead, deps.ServerHandler.List)
+	registerServerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ServerHandler)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "requests", "/requests", rbac.PermissionRequestsRead, deps.RequestHandler.List)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "deliveries", "/deliveries", rbac.PermissionDeliveriesRead, deps.DeliveryHandler.List)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "jobs", "/jobs", rbac.PermissionJobsRead, deps.WorkerHandler.List)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "observability", "/observability", rbac.PermissionObservabilityRead, deps.ObservabilityHandler.List)
+}
+
+func registerServerRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *server.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/servers")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "servers"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionServersRead), handler.List)
+	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersRead), handler.Get)
+	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Create)
+	group.PUT("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Update)
+	group.DELETE("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Delete)
 }
 
 func registerListRoute(

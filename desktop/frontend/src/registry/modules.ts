@@ -53,7 +53,7 @@ export const moduleRegistry = [
   {
     id: 'servers',
     label: 'Servers',
-    navGroup: 'dashboard',
+    navGroup: 'sukumad',
     basePath: '/servers',
     permissions: ['servers.read', 'servers.write'],
     navItems: ['servers'],
@@ -64,7 +64,7 @@ export const moduleRegistry = [
   {
     id: 'requests',
     label: 'Requests',
-    navGroup: 'dashboard',
+    navGroup: 'sukumad',
     basePath: '/requests',
     permissions: ['requests.read', 'requests.write'],
     navItems: ['requests'],
@@ -75,7 +75,7 @@ export const moduleRegistry = [
   {
     id: 'deliveries',
     label: 'Deliveries',
-    navGroup: 'dashboard',
+    navGroup: 'sukumad',
     basePath: '/deliveries',
     permissions: ['deliveries.read', 'deliveries.write'],
     navItems: ['deliveries'],
@@ -86,7 +86,7 @@ export const moduleRegistry = [
   {
     id: 'jobs',
     label: 'Jobs',
-    navGroup: 'dashboard',
+    navGroup: 'sukumad',
     basePath: '/jobs',
     permissions: ['jobs.read', 'jobs.write'],
     navItems: ['jobs'],
@@ -97,7 +97,7 @@ export const moduleRegistry = [
   {
     id: 'observability',
     label: 'Observability',
-    navGroup: 'dashboard',
+    navGroup: 'sukumad',
     basePath: '/observability',
     permissions: ['observability.read'],
     navItems: ['observability'],

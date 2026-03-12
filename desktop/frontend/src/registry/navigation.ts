@@ -7,6 +7,7 @@ export type NavigationIconKey =
   | 'dashboard'
   | 'settings'
   | 'administration'
+  | 'sukumad'
   | 'users'
   | 'roles'
   | 'permissions'
@@ -16,7 +17,7 @@ export type NavigationIconKey =
   | 'deliveries'
   | 'jobs'
   | 'observability'
-export type NavigationGroupKey = 'dashboard' | 'administration' | 'settings'
+export type NavigationGroupKey = 'dashboard' | 'administration' | 'sukumad' | 'settings'
 
 export interface NavigationVisibilityContext {
   principal: SessionPrincipal | null | undefined
@@ -90,44 +91,52 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
     visibleWhen: ({ principal }) => hasAdminRole(principal) || hasPermission(principal, 'settings.write'),
   },
   {
-    id: 'servers',
-    label: 'Servers',
-    icon: 'servers',
-    path: '/servers',
-    group: 'dashboard',
-    requiredPermissions: ['servers.read', 'servers.write'],
-  },
-  {
-    id: 'requests',
-    label: 'Requests',
-    icon: 'requests',
-    path: '/requests',
-    group: 'dashboard',
-    requiredPermissions: ['requests.read', 'requests.write'],
-  },
-  {
-    id: 'deliveries',
-    label: 'Deliveries',
-    icon: 'deliveries',
-    path: '/deliveries',
-    group: 'dashboard',
-    requiredPermissions: ['deliveries.read', 'deliveries.write'],
-  },
-  {
-    id: 'jobs',
-    label: 'Jobs',
-    icon: 'jobs',
-    path: '/jobs',
-    group: 'dashboard',
-    requiredPermissions: ['jobs.read', 'jobs.write'],
-  },
-  {
-    id: 'observability',
-    label: 'Observability',
-    icon: 'observability',
-    path: '/observability',
-    group: 'dashboard',
-    requiredPermissions: ['observability.read'],
+    id: 'sukumad',
+    label: 'Sukumad',
+    icon: 'sukumad',
+    group: 'sukumad',
+    children: [
+      {
+        id: 'servers',
+        label: 'Servers',
+        icon: 'servers',
+        path: '/servers',
+        group: 'sukumad',
+        requiredPermissions: ['servers.read', 'servers.write'],
+      },
+      {
+        id: 'requests',
+        label: 'Requests',
+        icon: 'requests',
+        path: '/requests',
+        group: 'sukumad',
+        requiredPermissions: ['requests.read', 'requests.write'],
+      },
+      {
+        id: 'deliveries',
+        label: 'Deliveries',
+        icon: 'deliveries',
+        path: '/deliveries',
+        group: 'sukumad',
+        requiredPermissions: ['deliveries.read', 'deliveries.write'],
+      },
+      {
+        id: 'jobs',
+        label: 'Jobs',
+        icon: 'jobs',
+        path: '/jobs',
+        group: 'sukumad',
+        requiredPermissions: ['jobs.read', 'jobs.write'],
+      },
+      {
+        id: 'observability',
+        label: 'Observability',
+        icon: 'observability',
+        path: '/observability',
+        group: 'sukumad',
+        requiredPermissions: ['observability.read'],
+      },
+    ],
   },
 ]
 

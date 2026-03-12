@@ -74,6 +74,13 @@ export function AppShell() {
       pathname.startsWith('/permissions') ||
       pathname.startsWith('/audit'),
   )
+  const [sukumadExpanded, setSukumadExpanded] = React.useState(
+    pathname.startsWith('/servers') ||
+      pathname.startsWith('/requests') ||
+      pathname.startsWith('/deliveries') ||
+      pathname.startsWith('/jobs') ||
+      pathname.startsWith('/observability'),
+  )
 
   const navCollapsed = !isMobile && prefs.navCollapsed
   const drawerWidth = navCollapsed ? MINI_DRAWER_WIDTH : DRAWER_WIDTH
@@ -91,11 +98,21 @@ export function AppShell() {
     ) {
       setAdminExpanded(true)
     }
+    if (
+      pathname.startsWith('/servers') ||
+      pathname.startsWith('/requests') ||
+      pathname.startsWith('/deliveries') ||
+      pathname.startsWith('/jobs') ||
+      pathname.startsWith('/observability')
+    ) {
+      setSukumadExpanded(true)
+    }
   }, [pathname])
 
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
+    sukumad: <DnsRoundedIcon fontSize="small" />,
     users: <GroupRoundedIcon fontSize="small" />,
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     permissions: <VpnKeyRoundedIcon fontSize="small" />,
@@ -182,6 +199,75 @@ export function AppShell() {
             {!navCollapsed ? <ListItemText primary={item.label} /> : null}
           </ListItemButton>
         ))}
+        {navigation.sukumad.visible ? (
+          <>
+            <ListItemButton
+              aria-label="Toggle Sukumad menu"
+              aria-expanded={sukumadExpanded}
+              onClick={() => setSukumadExpanded((current) => !current)}
+              sx={{
+                borderRadius: 2,
+                mb: 0.5,
+                justifyContent: navCollapsed ? 'center' : 'flex-start',
+                px: navCollapsed ? 1 : 1.5,
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>
+                {navIcons.sukumad}
+              </ListItemIcon>
+              {!navCollapsed ? <ListItemText primary="Sukumad" /> : null}
+              {!navCollapsed ? (sukumadExpanded ? <ExpandLessRoundedIcon fontSize="small" /> : <ExpandMoreRoundedIcon fontSize="small" />) : null}
+            </ListItemButton>
+            {navCollapsed ? (
+              sukumadExpanded
+                ? navigation.sukumad.children.map((item) => (
+                    <ListItemButton
+                      key={item.key}
+                      selected={pathname.startsWith(item.path)}
+                      onClick={() => {
+                        void navigate({ to: item.path })
+                        setMobileOpen(false)
+                      }}
+                      sx={{
+                        borderRadius: 2,
+                        mb: 0.5,
+                        justifyContent: 'center',
+                        px: 1,
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                        {navIcons[item.key as keyof typeof navIcons]}
+                      </ListItemIcon>
+                    </ListItemButton>
+                  ))
+                : null
+            ) : (
+              <Collapse in={sukumadExpanded} unmountOnExit>
+                {navigation.sukumad.children.map((item) => (
+                  <ListItemButton
+                    key={item.key}
+                    selected={pathname.startsWith(item.path)}
+                    onClick={() => {
+                      void navigate({ to: item.path })
+                      setMobileOpen(false)
+                    }}
+                    sx={{
+                      borderRadius: 2,
+                      mb: 0.5,
+                      justifyContent: 'flex-start',
+                      px: 2.25,
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 34, justifyContent: 'center' }}>
+                      {navIcons[item.key as keyof typeof navIcons]}
+                    </ListItemIcon>
+                    <ListItemText primary={item.label} />
+                  </ListItemButton>
+                ))}
+              </Collapse>
+            )}
+          </>
+        ) : null}
         {navigation.administration.visible ? (
           <>
             <ListItemButton

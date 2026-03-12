@@ -1,5 +1,56 @@
 # Status
 
+## Milestone — Server Management (Complete)
+
+### What changed
+- Added the `integration_servers` migration in [backend/migrations/000013_create_integration_servers.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000013_create_integration_servers.up.sql) and [backend/migrations/000013_create_integration_servers.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000013_create_integration_servers.down.sql).
+- Replaced the Sukumad server placeholder backend with a real repository/service/handler implementation under [backend/internal/sukumad/server](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server):
+  - paginated list, detail, create, update, and delete support
+  - input validation and structured validation errors
+  - RBAC-enforced CRUD routing through the existing Gin router/middleware stack
+  - audit events for create, update, delete, suspend, and activate
+- Updated Sukumad backend route registration so `/api/v1/servers` is a full CRUD surface while the other Sukumad modules remain on their existing placeholder list routes.
+- Replaced the web placeholder Servers page with a real CRUD page in [web/src/pages/ServersPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/ServersPage.tsx):
+  - Data Grid list for server name, code, system type, base URL, async status, and suspended status
+  - create/edit dialogs with client-side validation
+  - delete and suspend/activate actions
+- Replaced the desktop placeholder Servers page with matching CRUD behavior in [desktop/frontend/src/pages/ServersPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/ServersPage.tsx), using backend APIs only.
+- Grouped Sukumad navigation under an explicit `Sukumad` menu in both clients while preserving the existing shell/router/navigation patterns:
+  - web shell/navigation and route access registry updated
+  - desktop registry-driven navigation and shell updated
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-12-milestone-2-server-management.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - [backend/internal/sukumad/server/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server/repository_test.go)
+  - [backend/internal/sukumad/server/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server/service_test.go)
+  - [backend/internal/sukumad/server/handler_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server/handler_test.go)
+  - updated [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go) for CRUD and permission coverage
+- Web:
+  - added [web/src/pages/servers-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/servers-page.test.tsx)
+  - updated [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx)
+  - updated [web/src/registry/registry.test.ts](/Users/sam/projects/go/sukumadpro/web/src/registry/registry.test.ts)
+- Desktop:
+  - added [desktop/frontend/src/pages/servers-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/servers-page.test.tsx)
+  - updated [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx)
+  - updated [desktop/frontend/src/registry/registry.test.ts](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/registry/registry.test.ts)
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && npm test -- --run` -> PASS
+  - `cd web && npm run build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+  - `cd desktop/frontend && npm run build` -> PASS
+
+### Remaining follow-ups
+- Requests, deliveries, jobs, and observability remain placeholder Sukumad surfaces and are now grouped under the same `Sukumad` navigation section as Servers.
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in frontend test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web and desktop build output.
+
 ## Milestone - SukumadPro Bootstrap (Complete)
 
 ### What changed
