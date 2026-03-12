@@ -25,7 +25,7 @@ type RouteDeps struct {
 
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerServerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ServerHandler)
-	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "requests", "/requests", rbac.PermissionRequestsRead, deps.RequestHandler.List)
+	registerRequestRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.RequestHandler)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "deliveries", "/deliveries", rbac.PermissionDeliveriesRead, deps.DeliveryHandler.List)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "jobs", "/jobs", rbac.PermissionJobsRead, deps.WorkerHandler.List)
 	registerListRoute(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, "observability", "/observability", rbac.PermissionObservabilityRead, deps.ObservabilityHandler.List)
@@ -54,6 +54,29 @@ func registerServerRoutes(
 	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Create)
 	group.PUT("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Update)
 	group.DELETE("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Delete)
+}
+
+func registerRequestRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *requests.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/requests")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "requests"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.List)
+	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.Get)
+	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.Create)
 }
 
 func registerListRoute(

@@ -9,7 +9,7 @@ BACKEND_LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.B
 .PHONY: backend-build backend-test backend-run desktop-build desktop-dev desktop-test web-build web-dev web-test ci deps migrate-up migrate-down migrate-create
 
 backend-build:
-	cd backend && mkdir -p bin && GOCACHE=/tmp/go-build go build -ldflags "$(BACKEND_LDFLAGS)" -o bin/basepro-api ./cmd/api
+	cd backend && mkdir -p bin && GOCACHE=/tmp/go-build go build -ldflags "$(BACKEND_LDFLAGS)" -o bin/sukumad ./cmd/api
 
 backend-test:
 	cd backend && GOCACHE=/tmp/go-build go test ./...

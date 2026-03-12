@@ -1,5 +1,53 @@
 # Status
 
+## Milestone — Request Lifecycle (Complete)
+
+### What changed
+- Added the `exchange_requests` migration in [backend/migrations/000014_create_exchange_requests.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000014_create_exchange_requests.up.sql) and [backend/migrations/000014_create_exchange_requests.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000014_create_exchange_requests.down.sql).
+- Replaced the Sukumad request placeholder backend with a real repository/service/handler implementation under [backend/internal/sukumad/request](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request):
+  - paginated request listing with search, sort, and status filtering
+  - request detail lookup with destination-server enrichment
+  - request creation with JSON payload validation, metadata capture, initial `pending` status, and UID generation
+  - RBAC-enforced `GET /api/v1/requests`, `GET /api/v1/requests/:id`, and `POST /api/v1/requests`
+  - audit logging for `request.created`
+- Updated Sukumad backend route registration and API bootstrap wiring so the request module uses the existing Gin router, middleware, SQL repository wiring, and BasePro audit stack.
+- Replaced the web placeholder Requests page with a real request lifecycle UI in [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx):
+  - request list grid for UID, destination server, status, created time, and correlation ID
+  - permission-aware `Create Request` flow using backend APIs
+  - request detail inspection through the existing `/requests` route using [web/src/pages/RequestForm.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestForm.tsx) and [web/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestDetailPage.tsx)
+- Replaced the desktop placeholder Requests page with matching API-backed functionality in [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx), with parity components in [desktop/frontend/src/pages/RequestForm.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestForm.tsx) and [desktop/frontend/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestDetailPage.tsx).
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-12-milestone-3-request-lifecycle.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - [backend/internal/sukumad/request/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/repository_test.go)
+  - [backend/internal/sukumad/request/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service_test.go)
+  - [backend/internal/sukumad/request/handler_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/handler_test.go)
+  - updated [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go) for request create/list/detail and permission coverage
+- Web:
+  - added [web/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/requests-page.test.tsx)
+  - updated [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx)
+- Desktop:
+  - added [desktop/frontend/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/requests-page.test.tsx)
+  - updated [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx)
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && npm test -- --run` -> PASS
+  - `cd web && npm run build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && npm test -- --run` -> PASS
+  - `cd desktop/frontend && npm run build` -> PASS
+
+### Remaining follow-ups
+- Request status transition endpoints and background processing are still pending later milestones; requests currently enter the lifecycle in `pending` state only.
+- Deliveries, jobs, and observability remain separate placeholder or partial Sukumad surfaces outside this milestone’s request lifecycle scope.
+- Existing non-blocking MUI jsdom `anchorEl` warnings remain in frontend test logs.
+- Existing non-blocking Vite third-party `'use client'` and chunk-size warnings remain in web and desktop build output.
+
 ## Milestone — Server Management (Complete)
 
 ### What changed

@@ -115,6 +115,73 @@ func TestServerRoutesCRUD(t *testing.T) {
 	}
 }
 
+func TestRequestRoutesCreateListAndGet(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(95, "request-writer", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		95: {
+			rbac.PermissionRequestsRead,
+			rbac.PermissionRequestsWrite,
+		},
+	})
+	requestHandler := requests.NewHandler(requests.NewService(requests.NewRepository(), audit.NewService(&fakeAuditRepo{})))
+
+	router := newRouter(AppDeps{
+		JWTManager:           jwt,
+		RBACService:          rbacService,
+		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
+		RequestHandler:       requestHandler,
+		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
+		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
+		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
+	})
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/requests", bytes.NewReader([]byte(`{
+		"sourceSystem":"emr",
+		"destinationServerId":3,
+		"correlationId":"corr-123",
+		"payload":{"trackedEntity":"123"},
+		"metadata":{"priority":"high"}
+	}`)))
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createReq.Header.Set("Content-Type", "application/json")
+	createW := httptest.NewRecorder()
+	router.ServeHTTP(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", createW.Code, createW.Body.String())
+	}
+
+	var created map[string]any
+	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	id := int(created["id"].(float64))
+	idStr := strconv.Itoa(id)
+	if created["status"] != requests.StatusPending {
+		t.Fatalf("expected pending status, got %+v", created)
+	}
+	if _, ok := created["uid"].(string); !ok {
+		t.Fatalf("expected uid in response, got %+v", created)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/requests?page=1&pageSize=25", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listW := httptest.NewRecorder()
+	router.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from list, got %d body=%s", listW.Code, listW.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+idStr, nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getW := httptest.NewRecorder()
+	router.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from get, got %d body=%s", getW.Code, getW.Body.String())
+	}
+}
+
 func TestSukumadRoutesRequireMatchingReadPermission(t *testing.T) {
 	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
 	token, _, _ := jwt.GenerateAccessToken(92, "limited-reader", time.Now().UTC())
@@ -167,6 +234,34 @@ func TestServerRoutesRequireWritePermissionForMutation(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for missing servers.write permission, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequestRoutesRequireWritePermissionForMutation(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(96, "request-reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		96: {rbac.PermissionRequestsRead},
+	})
+
+	router := newRouter(AppDeps{
+		JWTManager:           jwt,
+		RBACService:          rbacService,
+		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
+		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
+		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
+		WorkerHandler:        worker.NewHandler(worker.NewService(worker.NewRepository())),
+		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository())),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests", bytes.NewReader([]byte(`{"destinationServerId":1,"payload":{}}`)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for missing requests.write permission, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
