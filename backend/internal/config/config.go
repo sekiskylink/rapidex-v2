@@ -65,6 +65,40 @@ type Config struct {
 		Flags map[string]bool `mapstructure:"flags"`
 	} `mapstructure:"modules"`
 	Sukumad struct {
+		SubmissionWindow struct {
+			Default struct {
+				StartHour int `mapstructure:"start_hour"`
+				EndHour   int `mapstructure:"end_hour"`
+			} `mapstructure:"default"`
+			Destinations map[string]struct {
+				StartHour int `mapstructure:"start_hour"`
+				EndHour   int `mapstructure:"end_hour"`
+			} `mapstructure:"destinations"`
+		} `mapstructure:"submission_window"`
+		Retry struct {
+			Default struct {
+				MaxRetries int `mapstructure:"max_retries"`
+			} `mapstructure:"default"`
+			Destinations map[string]struct {
+				MaxRetries int `mapstructure:"max_retries"`
+			} `mapstructure:"destinations"`
+		} `mapstructure:"retry"`
+		ResponseFilter struct {
+			Default struct {
+				AllowedContentTypes []string `mapstructure:"allowed_content_types"`
+				AllowUnknown        bool     `mapstructure:"allow_unknown"`
+			} `mapstructure:"default"`
+			Destinations map[string]struct {
+				AllowedContentTypes []string `mapstructure:"allowed_content_types"`
+				AllowUnknown        bool     `mapstructure:"allow_unknown"`
+			} `mapstructure:"destinations"`
+		} `mapstructure:"response_filter"`
+		Retention struct {
+			Enabled         bool `mapstructure:"enabled"`
+			DryRun          bool `mapstructure:"dry_run"`
+			TerminalAgeDays int `mapstructure:"terminal_age_days"`
+			BatchSize       int `mapstructure:"batch_size"`
+		} `mapstructure:"retention"`
 		RateLimit struct {
 			Default struct {
 				RequestsPerSecond float64 `mapstructure:"requests_per_second"`
@@ -186,6 +220,18 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.cors.allow_credentials", false)
 	v.SetDefault("seed.enable_dev_bootstrap", false)
 	v.SetDefault("modules.flags", map[string]bool{})
+	v.SetDefault("sukumad.submission_window.default.start_hour", 0)
+	v.SetDefault("sukumad.submission_window.default.end_hour", 0)
+	v.SetDefault("sukumad.submission_window.destinations", map[string]any{})
+	v.SetDefault("sukumad.retry.default.max_retries", 2)
+	v.SetDefault("sukumad.retry.destinations", map[string]any{})
+	v.SetDefault("sukumad.response_filter.default.allowed_content_types", []string{"application/json", "application/*+json", "application/xml", "text/xml"})
+	v.SetDefault("sukumad.response_filter.default.allow_unknown", false)
+	v.SetDefault("sukumad.response_filter.destinations", map[string]any{})
+	v.SetDefault("sukumad.retention.enabled", false)
+	v.SetDefault("sukumad.retention.dry_run", true)
+	v.SetDefault("sukumad.retention.terminal_age_days", 30)
+	v.SetDefault("sukumad.retention.batch_size", 100)
 	v.SetDefault("sukumad.rate_limit.default.requests_per_second", 2.0)
 	v.SetDefault("sukumad.rate_limit.default.burst", 2)
 	v.SetDefault("sukumad.rate_limit.destinations", map[string]any{})
@@ -224,6 +270,26 @@ func defaultConfig() Config {
 	cfg.Security.CORS.AllowCredentials = false
 	cfg.Seed.EnableDevBootstrap = false
 	cfg.Modules.Flags = map[string]bool{}
+	cfg.Sukumad.SubmissionWindow.Default.StartHour = 0
+	cfg.Sukumad.SubmissionWindow.Default.EndHour = 0
+	cfg.Sukumad.SubmissionWindow.Destinations = map[string]struct {
+		StartHour int `mapstructure:"start_hour"`
+		EndHour   int `mapstructure:"end_hour"`
+	}{}
+	cfg.Sukumad.Retry.Default.MaxRetries = 2
+	cfg.Sukumad.Retry.Destinations = map[string]struct {
+		MaxRetries int `mapstructure:"max_retries"`
+	}{}
+	cfg.Sukumad.ResponseFilter.Default.AllowedContentTypes = []string{"application/json", "application/*+json", "application/xml", "text/xml"}
+	cfg.Sukumad.ResponseFilter.Default.AllowUnknown = false
+	cfg.Sukumad.ResponseFilter.Destinations = map[string]struct {
+		AllowedContentTypes []string `mapstructure:"allowed_content_types"`
+		AllowUnknown        bool     `mapstructure:"allow_unknown"`
+	}{}
+	cfg.Sukumad.Retention.Enabled = false
+	cfg.Sukumad.Retention.DryRun = true
+	cfg.Sukumad.Retention.TerminalAgeDays = 30
+	cfg.Sukumad.Retention.BatchSize = 100
 	cfg.Sukumad.RateLimit.Default.RequestsPerSecond = 2
 	cfg.Sukumad.RateLimit.Default.Burst = 2
 	cfg.Sukumad.RateLimit.Destinations = map[string]struct {
@@ -330,6 +396,28 @@ func validate(cfg Config) error {
 	if cfg.Sukumad.RateLimit.Default.Burst <= 0 {
 		return errors.New("sukumad.rate_limit.default.burst must be > 0")
 	}
+	if err := validateWindow(cfg.Sukumad.SubmissionWindow.Default.StartHour, cfg.Sukumad.SubmissionWindow.Default.EndHour, "sukumad.submission_window.default"); err != nil {
+		return err
+	}
+	for key, destination := range cfg.Sukumad.SubmissionWindow.Destinations {
+		if err := validateWindow(destination.StartHour, destination.EndHour, "sukumad.submission_window.destinations."+key); err != nil {
+			return err
+		}
+	}
+	if cfg.Sukumad.Retry.Default.MaxRetries < 0 {
+		return errors.New("sukumad.retry.default.max_retries must be >= 0")
+	}
+	for key, destination := range cfg.Sukumad.Retry.Destinations {
+		if destination.MaxRetries < 0 {
+			return fmt.Errorf("sukumad.retry.destinations.%s.max_retries must be >= 0", key)
+		}
+	}
+	if cfg.Sukumad.Retention.TerminalAgeDays <= 0 {
+		return errors.New("sukumad.retention.terminal_age_days must be > 0")
+	}
+	if cfg.Sukumad.Retention.BatchSize <= 0 {
+		return errors.New("sukumad.retention.batch_size must be > 0")
+	}
 	for key, destination := range cfg.Sukumad.RateLimit.Destinations {
 		if strings.TrimSpace(key) == "" {
 			return errors.New("sukumad.rate_limit.destinations must not contain empty keys")
@@ -343,6 +431,22 @@ func validate(cfg Config) error {
 	}
 	if err := moduleenablement.ValidateOverrides(cfg.Modules.Flags); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateWindow(start int, end int, prefix string) error {
+	if start == 0 && end == 0 {
+		return nil
+	}
+	if start < 0 || start > 23 {
+		return fmt.Errorf("%s.start_hour must be between 0 and 23", prefix)
+	}
+	if end < 0 || end > 23 {
+		return fmt.Errorf("%s.end_hour must be between 0 and 23", prefix)
+	}
+	if start == end {
+		return fmt.Errorf("%s start_hour and end_hour must differ", prefix)
 	}
 	return nil
 }

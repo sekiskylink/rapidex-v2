@@ -300,14 +300,34 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 			continue
 		}
 		if _, err := s.RecordPoll(ctx, RecordPollInput{
-			AsyncTaskID:  task.ID,
-			StatusCode:   result.StatusCode,
-			RemoteStatus: result.RemoteStatus,
-			ResponseBody: result.ResponseBody,
-			ErrorMessage: result.ErrorMessage,
-			DurationMS:   result.DurationMS,
+			AsyncTaskID:           task.ID,
+			StatusCode:            result.StatusCode,
+			RemoteStatus:          result.RemoteStatus,
+			ResponseBody:          result.ResponseBody,
+			ResponseContentType:   result.ResponseContentType,
+			ResponseBodyFiltered:  result.ResponseBodyFiltered,
+			ErrorMessage:          result.ErrorMessage,
+			DurationMS:            result.DurationMS,
 		}); err != nil {
 			return err
+		}
+		if result.ResponseBodyFiltered {
+			s.appendEvent(ctx, traceevent.WriteInput{
+				RequestID:         &task.RequestID,
+				DeliveryAttemptID: &task.DeliveryAttemptID,
+				AsyncTaskID:       &task.ID,
+				EventType:         "async.poll.filtered_content_type",
+				EventLevel:        "warning",
+				Message:           traceevent.Message("Async poll content filtered", "Async task %s poll response content was filtered", task.UID),
+				CorrelationID:     task.CorrelationID,
+				Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+				SourceComponent:   "async.poller",
+				EventData: map[string]any{
+					"asyncTaskUid":         task.UID,
+					"responseContentType":  result.ResponseContentType,
+					"filtered":             true,
+				},
+			})
 		}
 		if _, err := s.UpdateTaskStatus(ctx, UpdateStatusInput{
 			ID:             task.ID,

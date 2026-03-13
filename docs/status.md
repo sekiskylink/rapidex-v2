@@ -1,5 +1,93 @@
 # Status
 
+## Milestone — Sukumad Addons Implementation (Complete)
+
+### What changed
+- Implemented the addon behaviors from [docs/notes/sukumad-addons.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-addons.md) vertically across backend, web, and desktop.
+- Backend request processing now persists and hydrates fan-out target and dependency detail through normal request reads under:
+  - [backend/internal/sukumad/request/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/repository.go)
+  - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+  - [backend/internal/sukumad/request/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/types.go)
+- Request status is now a target-derived roll-up across fan-out combinations instead of a minimal single-destination projection:
+  - blocked/deferred targets keep the request blocked
+  - processing targets keep the request processing
+  - any failed target fails the request
+  - all succeeded targets complete the request
+- Delivery and async persistence now keep the addon response-filtering fields durable in SQL and memory repositories:
+  - [backend/internal/sukumad/delivery/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository.go)
+  - [backend/internal/sukumad/async/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository.go)
+- Added a dedicated retention module under [backend/internal/sukumad/retention](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/retention) and wired a retention worker definition through:
+  - [backend/internal/sukumad/worker/retention.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/retention.go)
+  - [backend/internal/sukumad/worker/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/types.go)
+  - [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go)
+  - [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml)
+  - [backend/cmd/api/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/main.go)
+- Extended request visibility on both clients:
+  - [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx)
+  - [web/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestDetailPage.tsx)
+  - [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx)
+  - [desktop/frontend/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestDetailPage.tsx)
+  - both now expose blocked/deferred reasons, fan-out target counts, target lists, and dependency lists without introducing a parallel shell or route structure
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-sukumad-addons-implementation.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/retention/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/retention/service_test.go)
+  - updated [backend/internal/sukumad/request/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service_test.go) for fan-out target roll-up behavior
+  - updated [backend/internal/sukumad/request/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/repository_test.go) for target/dependency hydration
+  - updated [backend/internal/sukumad/delivery/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository_test.go) for persisted response-filter fields
+  - updated [backend/internal/sukumad/async/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository_test.go) for async poll response filtering fields
+- Web:
+  - updated [web/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/requests-page.test.tsx) for blocked/deferred/fan-out request visibility
+- Desktop:
+  - updated [desktop/frontend/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/requests-page.test.tsx) for the matching blocked/deferred/fan-out visibility
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/request ./internal/sukumad/delivery ./internal/sukumad/async ./internal/sukumad/retention ./internal/sukumad/worker` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Frontend test logs still include the existing non-blocking MUI jsdom `anchorEl` warnings and one existing MUI X `rowCount` warning in mocked route tests.
+- Frontend build logs still include existing third-party `'use client'` and chunk-size warnings.
+- Request roll-up intentionally stays coarse for now; optional-target semantics and richer partial-success UI can be layered later without changing the current persistence model.
+
+## Milestone — Sukumad Addons Design Note (Documentation)
+
+### What changed
+- Added [docs/notes/sukumad-addons.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-addons.md) to document refined requirements and implementation-ready architecture for:
+  - submission windows / allowed delivery periods
+  - max retries
+  - expected response content-type filtering
+  - retention / purge strategy
+  - request dependencies
+  - multi-destination / fan-out delivery
+- The note is aligned with the current Sukumad request-processing reality:
+  - request row persisted first
+  - first delivery attempt created immediately
+  - first submission triggered inline today
+  - retries modeled as new delivery attempts
+  - durable async state already in place
+  - future worker-driven execution kept compatible by reusing shared gating rules
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-sukumad-addons-design.md` (gitignored; not for commit)
+
+### Tests and verification
+- Documentation-only change.
+- No code, build, or test commands were run in this step.
+
+### Remaining follow-ups
+- The addons remain design-only until a later milestone implements schema, service, API, and UI changes vertically across backend, web, and desktop.
+
 ## Milestone — Sukumad Rate-Limiting Correction (Complete)
 
 ### What changed

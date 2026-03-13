@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -39,12 +40,20 @@ type recordRow struct {
 	CorrelationID     string     `db:"correlation_id"`
 	ServerID          int64      `db:"server_id"`
 	ServerName        string     `db:"server_name"`
+	ServerCode        string     `db:"server_code"`
 	SystemType        string     `db:"system_type"`
 	AttemptNumber     int        `db:"attempt_number"`
 	Status            string     `db:"status"`
 	HTTPStatus        *int       `db:"http_status"`
 	ResponseBody      string     `db:"response_body"`
+	ResponseContentType string   `db:"response_content_type"`
+	ResponseBodyFiltered bool    `db:"response_body_filtered"`
+	ResponseSummary   json.RawMessage `db:"response_summary"`
 	ErrorMessage      string     `db:"error_message"`
+	SubmissionHoldReason string  `db:"submission_hold_reason"`
+	NextEligibleAt    *time.Time `db:"next_eligible_at"`
+	HoldPolicySource  string     `db:"hold_policy_source"`
+	TerminalReason    string     `db:"terminal_reason"`
 	AsyncTaskID       *int64     `db:"async_task_id"`
 	AsyncTaskUID      string     `db:"async_task_uid"`
 	AsyncCurrentState string     `db:"async_current_state"`
@@ -148,8 +157,12 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code, COALESCE(s.system_type, '') AS system_type,
+		       d.attempt_number, d.status, d.http_status, COALESCE(d.response_body, '') AS response_body,
+		       COALESCE(d.response_content_type, '') AS response_content_type, d.response_body_filtered, d.response_summary,
+		       COALESCE(d.error_message, '') AS error_message,
+		       COALESCE(d.submission_hold_reason, '') AS submission_hold_reason, d.next_eligible_at, COALESCE(d.hold_policy_source, '') AS hold_policy_source,
+		       COALESCE(d.terminal_reason, '') AS terminal_reason,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
 		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
 		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
@@ -184,8 +197,12 @@ func (r *SQLRepository) GetDeliveryByID(ctx context.Context, id int64) (Record, 
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code, COALESCE(s.system_type, '') AS system_type,
+		       d.attempt_number, d.status, d.http_status, COALESCE(d.response_body, '') AS response_body,
+		       COALESCE(d.response_content_type, '') AS response_content_type, d.response_body_filtered, d.response_summary,
+		       COALESCE(d.error_message, '') AS error_message,
+		       COALESCE(d.submission_hold_reason, '') AS submission_hold_reason, d.next_eligible_at, COALESCE(d.hold_policy_source, '') AS hold_policy_source,
+		       COALESCE(d.terminal_reason, '') AS terminal_reason,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
 		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
 		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
@@ -205,13 +222,18 @@ func (r *SQLRepository) GetDeliveryByID(ctx context.Context, id int64) (Record, 
 }
 
 func (r *SQLRepository) CreateDelivery(ctx context.Context, params CreateParams) (Record, error) {
+	responseSummary, err := json.Marshal(cloneJSONMap(params.ResponseSummary))
+	if err != nil {
+		return Record{}, fmt.Errorf("marshal delivery response summary: %w", err)
+	}
 	var id int64
 	if err := r.db.GetContext(ctx, &id, `
 		INSERT INTO delivery_attempts (
-			uid, request_id, server_id, attempt_number, status, http_status, response_body, error_message,
-			started_at, finished_at, retry_at, created_at, updated_at
+			uid, request_id, server_id, attempt_number, status, http_status, response_body, response_content_type,
+			response_body_filtered, response_summary, error_message, submission_hold_reason, next_eligible_at, hold_policy_source,
+			terminal_reason, started_at, finished_at, retry_at, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
 		RETURNING id
 	`,
 		params.UID,
@@ -221,7 +243,14 @@ func (r *SQLRepository) CreateDelivery(ctx context.Context, params CreateParams)
 		params.Status,
 		params.HTTPStatus,
 		params.ResponseBody,
+		params.ResponseContentType,
+		params.ResponseBodyFiltered,
+		string(responseSummary),
 		params.ErrorMessage,
+		params.SubmissionHoldReason,
+		params.NextEligibleAt,
+		params.HoldPolicySource,
+		params.TerminalReason,
 		params.StartedAt,
 		params.FinishedAt,
 		params.RetryAt,
@@ -233,16 +262,27 @@ func (r *SQLRepository) CreateDelivery(ctx context.Context, params CreateParams)
 }
 
 func (r *SQLRepository) UpdateDelivery(ctx context.Context, params UpdateParams) (Record, error) {
+	responseSummary, err := json.Marshal(cloneJSONMap(params.ResponseSummary))
+	if err != nil {
+		return Record{}, fmt.Errorf("marshal delivery response summary: %w", err)
+	}
 	var id int64
 	if err := r.db.GetContext(ctx, &id, `
 		UPDATE delivery_attempts
 		SET status = $2,
 		    http_status = $3,
 		    response_body = $4,
-		    error_message = $5,
-		    started_at = $6,
-		    finished_at = $7,
-		    retry_at = $8,
+		    response_content_type = $5,
+		    response_body_filtered = $6,
+		    response_summary = $7::jsonb,
+		    error_message = $8,
+		    submission_hold_reason = $9,
+		    next_eligible_at = $10,
+		    hold_policy_source = $11,
+		    terminal_reason = $12,
+		    started_at = $13,
+		    finished_at = $14,
+		    retry_at = $15,
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id
@@ -251,7 +291,14 @@ func (r *SQLRepository) UpdateDelivery(ctx context.Context, params UpdateParams)
 		params.Status,
 		params.HTTPStatus,
 		params.ResponseBody,
+		params.ResponseContentType,
+		params.ResponseBodyFiltered,
+		string(responseSummary),
 		params.ErrorMessage,
+		params.SubmissionHoldReason,
+		params.NextEligibleAt,
+		params.HoldPolicySource,
+		params.TerminalReason,
 		params.StartedAt,
 		params.FinishedAt,
 		params.RetryAt,
@@ -291,6 +338,10 @@ func resolveSortColumn(sortField string) string {
 }
 
 func decodeRow(row recordRow) Record {
+	responseSummary := map[string]any{}
+	if len(row.ResponseSummary) > 0 {
+		_ = json.Unmarshal(row.ResponseSummary, &responseSummary)
+	}
 	return Record{
 		ID:                row.ID,
 		UID:               row.UID,
@@ -299,12 +350,20 @@ func decodeRow(row recordRow) Record {
 		CorrelationID:     row.CorrelationID,
 		ServerID:          row.ServerID,
 		ServerName:        row.ServerName,
+		ServerCode:        row.ServerCode,
 		SystemType:        row.SystemType,
 		AttemptNumber:     row.AttemptNumber,
 		Status:            row.Status,
 		HTTPStatus:        cloneIntPtr(row.HTTPStatus),
 		ResponseBody:      row.ResponseBody,
+		ResponseContentType: row.ResponseContentType,
+		ResponseBodyFiltered: row.ResponseBodyFiltered,
+		ResponseSummary:   responseSummary,
 		ErrorMessage:      row.ErrorMessage,
+		SubmissionHoldReason: row.SubmissionHoldReason,
+		NextEligibleAt:    cloneTimePtr(row.NextEligibleAt),
+		HoldPolicySource:  row.HoldPolicySource,
+		TerminalReason:    row.TerminalReason,
 		SubmissionMode:    submissionMode(row.AsyncTaskID),
 		AsyncTaskID:       cloneInt64Ptr(row.AsyncTaskID),
 		AsyncTaskUID:      row.AsyncTaskUID,
@@ -446,23 +505,31 @@ func (r *memoryRepository) CreateDelivery(_ context.Context, params CreateParams
 	r.nextID++
 	now := time.Now().UTC()
 	record := Record{
-		ID:             id,
-		UID:            params.UID,
-		RequestID:      params.RequestID,
-		RequestUID:     fmt.Sprintf("request-%d", params.RequestID),
-		ServerID:       params.ServerID,
-		ServerName:     fmt.Sprintf("Server #%d", params.ServerID),
-		AttemptNumber:  params.AttemptNumber,
-		Status:         params.Status,
-		HTTPStatus:     cloneIntPtr(params.HTTPStatus),
-		ResponseBody:   params.ResponseBody,
-		ErrorMessage:   params.ErrorMessage,
-		SubmissionMode: "synchronous",
-		StartedAt:      cloneTimePtr(params.StartedAt),
-		FinishedAt:     cloneTimePtr(params.FinishedAt),
-		RetryAt:        cloneTimePtr(params.RetryAt),
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                   id,
+		UID:                  params.UID,
+		RequestID:            params.RequestID,
+		RequestUID:           fmt.Sprintf("request-%d", params.RequestID),
+		ServerID:             params.ServerID,
+		ServerName:           fmt.Sprintf("Server #%d", params.ServerID),
+		ServerCode:           fmt.Sprintf("server-%d", params.ServerID),
+		AttemptNumber:        params.AttemptNumber,
+		Status:               params.Status,
+		HTTPStatus:           cloneIntPtr(params.HTTPStatus),
+		ResponseBody:         params.ResponseBody,
+		ResponseContentType:  params.ResponseContentType,
+		ResponseBodyFiltered: params.ResponseBodyFiltered,
+		ResponseSummary:      cloneJSONMap(params.ResponseSummary),
+		ErrorMessage:         params.ErrorMessage,
+		SubmissionHoldReason: params.SubmissionHoldReason,
+		NextEligibleAt:       cloneTimePtr(params.NextEligibleAt),
+		HoldPolicySource:     params.HoldPolicySource,
+		TerminalReason:       params.TerminalReason,
+		SubmissionMode:       "synchronous",
+		StartedAt:            cloneTimePtr(params.StartedAt),
+		FinishedAt:           cloneTimePtr(params.FinishedAt),
+		RetryAt:              cloneTimePtr(params.RetryAt),
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil
@@ -479,7 +546,14 @@ func (r *memoryRepository) UpdateDelivery(_ context.Context, params UpdateParams
 	item.Status = params.Status
 	item.HTTPStatus = cloneIntPtr(params.HTTPStatus)
 	item.ResponseBody = params.ResponseBody
+	item.ResponseContentType = params.ResponseContentType
+	item.ResponseBodyFiltered = params.ResponseBodyFiltered
+	item.ResponseSummary = cloneJSONMap(params.ResponseSummary)
 	item.ErrorMessage = params.ErrorMessage
+	item.SubmissionHoldReason = params.SubmissionHoldReason
+	item.NextEligibleAt = cloneTimePtr(params.NextEligibleAt)
+	item.HoldPolicySource = params.HoldPolicySource
+	item.TerminalReason = params.TerminalReason
 	item.StartedAt = cloneTimePtr(params.StartedAt)
 	item.FinishedAt = cloneTimePtr(params.FinishedAt)
 	item.RetryAt = cloneTimePtr(params.RetryAt)
@@ -514,6 +588,8 @@ func compareOptionalTimes(a *time.Time, b *time.Time) int {
 func cloneRecord(input Record) Record {
 	input.HTTPStatus = cloneIntPtr(input.HTTPStatus)
 	input.AsyncTaskID = cloneInt64Ptr(input.AsyncTaskID)
+	input.ResponseSummary = cloneJSONMap(input.ResponseSummary)
+	input.NextEligibleAt = cloneTimePtr(input.NextEligibleAt)
 	input.StartedAt = cloneTimePtr(input.StartedAt)
 	input.FinishedAt = cloneTimePtr(input.FinishedAt)
 	input.RetryAt = cloneTimePtr(input.RetryAt)

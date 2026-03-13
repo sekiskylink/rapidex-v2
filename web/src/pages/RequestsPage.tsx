@@ -38,6 +38,8 @@ function statusColor(status: string): 'default' | 'warning' | 'success' | 'error
   switch (status) {
     case 'pending':
       return 'warning'
+    case 'blocked':
+      return 'warning'
     case 'processing':
       return 'info'
     case 'completed':
@@ -240,6 +242,22 @@ export function RequestsPage() {
         renderCell: (params: GridRenderCellParams<RequestRow, string>) => (
           <Chip label={params.value ?? 'unknown'} size="small" color={statusColor(params.value ?? '')} />
         ),
+      },
+      {
+        field: 'targets',
+        headerName: 'Targets',
+        minWidth: 140,
+        valueGetter: (_value, row) => (Array.isArray(row.targets) && row.targets.length > 0 ? String(row.targets.length) : '1'),
+      },
+      {
+        field: 'statusReason',
+        headerName: 'Blocked / Reason',
+        minWidth: 220,
+        flex: 1,
+        valueGetter: (_value, row) => {
+          const deferred = row.deferredUntil ? ` until ${formatDate(row.deferredUntil)}` : ''
+          return row.statusReason ? `${row.statusReason}${deferred}` : row.deferredUntil ? formatDate(row.deferredUntil) : '-'
+        },
       },
       {
         field: 'latestAsyncState',

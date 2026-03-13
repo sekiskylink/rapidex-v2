@@ -28,6 +28,7 @@ import (
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/retention"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
@@ -149,17 +150,29 @@ func run() error {
 		WithRequestStatusUpdater(sukumadRequestService)
 	sukumadAsyncService := asyncjobs.NewService(asyncjobs.NewRepository(database), auditService)
 	sukumadWorkerService := worker.NewService(worker.NewRepository(database), auditService)
+	sukumadRetentionService := retention.NewService(retention.NewRepository(database), auditService)
 	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithEventWriter(sukumadObservabilityService)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
+	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
 	_ = worker.NewBootstrap(
 		sukumadWorkerService,
 		worker.NewSendDefinition(nil),
 		worker.NewPollDefinition(sukumadAsyncService, sukumadDHIS2Service, 10),
 		worker.NewRetryDefinition(nil),
+		worker.NewRetentionDefinition(
+			sukumadRetentionService,
+			cfg.Sukumad.Retention.Enabled,
+			func() time.Time {
+				nextCfg := config.Get()
+				return time.Now().UTC().Add(-time.Duration(nextCfg.Sukumad.Retention.TerminalAgeDays) * 24 * time.Hour)
+			},
+			cfg.Sukumad.Retention.BatchSize,
+			cfg.Sukumad.Retention.DryRun,
+		),
 	)
 	bootstrapService := bootstrap.NewService(
 		bootstrap.AppInfo{

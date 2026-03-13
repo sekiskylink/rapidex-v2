@@ -4,15 +4,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
 
 func interpretSubmission(response *http.Response, body []byte, useAsync bool) SubmissionResult {
 	statusCode := response.StatusCode
+	contentType := response.Header.Get("Content-Type")
 	result := SubmissionResult{
-		HTTPStatus:   intPtr(statusCode),
-		ResponseBody: strings.TrimSpace(string(body)),
+		HTTPStatus:         intPtr(statusCode),
+		ResponseBody:       strings.TrimSpace(string(body)),
+		ResponseContentType: contentType,
 	}
 
 	payload := decodeBody(body)
@@ -67,10 +70,11 @@ func interpretPollResponse(response *http.Response, body []byte) PollResult {
 	}
 
 	result := PollResult{
-		StatusCode:     intPtr(statusCode),
-		ResponseBody:   strings.TrimSpace(string(body)),
-		RemoteStatus:   remoteStatus,
-		RemoteResponse: payload,
+		StatusCode:         intPtr(statusCode),
+		ResponseBody:       strings.TrimSpace(string(body)),
+		ResponseContentType: response.Header.Get("Content-Type"),
+		RemoteStatus:       remoteStatus,
+		RemoteResponse:     payload,
 	}
 
 	switch {
@@ -90,6 +94,41 @@ func interpretPollResponse(response *http.Response, body []byte) PollResult {
 	}
 
 	return result
+}
+
+func summarizeBody(contentType string, body []byte) map[string]any {
+	text := strings.TrimSpace(string(body))
+	summary := map[string]any{
+		"contentType": strings.TrimSpace(contentType),
+		"bodyLength":  len(body),
+	}
+	if text == "" {
+		return summary
+	}
+	snippet := text
+	if len(snippet) > 240 {
+		snippet = snippet[:240]
+	}
+	if looksLikeHTML(contentType, text) {
+		summary["looksLikeHTML"] = true
+		snippet = stripHTML(snippet)
+	}
+	summary["snippet"] = strings.TrimSpace(snippet)
+	return summary
+}
+
+func stripHTML(value string) string {
+	re := regexp.MustCompile(`<[^>]+>`)
+	cleaned := re.ReplaceAllString(value, " ")
+	return strings.Join(strings.Fields(cleaned), " ")
+}
+
+func looksLikeHTML(contentType string, body string) bool {
+	if strings.Contains(strings.ToLower(contentType), "html") {
+		return true
+	}
+	trimmed := strings.ToLower(strings.TrimSpace(body))
+	return strings.HasPrefix(trimmed, "<!doctype html") || strings.HasPrefix(trimmed, "<html")
 }
 
 func decodeBody(body []byte) map[string]any {

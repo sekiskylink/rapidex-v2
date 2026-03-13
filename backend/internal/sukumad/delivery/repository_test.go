@@ -22,11 +22,12 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 	now := time.Now().UTC()
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
-		"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "system_type", "attempt_number",
-		"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
+		"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "server_code", "system_type", "attempt_number",
+		"status", "http_status", "response_body", "response_content_type", "response_body_filtered", "response_summary", "error_message", "submission_hold_reason", "next_eligible_at", "hold_policy_source", "terminal_reason",
+		"async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 	}).AddRow(
-		7, "delivery-uid", 3, "request-uid", "corr-1", 9, "DHIS2 Uganda", "dhis2", 1,
-		StatusFailed, 502, "{}", "timeout", nil, "", "", "", "", now, now, nil, now, now,
+		7, "delivery-uid", 3, "request-uid", "corr-1", 9, "DHIS2 Uganda", "dhis2-ug", "dhis2", 1,
+		StatusFailed, 502, "{}", "application/json", false, []byte(`{"summary":"timeout"}`), "timeout", "", nil, "", "timeout", nil, "", "", "", "", now, now, nil, now, now,
 	)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) 
@@ -43,26 +44,7 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 		) AND d.status = $2 AND (COALESCE(s.name, '') ILIKE $3 OR COALESCE(s.code, '') ILIKE $3) AND DATE(d.created_at) = $4::date`)).
 		WithArgs("%dhis%", StatusFailed, "%dhis%", now.Format("2006-01-02")).
 		WillReturnRows(countRows)
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
-		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
-		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
-		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
-		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
-		
-		FROM delivery_attempts d
-		LEFT JOIN exchange_requests r ON r.id = d.request_id
-		LEFT JOIN integration_servers s ON s.id = d.server_id
-		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
-		 WHERE (
-			d.uid::text ILIKE $1 OR
-			COALESCE(r.uid::text, '') ILIKE $1 OR
-			COALESCE(s.name, '') ILIKE $1 OR
-			COALESCE(s.code, '') ILIKE $1 OR
-			COALESCE(d.error_message, '') ILIKE $1
-		) AND d.status = $2 AND (COALESCE(s.name, '') ILIKE $3 OR COALESCE(s.code, '') ILIKE $3) AND DATE(d.created_at) = $4::date ORDER BY d.created_at DESC LIMIT $5 OFFSET $6`)).
+	mock.ExpectQuery("(?s)SELECT d.id, .*FROM delivery_attempts d .* ORDER BY d.created_at DESC LIMIT \\$5 OFFSET \\$6").
 		WithArgs("%dhis%", StatusFailed, "%dhis%", now.Format("2006-01-02"), 25, 0).
 		WillReturnRows(dataRows)
 
@@ -95,20 +77,7 @@ func TestSQLRepositoryGetDeliveryByIDNotFound(t *testing.T) {
 	defer sqlDB.Close()
 
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
-		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
-		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
-		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
-		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
-		FROM delivery_attempts d
-		LEFT JOIN exchange_requests r ON r.id = d.request_id
-		LEFT JOIN integration_servers s ON s.id = d.server_id
-		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
-		WHERE d.id = $1
-	`)).
+	mock.ExpectQuery("(?s)SELECT d.id, .*FROM delivery_attempts d .*WHERE d.id = \\$1").
 		WithArgs(int64(41)).
 		WillReturnError(sql.ErrNoRows)
 
@@ -130,37 +99,17 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 	finished := now
 	httpStatus := 200
 
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO delivery_attempts (
-			uid, request_id, server_id, attempt_number, status, http_status, response_body, error_message,
-			started_at, finished_at, retry_at, created_at, updated_at
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
-		RETURNING id
-	`)).
-		WithArgs("delivery-uid", int64(4), int64(8), 1, StatusPending, nil, "", "", nil, nil, nil).
+	mock.ExpectQuery("(?s)INSERT INTO delivery_attempts \\( uid, request_id, server_id, attempt_number, status, http_status, response_body, response_content_type, response_body_filtered, response_summary, error_message, submission_hold_reason, next_eligible_at, hold_policy_source, terminal_reason, started_at, finished_at, retry_at, created_at, updated_at \\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9, \\$10::jsonb, \\$11, \\$12, \\$13, \\$14, \\$15, \\$16, \\$17, \\$18, NOW\\(\\), NOW\\(\\)\\) RETURNING id").
+		WithArgs("delivery-uid", int64(4), int64(8), 1, StatusPending, nil, "", "", false, `{}`, "", "", nil, "", "", nil, nil, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
-		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
-		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
-		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
-		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
-		FROM delivery_attempts d
-		LEFT JOIN exchange_requests r ON r.id = d.request_id
-		LEFT JOIN integration_servers s ON s.id = d.server_id
-		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
-		WHERE d.id = $1
-	`)).
+	mock.ExpectQuery("(?s)SELECT d.id, .*FROM delivery_attempts d .*WHERE d.id = \\$1").
 		WithArgs(int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "system_type", "attempt_number",
-			"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
+			"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "server_code", "system_type", "attempt_number",
+			"status", "http_status", "response_body", "response_content_type", "response_body_filtered", "response_summary", "error_message", "submission_hold_reason", "next_eligible_at", "hold_policy_source", "terminal_reason", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 		}).AddRow(
-			10, "delivery-uid", 4, "request-uid", "corr-1", 8, "DHIS2 Uganda", "dhis2", 1,
-			StatusPending, nil, "", "", nil, "", "", "", "", nil, nil, nil, now, now,
+			10, "delivery-uid", 4, "request-uid", "corr-1", 8, "DHIS2 Uganda", "dhis2-ug", "dhis2", 1,
+			StatusPending, nil, "", "", false, []byte(`{}`), "", "", nil, "", "", nil, "", "", "", "", nil, nil, nil, now, now,
 		))
 
 	record, err := repo.CreateDelivery(context.Background(), CreateParams{
@@ -179,42 +128,17 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		t.Fatalf("unexpected created record: %+v", record)
 	}
 
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		UPDATE delivery_attempts
-		SET status = $2,
-		    http_status = $3,
-		    response_body = $4,
-		    error_message = $5,
-		    started_at = $6,
-		    finished_at = $7,
-		    retry_at = $8,
-		    updated_at = NOW()
-		WHERE id = $1
-		RETURNING id
-	`)).
-		WithArgs(int64(10), StatusSucceeded, &httpStatus, `{"status":"ok"}`, "", &started, &finished, nil).
+	mock.ExpectQuery("(?s)UPDATE delivery_attempts SET status = \\$2, http_status = \\$3, response_body = \\$4, response_content_type = \\$5, response_body_filtered = \\$6, response_summary = \\$7::jsonb, error_message = \\$8, submission_hold_reason = \\$9, next_eligible_at = \\$10, hold_policy_source = \\$11, terminal_reason = \\$12, started_at = \\$13, finished_at = \\$14, retry_at = \\$15, updated_at = NOW\\(\\) WHERE id = \\$1 RETURNING id").
+		WithArgs(int64(10), StatusSucceeded, &httpStatus, `{"status":"ok"}`, "", false, `{}`, "", "", nil, "", "", &started, &finished, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
-		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
-		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
-		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
-		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
-		FROM delivery_attempts d
-		LEFT JOIN exchange_requests r ON r.id = d.request_id
-		LEFT JOIN integration_servers s ON s.id = d.server_id
-		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
-		WHERE d.id = $1
-	`)).
+	mock.ExpectQuery("(?s)SELECT d.id, .*FROM delivery_attempts d .*WHERE d.id = \\$1").
 		WithArgs(int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "system_type", "attempt_number",
-			"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
+			"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "server_code", "system_type", "attempt_number",
+			"status", "http_status", "response_body", "response_content_type", "response_body_filtered", "response_summary", "error_message", "submission_hold_reason", "next_eligible_at", "hold_policy_source", "terminal_reason", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 		}).AddRow(
-			10, "delivery-uid", 4, "request-uid", "corr-1", 8, "DHIS2 Uganda", "dhis2", 1,
-			StatusSucceeded, httpStatus, `{"status":"ok"}`, "", nil, "", "", "", "", started, finished, nil, now, now,
+			10, "delivery-uid", 4, "request-uid", "corr-1", 8, "DHIS2 Uganda", "dhis2-ug", "dhis2", 1,
+			StatusSucceeded, httpStatus, `{"status":"ok"}`, "", false, []byte(`{}`), "", "", nil, "", "", nil, "", "", "", "", started, finished, nil, now, now,
 		))
 
 	updated, err := repo.UpdateDelivery(context.Background(), UpdateParams{

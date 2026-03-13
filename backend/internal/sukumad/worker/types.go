@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	TypeSend  = "send"
-	TypePoll  = "poll"
-	TypeRetry = "retry"
+	TypeSend      = "send"
+	TypePoll      = "poll"
+	TypeRetry     = "retry"
+	TypeRetention = "retention"
 )
 
 const (

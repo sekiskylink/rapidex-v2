@@ -44,6 +44,8 @@ type recordRow struct {
 	PayloadFormat          string          `db:"payload_format"`
 	URLSuffix              string          `db:"url_suffix"`
 	Status                 string          `db:"status"`
+	StatusReason           string          `db:"status_reason"`
+	DeferredUntil          *time.Time      `db:"deferred_until"`
 	Extras                 json.RawMessage `db:"extras"`
 	CreatedAt              time.Time       `db:"created_at"`
 	UpdatedAt              time.Time       `db:"updated_at"`
@@ -147,7 +149,7 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status,
+		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -174,6 +176,9 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 	if err != nil {
 		return ListResult{}, err
 	}
+	if err := r.hydrateRequests(ctx, items); err != nil {
+		return ListResult{}, err
+	}
 
 	return ListResult{
 		Items:    items,
@@ -189,7 +194,7 @@ func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, e
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status,
+		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -218,7 +223,15 @@ func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, e
 		}
 		return Record{}, fmt.Errorf("get exchange request: %w", err)
 	}
-	return decodeRow(row)
+	record, err := decodeRow(row)
+	if err != nil {
+		return Record{}, err
+	}
+	items := []Record{record}
+	if err := r.hydrateRequests(ctx, items); err != nil {
+		return Record{}, err
+	}
+	return items[0], nil
 }
 
 func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) (Record, error) {
@@ -231,9 +244,9 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 	if err := r.db.GetContext(ctx, &id, `
 		INSERT INTO exchange_requests (
 			uid, source_system, destination_server_id, batch_id, correlation_id, idempotency_key,
-			payload_body, payload_format, url_suffix, status, extras, created_at, updated_at, created_by
+			payload_body, payload_format, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW(), NOW(), $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW(), $14)
 		RETURNING id
 	`,
 		params.UID,
@@ -246,6 +259,8 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 		params.PayloadFormat,
 		nullIfEmpty(params.URLSuffix),
 		params.Status,
+		nullIfEmpty(params.StatusReason),
+		params.DeferredUntil,
 		string(extras),
 		params.CreatedBy,
 	); err != nil {
@@ -255,15 +270,17 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 	return r.GetRequestByID(ctx, id)
 }
 
-func (r *SQLRepository) UpdateRequestStatus(ctx context.Context, id int64, status string) (Record, error) {
+func (r *SQLRepository) UpdateRequestStatus(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error) {
 	var updatedID int64
 	if err := r.db.GetContext(ctx, &updatedID, `
 		UPDATE exchange_requests
 		SET status = $2,
+		    status_reason = NULLIF($3, ''),
+		    deferred_until = $4,
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id
-	`, id, status); err != nil {
+	`, id, status, reason, deferredUntil); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Record{}, sql.ErrNoRows
 		}
@@ -321,6 +338,8 @@ func decodeRow(row recordRow) (Record, error) {
 		PayloadFormat:          row.PayloadFormat,
 		URLSuffix:              row.URLSuffix,
 		Status:                 row.Status,
+		StatusReason:           row.StatusReason,
+		DeferredUntil:          cloneTimePtr(row.DeferredUntil),
 		Extras:                 extras,
 		CreatedAt:              row.CreatedAt,
 		UpdatedAt:              row.UpdatedAt,
@@ -336,6 +355,164 @@ func decodeRow(row recordRow) (Record, error) {
 		LatestAsyncPollURL:     row.LatestAsyncPollURL,
 		AwaitingAsync:          row.LatestAsyncTaskID != nil && row.LatestAsyncState != "" && row.LatestAsyncState != StatusCompleted && row.LatestAsyncState != StatusFailed,
 	}, nil
+}
+
+func (r *SQLRepository) hydrateRequests(ctx context.Context, items []Record) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	requestIDs := make([]int64, 0, len(items))
+	indexByID := make(map[int64]int, len(items))
+	for index := range items {
+		requestIDs = append(requestIDs, items[index].ID)
+		indexByID[items[index].ID] = index
+	}
+
+	targetsByRequestID, err := r.listTargetsByRequestIDs(ctx, requestIDs)
+	if err != nil {
+		return err
+	}
+	dependenciesByRequestID, err := r.listDependenciesByRequestIDs(ctx, requestIDs)
+	if err != nil {
+		return err
+	}
+
+	for requestID, targets := range targetsByRequestID {
+		items[indexByID[requestID]].Targets = targets
+	}
+	for requestID, dependencies := range dependenciesByRequestID {
+		items[indexByID[requestID]].Dependencies = dependencies
+	}
+	return nil
+}
+
+func (r *SQLRepository) listTargetsByRequestIDs(ctx context.Context, requestIDs []int64) (map[int64][]TargetRecord, error) {
+	query, args, err := sqlx.In(`
+		SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code,
+		       t.target_kind, t.priority, t.status, COALESCE(t.blocked_reason, '') AS blocked_reason, t.deferred_until, t.last_released_at,
+		       ld.id AS latest_delivery_id,
+		       COALESCE(ld.uid, '') AS latest_delivery_uid,
+		       COALESCE(ld.status, '') AS latest_delivery_status,
+		       a.id AS latest_async_task_id,
+		       COALESCE(a.uid::text, '') AS latest_async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS latest_async_state,
+		       COALESCE(a.remote_job_id, '') AS latest_async_remote_job_id,
+		       COALESCE(a.poll_url, '') AS latest_async_poll_url,
+		       t.created_at, t.updated_at
+		FROM request_targets t
+		LEFT JOIN integration_servers s ON s.id = t.server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = t.request_id
+			  AND d.server_id = t.server_id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
+		WHERE t.request_id IN (?)
+		ORDER BY t.request_id ASC, t.priority ASC, t.id ASC
+	`, requestIDs)
+	if err != nil {
+		return nil, fmt.Errorf("build request target hydration query: %w", err)
+	}
+	query = r.db.Rebind(query)
+
+	type targetRow struct {
+		ID                    int64      `db:"id"`
+		UID                   string     `db:"uid"`
+		RequestID             int64      `db:"request_id"`
+		ServerID              int64      `db:"server_id"`
+		ServerName            string     `db:"server_name"`
+		ServerCode            string     `db:"server_code"`
+		TargetKind            string     `db:"target_kind"`
+		Priority              int        `db:"priority"`
+		Status                string     `db:"status"`
+		BlockedReason         string     `db:"blocked_reason"`
+		DeferredUntil         *time.Time `db:"deferred_until"`
+		LastReleasedAt        *time.Time `db:"last_released_at"`
+		LatestDeliveryID      *int64     `db:"latest_delivery_id"`
+		LatestDeliveryUID     string     `db:"latest_delivery_uid"`
+		LatestDeliveryStatus  string     `db:"latest_delivery_status"`
+		LatestAsyncTaskID     *int64     `db:"latest_async_task_id"`
+		LatestAsyncTaskUID    string     `db:"latest_async_task_uid"`
+		LatestAsyncState      string     `db:"latest_async_state"`
+		LatestAsyncRemoteJobID string    `db:"latest_async_remote_job_id"`
+		LatestAsyncPollURL    string     `db:"latest_async_poll_url"`
+		CreatedAt             time.Time  `db:"created_at"`
+		UpdatedAt             time.Time  `db:"updated_at"`
+	}
+
+	rows := []targetRow{}
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, fmt.Errorf("hydrate request targets: %w", err)
+	}
+
+	result := make(map[int64][]TargetRecord, len(requestIDs))
+	for _, row := range rows {
+		target := TargetRecord{
+			ID:                    row.ID,
+			UID:                   row.UID,
+			RequestID:             row.RequestID,
+			ServerID:              row.ServerID,
+			ServerName:            row.ServerName,
+			ServerCode:            row.ServerCode,
+			TargetKind:            row.TargetKind,
+			Priority:              row.Priority,
+			Status:                row.Status,
+			BlockedReason:         row.BlockedReason,
+			DeferredUntil:         cloneTimePtr(row.DeferredUntil),
+			LastReleasedAt:        cloneTimePtr(row.LastReleasedAt),
+			LatestDeliveryID:      cloneInt64Ptr(row.LatestDeliveryID),
+			LatestDeliveryUID:     row.LatestDeliveryUID,
+			LatestDeliveryStatus:  row.LatestDeliveryStatus,
+			LatestAsyncTaskID:     cloneInt64Ptr(row.LatestAsyncTaskID),
+			LatestAsyncTaskUID:    row.LatestAsyncTaskUID,
+			LatestAsyncState:      row.LatestAsyncState,
+			LatestAsyncRemoteJobID: row.LatestAsyncRemoteJobID,
+			LatestAsyncPollURL:    row.LatestAsyncPollURL,
+			AwaitingAsync:         row.LatestAsyncTaskID != nil && row.LatestAsyncState != "" && row.LatestAsyncState != StatusCompleted && row.LatestAsyncState != StatusFailed,
+			CreatedAt:             row.CreatedAt,
+			UpdatedAt:             row.UpdatedAt,
+		}
+		result[row.RequestID] = append(result[row.RequestID], target)
+	}
+
+	return result, nil
+}
+
+func (r *SQLRepository) listDependenciesByRequestIDs(ctx context.Context, requestIDs []int64) (map[int64][]DependencyRef, error) {
+	query, args, err := sqlx.In(`
+		SELECT d.request_id, d.depends_on_request_id, COALESCE(r.uid::text, '') AS request_uid,
+		       COALESCE(dep.uid::text, '') AS depends_on_uid, COALESCE(dep.status, '') AS status,
+		       COALESCE(dep.status_reason, '') AS status_reason, dep.deferred_until,
+		       COALESCE(s.name, '') AS depends_on_destination_server_name
+		FROM request_dependencies d
+		LEFT JOIN exchange_requests r ON r.id = d.request_id
+		LEFT JOIN exchange_requests dep ON dep.id = d.depends_on_request_id
+		LEFT JOIN integration_servers s ON s.id = dep.destination_server_id
+		WHERE d.request_id IN (?)
+		ORDER BY d.request_id ASC, d.depends_on_request_id ASC
+	`, requestIDs)
+	if err != nil {
+		return nil, fmt.Errorf("build request dependency hydration query: %w", err)
+	}
+	query = r.db.Rebind(query)
+
+	rows := []DependencyRef{}
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, fmt.Errorf("hydrate request dependencies: %w", err)
+	}
+
+	result := make(map[int64][]DependencyRef, len(requestIDs))
+	for _, row := range rows {
+		row.DeferredUntil = cloneTimePtr(row.DeferredUntil)
+		result[row.RequestID] = append(result[row.RequestID], row)
+	}
+	return result, nil
 }
 
 func decodeExtras(raw json.RawMessage) (map[string]any, error) {
@@ -465,9 +642,11 @@ func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams)
 		IdempotencyKey:        params.IdempotencyKey,
 		PayloadBody:           params.PayloadBody,
 		PayloadFormat:         params.PayloadFormat,
-		URLSuffix:             params.URLSuffix,
-		Status:                params.Status,
-		Extras:                cloneExtras(params.Extras),
+			URLSuffix:             params.URLSuffix,
+			Status:                params.Status,
+			StatusReason:          params.StatusReason,
+			DeferredUntil:         cloneTimePtr(params.DeferredUntil),
+			Extras:                cloneExtras(params.Extras),
 		CreatedAt:             now,
 		UpdatedAt:             now,
 		CreatedBy:             params.CreatedBy,
@@ -477,7 +656,7 @@ func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams)
 	return cloneRecord(record), nil
 }
 
-func (r *memoryRepository) UpdateRequestStatus(_ context.Context, id int64, status string) (Record, error) {
+func (r *memoryRepository) UpdateRequestStatus(_ context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -486,9 +665,253 @@ func (r *memoryRepository) UpdateRequestStatus(_ context.Context, id int64, stat
 		return Record{}, sql.ErrNoRows
 	}
 	item.Status = status
+	item.StatusReason = reason
+	item.DeferredUntil = cloneTimePtr(deferredUntil)
 	item.UpdatedAt = time.Now().UTC()
 	r.items[id] = item
 	return cloneRecord(item), nil
+}
+
+func (r *SQLRepository) CreateTargets(ctx context.Context, requestID int64, targets []CreateTargetParams) ([]TargetRecord, error) {
+	items := make([]TargetRecord, 0, len(targets))
+	for _, target := range targets {
+		var item TargetRecord
+		if err := r.db.GetContext(ctx, &item, `
+			INSERT INTO request_targets (uid, request_id, server_id, target_kind, priority, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+			RETURNING id, uid::text AS uid, request_id, server_id, target_kind, priority, status, blocked_reason, deferred_until, last_released_at, created_at, updated_at
+		`, target.UID, requestID, target.ServerID, target.TargetKind, target.Priority, target.Status); err != nil {
+			return nil, fmt.Errorf("create request target: %w", err)
+		}
+		items = append(items, item)
+	}
+	return r.ListTargetsByRequest(ctx, requestID)
+}
+
+func (r *SQLRepository) ListTargetsByRequest(ctx context.Context, requestID int64) ([]TargetRecord, error) {
+	rowsByRequestID, err := r.listTargetsByRequestIDs(ctx, []int64{requestID})
+	if err != nil {
+		return nil, fmt.Errorf("list request targets: %w", err)
+	}
+	rows, ok := rowsByRequestID[requestID]
+	if !ok {
+		return []TargetRecord{}, nil
+	}
+	return rows, nil
+}
+
+func (r *SQLRepository) UpdateTarget(ctx context.Context, params UpdateTargetParams) (TargetRecord, error) {
+	var touched int
+	if err := r.db.GetContext(ctx, &touched, `
+		UPDATE request_targets
+		SET status = $3,
+		    blocked_reason = $4,
+		    deferred_until = $5,
+		    last_released_at = $6,
+		    updated_at = NOW()
+		WHERE request_id = $1
+		  AND server_id = $2
+		RETURNING 1
+	`, params.RequestID, params.ServerID, params.Status, params.BlockedReason, params.DeferredUntil, params.LastReleasedAt); err != nil {
+		return TargetRecord{}, fmt.Errorf("update request target: %w", err)
+	}
+	rowsByRequestID, err := r.listTargetsByRequestIDs(ctx, []int64{params.RequestID})
+	if err != nil {
+		return TargetRecord{}, fmt.Errorf("list request targets: %w", err)
+	}
+	for _, item := range rowsByRequestID[params.RequestID] {
+		if item.ServerID == params.ServerID {
+			return item, nil
+		}
+	}
+	return TargetRecord{}, sql.ErrNoRows
+}
+
+func (r *SQLRepository) CreateDependencies(ctx context.Context, requestID int64, dependencyIDs []int64) error {
+	for _, dependencyID := range dependencyIDs {
+		if _, err := r.db.ExecContext(ctx, `
+			INSERT INTO request_dependencies (request_id, depends_on_request_id, created_at)
+			VALUES ($1, $2, NOW())
+		`, requestID, dependencyID); err != nil {
+			return fmt.Errorf("create request dependency: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *SQLRepository) ListDependencies(ctx context.Context, requestID int64) ([]DependencyRef, error) {
+	rows := []DependencyRef{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT d.request_id, d.depends_on_request_id, COALESCE(r.uid::text, '') AS request_uid,
+		       COALESCE(dep.uid::text, '') AS depends_on_uid, COALESCE(dep.status, '') AS status
+		FROM request_dependencies d
+		LEFT JOIN exchange_requests r ON r.id = d.request_id
+		LEFT JOIN exchange_requests dep ON dep.id = d.depends_on_request_id
+		WHERE d.request_id = $1
+		ORDER BY d.depends_on_request_id ASC
+	`, requestID); err != nil {
+		return nil, fmt.Errorf("list request dependencies: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *SQLRepository) ListDependents(ctx context.Context, dependencyRequestID int64) ([]DependencyRef, error) {
+	rows := []DependencyRef{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT d.request_id, d.depends_on_request_id, COALESCE(r.uid::text, '') AS request_uid,
+		       COALESCE(dep.uid::text, '') AS depends_on_uid, COALESCE(r.status, '') AS status
+		FROM request_dependencies d
+		LEFT JOIN exchange_requests r ON r.id = d.request_id
+		LEFT JOIN exchange_requests dep ON dep.id = d.depends_on_request_id
+		WHERE d.depends_on_request_id = $1
+		ORDER BY d.request_id ASC
+	`, dependencyRequestID); err != nil {
+		return nil, fmt.Errorf("list dependent requests: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *SQLRepository) GetDependencyStatuses(ctx context.Context, requestID int64) ([]DependencyStatus, error) {
+	rows := []DependencyStatus{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT dep.id AS request_id, dep.uid::text AS request_uid, dep.status, COALESCE(dep.status_reason, '') AS status_reason
+		FROM request_dependencies d
+		JOIN exchange_requests dep ON dep.id = d.depends_on_request_id
+		WHERE d.request_id = $1
+		ORDER BY dep.id ASC
+	`, requestID); err != nil {
+		return nil, fmt.Errorf("get dependency statuses: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *SQLRepository) DependencyPathExists(ctx context.Context, fromRequestID int64, toRequestID int64) (bool, error) {
+	var exists bool
+	if err := r.db.GetContext(ctx, &exists, `
+		WITH RECURSIVE dependency_chain AS (
+			SELECT depends_on_request_id
+			FROM request_dependencies
+			WHERE request_id = $1
+			UNION
+			SELECT d.depends_on_request_id
+			FROM request_dependencies d
+			JOIN dependency_chain dc ON dc.depends_on_request_id = d.request_id
+		)
+		SELECT EXISTS(SELECT 1 FROM dependency_chain WHERE depends_on_request_id = $2)
+	`, fromRequestID, toRequestID); err != nil {
+		return false, fmt.Errorf("check dependency path: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *memoryRepository) CreateTargets(_ context.Context, requestID int64, targets []CreateTargetParams) ([]TargetRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item := r.items[requestID]
+	now := time.Now().UTC()
+	item.Targets = make([]TargetRecord, 0, len(targets))
+	for index, target := range targets {
+		item.Targets = append(item.Targets, TargetRecord{
+			ID:         int64(index + 1),
+			UID:        target.UID,
+			RequestID:  requestID,
+			ServerID:   target.ServerID,
+			ServerName: fmt.Sprintf("Server #%d", target.ServerID),
+			ServerCode: fmt.Sprintf("server-%d", target.ServerID),
+			TargetKind: target.TargetKind,
+			Priority:   target.Priority,
+			Status:     target.Status,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		})
+	}
+	r.items[requestID] = item
+	return append([]TargetRecord{}, item.Targets...), nil
+}
+
+func (r *memoryRepository) ListTargetsByRequest(_ context.Context, requestID int64) ([]TargetRecord, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]TargetRecord{}, r.items[requestID].Targets...), nil
+}
+
+func (r *memoryRepository) UpdateTarget(_ context.Context, params UpdateTargetParams) (TargetRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item, ok := r.items[params.RequestID]
+	if !ok {
+		return TargetRecord{}, sql.ErrNoRows
+	}
+	for index := range item.Targets {
+		if item.Targets[index].ServerID != params.ServerID {
+			continue
+		}
+		item.Targets[index].Status = params.Status
+		item.Targets[index].BlockedReason = params.BlockedReason
+		item.Targets[index].DeferredUntil = cloneTimePtr(params.DeferredUntil)
+		item.Targets[index].LastReleasedAt = cloneTimePtr(params.LastReleasedAt)
+		item.Targets[index].UpdatedAt = time.Now().UTC()
+		r.items[params.RequestID] = item
+		return item.Targets[index], nil
+	}
+	return TargetRecord{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) CreateDependencies(_ context.Context, requestID int64, dependencyIDs []int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item := r.items[requestID]
+	item.Dependencies = make([]DependencyRef, 0, len(dependencyIDs))
+	for _, dependencyID := range dependencyIDs {
+		dependency := r.items[dependencyID]
+		item.Dependencies = append(item.Dependencies, DependencyRef{
+			RequestID:                  requestID,
+			DependsOnRequestID:         dependencyID,
+			RequestUID:                 item.UID,
+			DependsOnUID:               dependency.UID,
+			Status:                     dependency.Status,
+			StatusReason:               dependency.StatusReason,
+			DeferredUntil:              cloneTimePtr(dependency.DeferredUntil),
+			DependsOnDestinationServerName: dependency.DestinationServerName,
+		})
+	}
+	r.items[requestID] = item
+	return nil
+}
+
+func (r *memoryRepository) ListDependencies(_ context.Context, requestID int64) ([]DependencyRef, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]DependencyRef{}, r.items[requestID].Dependencies...), nil
+}
+
+func (r *memoryRepository) ListDependents(_ context.Context, dependencyRequestID int64) ([]DependencyRef, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	items := []DependencyRef{}
+	for _, item := range r.items {
+		for _, dependency := range item.Dependencies {
+			if dependency.DependsOnRequestID == dependencyRequestID {
+				items = append(items, dependency)
+			}
+		}
+	}
+	return items, nil
+}
+
+func (r *memoryRepository) GetDependencyStatuses(_ context.Context, requestID int64) ([]DependencyStatus, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	statuses := []DependencyStatus{}
+	for _, dependency := range r.items[requestID].Dependencies {
+		record := r.items[dependency.DependsOnRequestID]
+		statuses = append(statuses, DependencyStatus{RequestID: record.ID, RequestUID: record.UID, Status: record.Status, StatusReason: record.StatusReason})
+	}
+	return statuses, nil
+}
+
+func (r *memoryRepository) DependencyPathExists(_ context.Context, fromRequestID int64, toRequestID int64) (bool, error) {
+	return fromRequestID == toRequestID, nil
 }
 
 func compareTimes(a time.Time, b time.Time) int {
@@ -506,10 +929,42 @@ func cloneRecord(input Record) Record {
 	input.Payload = append(json.RawMessage(nil), input.Payload...)
 	input.LatestDeliveryID = cloneInt64Ptr(input.LatestDeliveryID)
 	input.LatestAsyncTaskID = cloneInt64Ptr(input.LatestAsyncTaskID)
+	input.DeferredUntil = cloneTimePtr(input.DeferredUntil)
+	input.Targets = cloneTargets(input.Targets)
+	input.Dependencies = cloneDependencies(input.Dependencies)
 	return input
 }
 
+func cloneTargets(input []TargetRecord) []TargetRecord {
+	items := make([]TargetRecord, 0, len(input))
+	for _, item := range input {
+		item.DeferredUntil = cloneTimePtr(item.DeferredUntil)
+		item.LastReleasedAt = cloneTimePtr(item.LastReleasedAt)
+		item.LatestDeliveryID = cloneInt64Ptr(item.LatestDeliveryID)
+		item.LatestAsyncTaskID = cloneInt64Ptr(item.LatestAsyncTaskID)
+		items = append(items, item)
+	}
+	return items
+}
+
+func cloneDependencies(input []DependencyRef) []DependencyRef {
+	items := make([]DependencyRef, 0, len(input))
+	for _, item := range input {
+		item.DeferredUntil = cloneTimePtr(item.DeferredUntil)
+		items = append(items, item)
+	}
+	return items
+}
+
 func cloneInt64Ptr(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func cloneTimePtr(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}

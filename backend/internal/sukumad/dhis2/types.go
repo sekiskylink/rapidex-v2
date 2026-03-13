@@ -15,6 +15,9 @@ type SubmissionInput struct {
 type SubmissionResult struct {
 	HTTPStatus     *int
 	ResponseBody   string
+	ResponseContentType string
+	ResponseBodyFiltered bool
+	ResponseSummary map[string]any
 	ErrorMessage   string
 	RemoteJobID    string
 	PollURL        string
@@ -30,6 +33,9 @@ type PollResult struct {
 	RemoteStatus   string
 	TerminalState  string
 	ResponseBody   string
+	ResponseContentType string
+	ResponseBodyFiltered bool
+	ResponseSummary map[string]any
 	ErrorMessage   string
 	NextPollAt     *time.Time
 	RemoteResponse map[string]any

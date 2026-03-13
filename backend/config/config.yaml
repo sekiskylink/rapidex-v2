@@ -61,6 +61,29 @@ modules:
   flags: {}
 
 sukumad:
+  submission_window:
+    default:
+      start_hour: 0
+      end_hour: 0
+    destinations: {}
+  retry:
+    default:
+      max_retries: 2
+    destinations: {}
+  response_filter:
+    default:
+      allowed_content_types:
+        - "application/json"
+        - "application/*+json"
+        - "application/xml"
+        - "text/xml"
+      allow_unknown: false
+    destinations: {}
+  retention:
+    enabled: false
+    dry_run: true
+    terminal_age_days: 30
+    batch_size: 100
   rate_limit:
     default:
       requests_per_second: 2

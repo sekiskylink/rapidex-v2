@@ -30,21 +30,32 @@ type Service struct {
 		SetProcessing(context.Context, int64) error
 		SetCompleted(context.Context, int64) error
 		SetFailed(context.Context, int64) error
+		SetBlocked(context.Context, int64, string, *time.Time) error
+	}
+	targetUpdater interface {
+		SetTargetPending(context.Context, int64, int64) error
+		SetTargetBlocked(context.Context, int64, int64, string, *time.Time) error
+		SetTargetProcessing(context.Context, int64, int64) error
+		SetTargetSucceeded(context.Context, int64, int64) error
+		SetTargetFailed(context.Context, int64, int64, string) error
 	}
 	eventWriter traceevent.Writer
 }
 
 type DispatchResult struct {
-	HTTPStatus     *int
-	ResponseBody   string
-	ErrorMessage   string
-	RemoteJobID    string
-	PollURL        string
-	RemoteStatus   string
-	RemoteResponse map[string]any
-	Async          bool
-	Terminal       bool
-	Succeeded      bool
+	HTTPStatus           *int
+	ResponseBody         string
+	ResponseContentType  string
+	ResponseBodyFiltered bool
+	ResponseSummary      map[string]any
+	ErrorMessage         string
+	RemoteJobID          string
+	PollURL              string
+	RemoteStatus         string
+	RemoteResponse       map[string]any
+	Async                bool
+	Terminal             bool
+	Succeeded            bool
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -73,8 +84,20 @@ func (s *Service) WithRequestStatusUpdater(updater interface {
 	SetProcessing(context.Context, int64) error
 	SetCompleted(context.Context, int64) error
 	SetFailed(context.Context, int64) error
+	SetBlocked(context.Context, int64, string, *time.Time) error
 }) *Service {
 	s.requestStatusUpdater = updater
+	return s
+}
+
+func (s *Service) WithTargetUpdater(updater interface {
+	SetTargetPending(context.Context, int64, int64) error
+	SetTargetBlocked(context.Context, int64, int64, string, *time.Time) error
+	SetTargetProcessing(context.Context, int64, int64) error
+	SetTargetSucceeded(context.Context, int64, int64) error
+	SetTargetFailed(context.Context, int64, int64, string) error
+}) *Service {
+	s.targetUpdater = updater
 	return s
 }
 
@@ -107,13 +130,19 @@ func (s *Service) CreatePendingDelivery(ctx context.Context, input CreateInput) 
 	}
 
 	created, err := s.repo.CreateDelivery(ctx, CreateParams{
-		UID:           newUID(),
-		RequestID:     input.RequestID,
-		ServerID:      input.ServerID,
-		AttemptNumber: 1,
-		Status:        StatusPending,
-		ResponseBody:  "",
-		ErrorMessage:  "",
+		UID:                  newUID(),
+		RequestID:            input.RequestID,
+		ServerID:             input.ServerID,
+		AttemptNumber:        1,
+		Status:               StatusPending,
+		ResponseBody:         "",
+		ResponseContentType:  "",
+		ResponseBodyFiltered: false,
+		ResponseSummary:      map[string]any{},
+		ErrorMessage:         "",
+		SubmissionHoldReason: "",
+		HoldPolicySource:     "",
+		TerminalReason:       "",
 	})
 	if err != nil {
 		if mapped := mapConstraintError(err); mapped != nil {
@@ -137,6 +166,9 @@ func (s *Service) CreatePendingDelivery(ctx context.Context, input CreateInput) 
 			"status":        created.Status,
 		},
 	})
+	if s.targetUpdater != nil {
+		_ = s.targetUpdater.SetTargetPending(ctx, created.RequestID, created.ServerID)
+	}
 	s.appendEvent(ctx, traceevent.WriteInput{
 		RequestID:         &created.RequestID,
 		DeliveryAttemptID: &created.ID,
@@ -168,14 +200,21 @@ func (s *Service) MarkRunning(ctx context.Context, id int64) (Record, error) {
 	}
 	now := time.Now().UTC()
 	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-		ID:           id,
-		Status:       StatusRunning,
-		HTTPStatus:   nil,
-		ResponseBody: record.ResponseBody,
-		ErrorMessage: "",
-		StartedAt:    &now,
-		FinishedAt:   nil,
-		RetryAt:      nil,
+		ID:                  id,
+		Status:              StatusRunning,
+		HTTPStatus:          nil,
+		ResponseBody:        record.ResponseBody,
+		ResponseContentType: record.ResponseContentType,
+		ResponseBodyFiltered: record.ResponseBodyFiltered,
+		ResponseSummary:     cloneJSONMap(record.ResponseSummary),
+		ErrorMessage:        "",
+		SubmissionHoldReason: "",
+		NextEligibleAt:      nil,
+		HoldPolicySource:    "",
+		TerminalReason:      "",
+		StartedAt:           &now,
+		FinishedAt:          nil,
+		RetryAt:             nil,
 	})
 	if err != nil {
 		return Record{}, err
@@ -202,6 +241,9 @@ func (s *Service) MarkRunning(ctx context.Context, id int64) (Record, error) {
 			"status":        updated.Status,
 		},
 	})
+	if s.targetUpdater != nil {
+		_ = s.targetUpdater.SetTargetProcessing(ctx, updated.RequestID, updated.ServerID)
+	}
 	return updated, nil
 }
 
@@ -215,14 +257,21 @@ func (s *Service) MarkSucceeded(ctx context.Context, input CompletionInput) (Rec
 	}
 	now := time.Now().UTC()
 	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-		ID:           input.ID,
-		Status:       StatusSucceeded,
-		HTTPStatus:   input.HTTPStatus,
-		ResponseBody: strings.TrimSpace(input.ResponseBody),
-		ErrorMessage: "",
-		StartedAt:    record.StartedAt,
-		FinishedAt:   &now,
-		RetryAt:      nil,
+		ID:                  input.ID,
+		Status:              StatusSucceeded,
+		HTTPStatus:          input.HTTPStatus,
+		ResponseBody:        strings.TrimSpace(input.ResponseBody),
+		ResponseContentType: firstNonEmpty(input.ResponseContentType, record.ResponseContentType),
+		ResponseBodyFiltered: input.ResponseBodyFiltered || record.ResponseBodyFiltered,
+		ResponseSummary:     mergeResponseSummary(record.ResponseSummary, input.ResponseSummary),
+		ErrorMessage:        "",
+		SubmissionHoldReason: "",
+		NextEligibleAt:      nil,
+		HoldPolicySource:    "",
+		TerminalReason:      "",
+		StartedAt:           record.StartedAt,
+		FinishedAt:          &now,
+		RetryAt:             nil,
 	})
 	if err != nil {
 		return Record{}, err
@@ -271,6 +320,9 @@ func (s *Service) MarkSucceeded(ctx context.Context, input CompletionInput) (Rec
 			"attemptNumber": updated.AttemptNumber,
 		},
 	})
+	if s.targetUpdater != nil {
+		_ = s.targetUpdater.SetTargetSucceeded(ctx, updated.RequestID, updated.ServerID)
+	}
 
 	return updated, nil
 }
@@ -285,14 +337,21 @@ func (s *Service) MarkFailed(ctx context.Context, input CompletionInput) (Record
 	}
 	now := time.Now().UTC()
 	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-		ID:           input.ID,
-		Status:       StatusFailed,
-		HTTPStatus:   input.HTTPStatus,
-		ResponseBody: strings.TrimSpace(input.ResponseBody),
-		ErrorMessage: strings.TrimSpace(input.ErrorMessage),
-		StartedAt:    record.StartedAt,
-		FinishedAt:   &now,
-		RetryAt:      nil,
+		ID:                  input.ID,
+		Status:              StatusFailed,
+		HTTPStatus:          input.HTTPStatus,
+		ResponseBody:        strings.TrimSpace(input.ResponseBody),
+		ResponseContentType: record.ResponseContentType,
+		ResponseBodyFiltered: record.ResponseBodyFiltered,
+		ResponseSummary:     cloneJSONMap(record.ResponseSummary),
+		ErrorMessage:        strings.TrimSpace(input.ErrorMessage),
+		SubmissionHoldReason: "",
+		NextEligibleAt:      nil,
+		HoldPolicySource:    "",
+		TerminalReason:      strings.TrimSpace(input.ErrorMessage),
+		StartedAt:           record.StartedAt,
+		FinishedAt:          &now,
+		RetryAt:             nil,
 	})
 	if err != nil {
 		return Record{}, err
@@ -343,6 +402,9 @@ func (s *Service) MarkFailed(ctx context.Context, input CompletionInput) (Record
 			"attemptNumber": updated.AttemptNumber,
 		},
 	})
+	if s.targetUpdater != nil {
+		_ = s.targetUpdater.SetTargetFailed(ctx, updated.RequestID, updated.ServerID, updated.ErrorMessage)
+	}
 
 	return updated, nil
 }
@@ -355,17 +417,43 @@ func (s *Service) RetryDelivery(ctx context.Context, actorID *int64, id int64) (
 	if record.Status != StatusFailed {
 		return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"status": []string{"only failed deliveries can be retried"}})
 	}
+	maxRetries := ResolveMaxRetries(record.ServerCode)
+	if (record.AttemptNumber - 1) >= maxRetries {
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &record.RequestID,
+			DeliveryAttemptID: &record.ID,
+			EventType:         "delivery.retry.rejected.max_retries",
+			EventLevel:        "warning",
+			Message:           traceevent.Message("Delivery retry rejected", "Delivery %s exceeded max retries", record.UID),
+			SourceComponent:   "delivery.service",
+			CorrelationID:     record.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: actorID},
+			EventData: map[string]any{
+				"deliveryUid":   record.UID,
+				"attemptNumber": record.AttemptNumber,
+				"maxRetries":    maxRetries,
+				"serverCode":    record.ServerCode,
+			},
+		})
+		return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"status": []string{"max retries reached"}})
+	}
 
 	retryAt := time.Now().UTC().Add(retryDelay)
 	created, err := s.repo.CreateDelivery(ctx, CreateParams{
-		UID:           newUID(),
-		RequestID:     record.RequestID,
-		ServerID:      record.ServerID,
-		AttemptNumber: record.AttemptNumber + 1,
-		Status:        StatusRetrying,
-		ResponseBody:  "",
-		ErrorMessage:  "",
-		RetryAt:       &retryAt,
+		UID:                  newUID(),
+		RequestID:            record.RequestID,
+		ServerID:             record.ServerID,
+		AttemptNumber:        record.AttemptNumber + 1,
+		Status:               StatusRetrying,
+		ResponseBody:         "",
+		ResponseContentType:  "",
+		ResponseBodyFiltered: false,
+		ResponseSummary:      map[string]any{},
+		ErrorMessage:         "",
+		SubmissionHoldReason: "",
+		HoldPolicySource:     "",
+		TerminalReason:       "",
+		RetryAt:              &retryAt,
 	})
 	if err != nil {
 		if mapped := mapConstraintError(err); mapped != nil {
@@ -422,6 +510,57 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 	if s.dispatcher == nil {
 		return s.GetDelivery(ctx, input.DeliveryID)
 	}
+	now := time.Now().UTC()
+	windowPolicy := ResolveSubmissionWindow(input.Server.Code)
+	allowed, nextEligibleAt := windowPolicy.Evaluate(now)
+	if !allowed {
+		record, err := s.repo.UpdateDelivery(ctx, UpdateParams{
+			ID:                  input.DeliveryID,
+			Status:              StatusPending,
+			HTTPStatus:          nil,
+			ResponseBody:        "",
+			ResponseContentType: "",
+			ResponseBodyFiltered: false,
+			ResponseSummary:     map[string]any{},
+			ErrorMessage:        "",
+			SubmissionHoldReason: "window_closed",
+			NextEligibleAt:      nextEligibleAt,
+			HoldPolicySource:    windowPolicy.Source,
+			TerminalReason:      "",
+			StartedAt:           nil,
+			FinishedAt:          nil,
+			RetryAt:             nil,
+		})
+		if err != nil {
+			return Record{}, err
+		}
+		if s.targetUpdater != nil {
+			_ = s.targetUpdater.SetTargetBlocked(ctx, record.RequestID, record.ServerID, "window_closed", nextEligibleAt)
+		}
+		if s.requestStatusUpdater != nil {
+			_ = s.requestStatusUpdater.SetBlocked(ctx, input.RequestID, "window_closed", nextEligibleAt)
+		}
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &record.RequestID,
+			DeliveryAttemptID: &record.ID,
+			EventType:         "delivery.deferred.window",
+			EventLevel:        "info",
+			Message:           traceevent.Message("Delivery deferred by submission window", "Delivery %s deferred by submission window", record.UID),
+			SourceComponent:   "delivery.service",
+			CorrelationID:     record.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+			EventData: map[string]any{
+				"deliveryUid":     record.UID,
+				"serverCode":      input.Server.Code,
+				"policySource":    windowPolicy.Source,
+				"startHour":       windowPolicy.StartHour,
+				"endHour":         windowPolicy.EndHour,
+				"nextEligibleAt":  nextEligibleAt,
+				"deferReason":     "window_closed",
+			},
+		})
+		return record, nil
+	}
 
 	running, err := s.MarkRunning(ctx, input.DeliveryID)
 	if err != nil {
@@ -474,16 +613,42 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"async": []string{"async service is not configured"}})
 		}
 		if _, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-			ID:           running.ID,
-			Status:       StatusRunning,
-			HTTPStatus:   result.HTTPStatus,
-			ResponseBody: strings.TrimSpace(result.ResponseBody),
-			ErrorMessage: strings.TrimSpace(result.ErrorMessage),
-			StartedAt:    running.StartedAt,
-			FinishedAt:   nil,
-			RetryAt:      nil,
+			ID:                  running.ID,
+			Status:              StatusRunning,
+			HTTPStatus:          result.HTTPStatus,
+			ResponseBody:        strings.TrimSpace(result.ResponseBody),
+			ResponseContentType: result.ResponseContentType,
+			ResponseBodyFiltered: result.ResponseBodyFiltered,
+			ResponseSummary:     cloneJSONMap(result.ResponseSummary),
+			ErrorMessage:        strings.TrimSpace(result.ErrorMessage),
+			SubmissionHoldReason: "",
+			NextEligibleAt:      nil,
+			HoldPolicySource:    "",
+			TerminalReason:      "",
+			StartedAt:           running.StartedAt,
+			FinishedAt:          nil,
+			RetryAt:             nil,
 		}); err != nil {
 			return Record{}, err
+		}
+		if result.ResponseBodyFiltered {
+			s.appendEvent(ctx, traceevent.WriteInput{
+				RequestID:         &running.RequestID,
+				DeliveryAttemptID: &running.ID,
+				EventType:         "delivery.response.filtered_content_type",
+				EventLevel:        "warning",
+				Message:           traceevent.Message("Delivery response content filtered", "Delivery %s response content was filtered", running.UID),
+				SourceComponent:   "delivery.service",
+				CorrelationID:     running.CorrelationID,
+				Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+				EventData: map[string]any{
+					"deliveryUid":         running.UID,
+					"responseContentType": result.ResponseContentType,
+					"httpStatus":          result.HTTPStatus,
+					"filtered":            true,
+					"summary":             cloneJSONMap(result.ResponseSummary),
+				},
+			})
 		}
 		task, err := s.asyncService.CreateTask(ctx, asyncjobs.CreateInput{
 			DeliveryAttemptID: running.ID,
@@ -516,11 +681,17 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 	}
 
 	if result.Terminal && result.Succeeded {
+		running.ResponseContentType = result.ResponseContentType
+		running.ResponseBodyFiltered = result.ResponseBodyFiltered
+		running.ResponseSummary = cloneJSONMap(result.ResponseSummary)
 		record, err := s.MarkSucceeded(ctx, CompletionInput{
-			ID:           running.ID,
-			HTTPStatus:   result.HTTPStatus,
-			ResponseBody: result.ResponseBody,
-			ActorID:      input.ActorID,
+			ID:                  running.ID,
+			HTTPStatus:          result.HTTPStatus,
+			ResponseBody:        result.ResponseBody,
+			ResponseContentType: result.ResponseContentType,
+			ResponseBodyFiltered: result.ResponseBodyFiltered,
+			ResponseSummary:     cloneJSONMap(result.ResponseSummary),
+			ActorID:             input.ActorID,
 		})
 		if err != nil {
 			return Record{}, err
@@ -543,12 +714,18 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 		return record, nil
 	}
 
+	running.ResponseContentType = result.ResponseContentType
+	running.ResponseBodyFiltered = result.ResponseBodyFiltered
+	running.ResponseSummary = cloneJSONMap(result.ResponseSummary)
 	record, err := s.MarkFailed(ctx, CompletionInput{
-		ID:           running.ID,
-		HTTPStatus:   result.HTTPStatus,
-		ResponseBody: result.ResponseBody,
-		ErrorMessage: firstNonEmpty(result.ErrorMessage, "dhis2 submission failed"),
-		ActorID:      input.ActorID,
+		ID:                  running.ID,
+		HTTPStatus:          result.HTTPStatus,
+		ResponseBody:        result.ResponseBody,
+		ResponseContentType: result.ResponseContentType,
+		ResponseBodyFiltered: result.ResponseBodyFiltered,
+		ResponseSummary:     cloneJSONMap(result.ResponseSummary),
+		ErrorMessage:        firstNonEmpty(result.ErrorMessage, "dhis2 submission failed"),
+		ActorID:             input.ActorID,
 	})
 	if err != nil {
 		return Record{}, err
@@ -662,4 +839,11 @@ func cloneJSONMap(input map[string]any) map[string]any {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func mergeResponseSummary(existing map[string]any, next map[string]any) map[string]any {
+	if len(next) == 0 {
+		return cloneJSONMap(existing)
+	}
+	return cloneJSONMap(next)
 }

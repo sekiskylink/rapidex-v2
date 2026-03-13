@@ -146,6 +146,7 @@ type fakeRequestStatusUpdater struct {
 	processing []int64
 	completed  []int64
 	failed     []int64
+	blocked    []int64
 }
 
 func (f *fakeRequestStatusUpdater) SetProcessing(_ context.Context, requestID int64) error {
@@ -160,6 +161,11 @@ func (f *fakeRequestStatusUpdater) SetCompleted(_ context.Context, requestID int
 
 func (f *fakeRequestStatusUpdater) SetFailed(_ context.Context, requestID int64) error {
 	f.failed = append(f.failed, requestID)
+	return nil
+}
+
+func (f *fakeRequestStatusUpdater) SetBlocked(_ context.Context, requestID int64, _ string, _ *time.Time) error {
+	f.blocked = append(f.blocked, requestID)
 	return nil
 }
 

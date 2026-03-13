@@ -35,17 +35,26 @@ func (s *Service) Submit(ctx context.Context, input delivery.DispatchInput) (del
 	}
 
 	interpreted := interpretSubmission(response, body, input.Server.UseAsync)
+	policy := delivery.ResolveResponseFilter(input.Server.Code)
+	if !delivery.ShouldAllowContentType(policy, interpreted.ResponseContentType) {
+		interpreted.ResponseBodyFiltered = true
+		interpreted.ResponseSummary = summarizeBody(interpreted.ResponseContentType, body)
+		interpreted.ResponseBody = ""
+	}
 	return delivery.DispatchResult{
-		HTTPStatus:     interpreted.HTTPStatus,
-		ResponseBody:   interpreted.ResponseBody,
-		ErrorMessage:   interpreted.ErrorMessage,
-		RemoteJobID:    interpreted.RemoteJobID,
-		PollURL:        interpreted.PollURL,
-		RemoteStatus:   interpreted.RemoteStatus,
-		RemoteResponse: interpreted.RemoteResponse,
-		Async:          interpreted.Async,
-		Terminal:       interpreted.Terminal,
-		Succeeded:      interpreted.Succeeded,
+		HTTPStatus:           interpreted.HTTPStatus,
+		ResponseBody:         interpreted.ResponseBody,
+		ResponseContentType:  delivery.NormalizeContentType(interpreted.ResponseContentType),
+		ResponseBodyFiltered: interpreted.ResponseBodyFiltered,
+		ResponseSummary:      interpreted.ResponseSummary,
+		ErrorMessage:         interpreted.ErrorMessage,
+		RemoteJobID:          interpreted.RemoteJobID,
+		PollURL:              interpreted.PollURL,
+		RemoteStatus:         interpreted.RemoteStatus,
+		RemoteResponse:       interpreted.RemoteResponse,
+		Async:                interpreted.Async,
+		Terminal:             interpreted.Terminal,
+		Succeeded:            interpreted.Succeeded,
 	}, nil
 }
 
@@ -56,14 +65,22 @@ func (s *Service) Poll(ctx context.Context, task asyncjobs.Record) (asyncjobs.Re
 	}
 
 	interpreted := interpretPollResponse(response, body)
+	policy := delivery.ResolveResponseFilter(task.DestinationCode)
+	if !delivery.ShouldAllowContentType(policy, interpreted.ResponseContentType) {
+		interpreted.ResponseBodyFiltered = true
+		interpreted.ResponseSummary = summarizeBody(interpreted.ResponseContentType, body)
+		interpreted.ResponseBody = ""
+	}
 	return asyncjobs.RemotePollResult{
-		StatusCode:     interpreted.StatusCode,
-		RemoteStatus:   interpreted.RemoteStatus,
-		TerminalState:  strings.TrimSpace(interpreted.TerminalState),
-		ResponseBody:   interpreted.ResponseBody,
-		ErrorMessage:   interpreted.ErrorMessage,
-		NextPollAt:     interpreted.NextPollAt,
-		RemoteResponse: interpreted.RemoteResponse,
+		StatusCode:          interpreted.StatusCode,
+		RemoteStatus:        interpreted.RemoteStatus,
+		TerminalState:       strings.TrimSpace(interpreted.TerminalState),
+		ResponseBody:        interpreted.ResponseBody,
+		ResponseContentType: delivery.NormalizeContentType(interpreted.ResponseContentType),
+		ResponseBodyFiltered: interpreted.ResponseBodyFiltered,
+		ErrorMessage:        interpreted.ErrorMessage,
+		NextPollAt:          interpreted.NextPollAt,
+		RemoteResponse:      interpreted.RemoteResponse,
 	}, nil
 }
 

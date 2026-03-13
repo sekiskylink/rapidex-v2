@@ -142,9 +142,20 @@ describe('desktop requests page', () => {
                   payload: { trackedEntity: '123' },
                   urlSuffix: '/api/data',
                   status: 'pending',
+                  statusReason: 'window_closed',
+                  deferredUntil: '2026-03-10T12:00:00Z',
                   extras: {},
                   createdAt: '2026-03-10T09:00:00Z',
                   updatedAt: '2026-03-10T10:00:00Z',
+                  latestDeliveryUid: 'del-1',
+                  latestDeliveryStatus: 'pending',
+                  latestAsyncTaskUid: '',
+                  latestAsyncState: '',
+                  latestAsyncRemoteJobId: '',
+                  latestAsyncPollUrl: '',
+                  awaitingAsync: false,
+                  targets: [{ id: 1, uid: 'target-1', serverId: 3, serverName: 'DHIS2 Uganda', serverCode: 'dhis2-ug', targetKind: 'primary', status: 'blocked', blockedReason: 'window_closed', deferredUntil: '2026-03-10T12:00:00Z', latestDeliveryUid: 'del-1', latestDeliveryStatus: 'pending', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false }],
+                  dependencies: [],
                 },
               ],
               totalCount: 1,
@@ -166,6 +177,7 @@ describe('desktop requests page', () => {
     expect(await screen.findByRole('heading', { name: 'Requests', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('req-1')).toBeInTheDocument()
     expect(screen.getByText('DHIS2 Uganda')).toBeInTheDocument()
+    expect(screen.getByText(/window_closed/)).toBeInTheDocument()
   })
 
   it('create and detail request flows call backend APIs', async () => {
@@ -212,9 +224,23 @@ describe('desktop requests page', () => {
                 payload: { trackedEntity: '123' },
                 urlSuffix: '/api/data',
                 status: 'pending',
+                statusReason: 'dependency_blocked',
+                deferredUntil: null,
                 extras: {},
                 createdAt: '2026-03-10T09:00:00Z',
                 updatedAt: '2026-03-10T10:00:00Z',
+                latestDeliveryUid: 'del-4',
+                latestDeliveryStatus: 'pending',
+                latestAsyncTaskUid: '',
+                latestAsyncState: '',
+                latestAsyncRemoteJobId: '',
+                latestAsyncPollUrl: '',
+                awaitingAsync: false,
+                targets: [
+                  { id: 1, uid: 'target-4a', serverId: 3, serverName: 'DHIS2 Uganda', serverCode: 'dhis2-ug', targetKind: 'primary', status: 'blocked', blockedReason: 'dependency_blocked', deferredUntil: null, latestDeliveryUid: 'del-4a', latestDeliveryStatus: 'pending', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+                  { id: 2, uid: 'target-4b', serverId: 9, serverName: 'Mirror', serverCode: 'mirror', targetKind: 'cc', status: 'succeeded', blockedReason: '', deferredUntil: null, latestDeliveryUid: 'del-4b', latestDeliveryStatus: 'succeeded', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+                ],
+                dependencies: [{ requestId: 4, dependsOnRequestId: 1, dependsOnUid: 'req-1', status: 'failed', statusReason: 'dependency_failed', deferredUntil: null, dependsOnDestinationServerName: 'DHIS2 Uganda' }],
               },
             ],
             totalCount: 1,
@@ -251,9 +277,23 @@ describe('desktop requests page', () => {
             payload: { trackedEntity: '123' },
             urlSuffix: '/api/data',
             status: 'pending',
+            statusReason: 'dependency_blocked',
+            deferredUntil: null,
             extras: { priority: 'high' },
             createdAt: '2026-03-10T09:00:00Z',
             updatedAt: '2026-03-10T10:00:00Z',
+            latestDeliveryUid: 'del-4',
+            latestDeliveryStatus: 'pending',
+            latestAsyncTaskUid: '',
+            latestAsyncState: '',
+            latestAsyncRemoteJobId: '',
+            latestAsyncPollUrl: '',
+            awaitingAsync: false,
+            targets: [
+              { id: 1, uid: 'target-4a', serverId: 3, serverName: 'DHIS2 Uganda', serverCode: 'dhis2-ug', targetKind: 'primary', status: 'blocked', blockedReason: 'dependency_blocked', deferredUntil: null, latestDeliveryUid: 'del-4a', latestDeliveryStatus: 'pending', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+              { id: 2, uid: 'target-4b', serverId: 9, serverName: 'Mirror', serverCode: 'mirror', targetKind: 'cc', status: 'succeeded', blockedReason: '', deferredUntil: null, latestDeliveryUid: 'del-4b', latestDeliveryStatus: 'succeeded', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+            ],
+            dependencies: [{ requestId: 4, dependsOnRequestId: 1, dependsOnUid: 'req-1', status: 'failed', statusReason: 'dependency_failed', deferredUntil: null, dependsOnDestinationServerName: 'DHIS2 Uganda' }],
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         )
@@ -293,6 +333,9 @@ describe('desktop requests page', () => {
 
     const detailDialog = await screen.findByRole('dialog', { name: 'Request Detail' })
     expect(within(detailDialog).getByText('req-4')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('2 targets')).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText('dependency_blocked').length).toBeGreaterThan(0)
+    expect(within(detailDialog).getByText('req-1')).toBeInTheDocument()
     expect(within(detailDialog).getByText(/trackedEntity/)).toBeInTheDocument()
   })
 

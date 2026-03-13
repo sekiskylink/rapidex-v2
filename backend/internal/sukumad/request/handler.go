@@ -21,14 +21,16 @@ func NewHandler(service *Service) *Handler {
 }
 
 type createRequestRequest struct {
-	SourceSystem        string          `json:"sourceSystem"`
-	DestinationServerID int64           `json:"destinationServerId"`
-	BatchID             string          `json:"batchId"`
-	CorrelationID       string          `json:"correlationId"`
-	IdempotencyKey      string          `json:"idempotencyKey"`
-	Payload             json.RawMessage `json:"payload"`
-	URLSuffix           string          `json:"urlSuffix"`
-	Metadata            map[string]any  `json:"metadata"`
+	SourceSystem         string          `json:"sourceSystem"`
+	DestinationServerID  int64           `json:"destinationServerId"`
+	DestinationServerIDs []int64         `json:"destinationServerIds"`
+	DependencyRequestIDs []int64         `json:"dependencyRequestIds"`
+	BatchID              string          `json:"batchId"`
+	CorrelationID        string          `json:"correlationId"`
+	IdempotencyKey       string          `json:"idempotencyKey"`
+	Payload              json.RawMessage `json:"payload"`
+	URLSuffix            string          `json:"urlSuffix"`
+	Metadata             map[string]any  `json:"metadata"`
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -121,15 +123,17 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	created, err := h.service.CreateRequest(c.Request.Context(), CreateInput{
-		SourceSystem:        req.SourceSystem,
-		DestinationServerID: req.DestinationServerID,
-		BatchID:             req.BatchID,
-		CorrelationID:       req.CorrelationID,
-		IdempotencyKey:      req.IdempotencyKey,
-		Payload:             req.Payload,
-		URLSuffix:           req.URLSuffix,
-		Extras:              req.Metadata,
-		ActorID:             actorUserID(principal),
+		SourceSystem:         req.SourceSystem,
+		DestinationServerID:  req.DestinationServerID,
+		DestinationServerIDs: req.DestinationServerIDs,
+		DependencyRequestIDs: req.DependencyRequestIDs,
+		BatchID:              req.BatchID,
+		CorrelationID:        req.CorrelationID,
+		IdempotencyKey:       req.IdempotencyKey,
+		Payload:              req.Payload,
+		URLSuffix:            req.URLSuffix,
+		Extras:               req.Metadata,
+		ActorID:              actorUserID(principal),
 	})
 	if err != nil {
 		apperror.Write(c, err)
@@ -157,7 +161,7 @@ func actorUserID(principal auth.Principal) *int64 {
 
 func isValidStatus(value string) bool {
 	switch value {
-	case StatusPending, StatusProcessing, StatusCompleted, StatusFailed:
+	case StatusPending, StatusBlocked, StatusProcessing, StatusCompleted, StatusFailed:
 		return true
 	default:
 		return false

@@ -14,7 +14,7 @@ type fakeRepo struct {
 	listFn   func(ctx context.Context, query ListQuery) (ListResult, error)
 	getFn    func(ctx context.Context, id int64) (Record, error)
 	createFn func(ctx context.Context, params CreateParams) (Record, error)
-	updateFn func(ctx context.Context, id int64, status string) (Record, error)
+	updateFn func(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
 }
 
 func (f *fakeRepo) ListRequests(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -29,11 +29,43 @@ func (f *fakeRepo) CreateRequest(ctx context.Context, params CreateParams) (Reco
 	return f.createFn(ctx, params)
 }
 
-func (f *fakeRepo) UpdateRequestStatus(ctx context.Context, id int64, status string) (Record, error) {
+func (f *fakeRepo) UpdateRequestStatus(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error) {
 	if f.updateFn == nil {
 		return Record{}, sql.ErrNoRows
 	}
-	return f.updateFn(ctx, id, status)
+	return f.updateFn(ctx, id, status, reason, deferredUntil)
+}
+
+func (f *fakeRepo) CreateTargets(context.Context, int64, []CreateTargetParams) ([]TargetRecord, error) {
+	return []TargetRecord{}, nil
+}
+
+func (f *fakeRepo) ListTargetsByRequest(context.Context, int64) ([]TargetRecord, error) {
+	return []TargetRecord{}, nil
+}
+
+func (f *fakeRepo) UpdateTarget(context.Context, UpdateTargetParams) (TargetRecord, error) {
+	return TargetRecord{}, nil
+}
+
+func (f *fakeRepo) CreateDependencies(context.Context, int64, []int64) error {
+	return nil
+}
+
+func (f *fakeRepo) ListDependencies(context.Context, int64) ([]DependencyRef, error) {
+	return []DependencyRef{}, nil
+}
+
+func (f *fakeRepo) ListDependents(context.Context, int64) ([]DependencyRef, error) {
+	return []DependencyRef{}, nil
+}
+
+func (f *fakeRepo) GetDependencyStatuses(context.Context, int64) ([]DependencyStatus, error) {
+	return []DependencyStatus{}, nil
+}
+
+func (f *fakeRepo) DependencyPathExists(context.Context, int64, int64) (bool, error) {
+	return false, nil
 }
 
 type fakeAuditRepo struct {

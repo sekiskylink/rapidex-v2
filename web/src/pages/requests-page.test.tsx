@@ -113,9 +113,20 @@ describe('requests page', () => {
               payload: { trackedEntity: '123' },
               urlSuffix: '/api/data',
               status: 'pending',
+              statusReason: 'window_closed',
+              deferredUntil: '2026-03-10T12:00:00Z',
               extras: { priority: 'high' },
               createdAt: '2026-03-10T09:00:00Z',
               updatedAt: '2026-03-10T10:00:00Z',
+              latestDeliveryUid: 'del-11',
+              latestDeliveryStatus: 'pending',
+              latestAsyncTaskUid: '',
+              latestAsyncState: '',
+              latestAsyncRemoteJobId: '',
+              latestAsyncPollUrl: '',
+              awaitingAsync: false,
+              targets: [{ id: 1, uid: 'target-1', serverId: 3, serverName: 'DHIS2 Uganda', serverCode: 'dhis2-ug', targetKind: 'primary', status: 'blocked', blockedReason: 'window_closed', deferredUntil: '2026-03-10T12:00:00Z', latestDeliveryUid: 'del-11', latestDeliveryStatus: 'pending', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false }],
+              dependencies: [],
             },
           ],
           totalCount: 1,
@@ -131,6 +142,7 @@ describe('requests page', () => {
     expect(await screen.findByRole('heading', { name: 'Requests', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('req-11')).toBeInTheDocument()
     expect(screen.getByText('DHIS2 Uganda')).toBeInTheDocument()
+    expect(screen.getByText(/window_closed/)).toBeInTheDocument()
   })
 
   it('create request submits payload through API', async () => {
@@ -198,9 +210,23 @@ describe('requests page', () => {
               payload: { trackedEntity: 'abc' },
               urlSuffix: '/api/data',
               status: 'completed',
+              statusReason: '',
+              deferredUntil: null,
               extras: { priority: 'high' },
               createdAt: '2026-03-10T09:00:00Z',
               updatedAt: '2026-03-10T10:00:00Z',
+              latestDeliveryUid: 'del-5',
+              latestDeliveryStatus: 'succeeded',
+              latestAsyncTaskUid: '',
+              latestAsyncState: '',
+              latestAsyncRemoteJobId: '',
+              latestAsyncPollUrl: '',
+              awaitingAsync: false,
+              targets: [
+                { id: 1, uid: 'target-5a', serverId: 4, serverName: 'DHIS2 Uganda', serverCode: 'dhis2-ug', targetKind: 'primary', status: 'succeeded', blockedReason: '', deferredUntil: null, latestDeliveryUid: 'del-5a', latestDeliveryStatus: 'succeeded', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+                { id: 2, uid: 'target-5b', serverId: 6, serverName: 'Mirror', serverCode: 'mirror', targetKind: 'cc', status: 'succeeded', blockedReason: '', deferredUntil: null, latestDeliveryUid: 'del-5b', latestDeliveryStatus: 'succeeded', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+              ],
+              dependencies: [{ requestId: 5, dependsOnRequestId: 2, dependsOnUid: 'req-2', status: 'completed', statusReason: '', deferredUntil: null, dependsOnDestinationServerName: 'Bootstrap' }],
             },
           ],
           totalCount: 1,
@@ -223,9 +249,23 @@ describe('requests page', () => {
           payload: { trackedEntity: 'abc' },
           urlSuffix: '/api/data',
           status: 'completed',
+          statusReason: '',
+          deferredUntil: null,
           extras: { priority: 'high' },
           createdAt: '2026-03-10T09:00:00Z',
           updatedAt: '2026-03-10T10:00:00Z',
+          latestDeliveryUid: 'del-5',
+          latestDeliveryStatus: 'succeeded',
+          latestAsyncTaskUid: '',
+          latestAsyncState: '',
+          latestAsyncRemoteJobId: '',
+          latestAsyncPollUrl: '',
+          awaitingAsync: false,
+          targets: [
+            { id: 1, uid: 'target-5a', serverId: 4, serverName: 'DHIS2 Uganda', serverCode: 'dhis2-ug', targetKind: 'primary', status: 'succeeded', blockedReason: '', deferredUntil: null, latestDeliveryUid: 'del-5a', latestDeliveryStatus: 'succeeded', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+            { id: 2, uid: 'target-5b', serverId: 6, serverName: 'Mirror', serverCode: 'mirror', targetKind: 'cc', status: 'blocked', blockedReason: 'dependency_blocked', deferredUntil: null, latestDeliveryUid: 'del-5b', latestDeliveryStatus: 'pending', latestAsyncTaskUid: '', latestAsyncState: '', awaitingAsync: false },
+          ],
+          dependencies: [{ requestId: 5, dependsOnRequestId: 2, dependsOnUid: 'req-2', status: 'failed', statusReason: 'dependency_failed', deferredUntil: null, dependsOnDestinationServerName: 'Bootstrap' }],
         }
       }
       return {}
@@ -238,6 +278,9 @@ describe('requests page', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Request Detail' })
     expect(within(dialog).getByText('req-5')).toBeInTheDocument()
+    expect(within(dialog).getByText('2 targets')).toBeInTheDocument()
+    expect(within(dialog).getByText('dependency_blocked')).toBeInTheDocument()
+    expect(within(dialog).getByText('req-2')).toBeInTheDocument()
     expect(within(dialog).getByText(/trackedEntity/)).toBeInTheDocument()
     expect(within(dialog).getByText(/priority/)).toBeInTheDocument()
   })

@@ -21,12 +21,20 @@ type Record struct {
 	CorrelationID     string     `json:"correlationId"`
 	ServerID          int64      `db:"server_id" json:"serverId"`
 	ServerName        string     `json:"serverName"`
+	ServerCode        string     `json:"serverCode"`
 	SystemType        string     `json:"systemType"`
 	AttemptNumber     int        `db:"attempt_number" json:"attemptNumber"`
 	Status            string     `db:"status" json:"status"`
 	HTTPStatus        *int       `db:"http_status" json:"httpStatus,omitempty"`
 	ResponseBody      string     `db:"response_body" json:"responseBody"`
+	ResponseContentType string   `db:"response_content_type" json:"responseContentType"`
+	ResponseBodyFiltered bool    `db:"response_body_filtered" json:"responseBodyFiltered"`
+	ResponseSummary   map[string]any `json:"responseSummary"`
 	ErrorMessage      string     `db:"error_message" json:"errorMessage"`
+	SubmissionHoldReason string  `db:"submission_hold_reason" json:"submissionHoldReason"`
+	NextEligibleAt    *time.Time `db:"next_eligible_at" json:"nextEligibleAt,omitempty"`
+	HoldPolicySource  string     `db:"hold_policy_source" json:"holdPolicySource"`
+	TerminalReason    string     `db:"terminal_reason" json:"terminalReason"`
 	SubmissionMode    string     `json:"submissionMode"`
 	AsyncTaskID       *int64     `json:"asyncTaskId,omitempty"`
 	AsyncTaskUID      string     `json:"asyncTaskUid"`
@@ -67,7 +75,14 @@ type CreateParams struct {
 	Status        string
 	HTTPStatus    *int
 	ResponseBody  string
+	ResponseContentType string
+	ResponseBodyFiltered bool
+	ResponseSummary map[string]any
 	ErrorMessage  string
+	SubmissionHoldReason string
+	NextEligibleAt *time.Time
+	HoldPolicySource string
+	TerminalReason string
 	StartedAt     *time.Time
 	FinishedAt    *time.Time
 	RetryAt       *time.Time
@@ -78,7 +93,14 @@ type UpdateParams struct {
 	Status       string
 	HTTPStatus   *int
 	ResponseBody string
+	ResponseContentType string
+	ResponseBodyFiltered bool
+	ResponseSummary map[string]any
 	ErrorMessage string
+	SubmissionHoldReason string
+	NextEligibleAt *time.Time
+	HoldPolicySource string
+	TerminalReason string
 	StartedAt    *time.Time
 	FinishedAt   *time.Time
 	RetryAt      *time.Time
@@ -95,6 +117,9 @@ type CompletionInput struct {
 	ID           int64
 	HTTPStatus   *int
 	ResponseBody string
+	ResponseContentType string
+	ResponseBodyFiltered bool
+	ResponseSummary map[string]any
 	ErrorMessage string
 	ActorID      *int64
 }
@@ -110,6 +135,8 @@ type ServerSnapshot struct {
 	UseAsync     bool
 	Headers      map[string]string
 	URLParams    map[string]string
+	SubmissionWindowStartHour int
+	SubmissionWindowEndHour   int
 }
 
 type DispatchInput struct {

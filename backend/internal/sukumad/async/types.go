@@ -40,6 +40,8 @@ type PollRecord struct {
 	StatusCode   *int      `db:"status_code" json:"statusCode,omitempty"`
 	RemoteStatus string    `db:"remote_status" json:"remoteStatus"`
 	ResponseBody string    `db:"response_body" json:"responseBody"`
+	ResponseContentType string `db:"response_content_type" json:"responseContentType"`
+	ResponseBodyFiltered bool  `db:"response_body_filtered" json:"responseBodyFiltered"`
 	ErrorMessage string    `db:"error_message" json:"errorMessage"`
 	DurationMS   *int      `db:"duration_ms" json:"durationMs,omitempty"`
 }
@@ -116,6 +118,8 @@ type RecordPollInput struct {
 	StatusCode   *int
 	RemoteStatus string
 	ResponseBody string
+	ResponseContentType string
+	ResponseBodyFiltered bool
 	ErrorMessage string
 	DurationMS   *int
 }
@@ -125,6 +129,8 @@ type RemotePollResult struct {
 	RemoteStatus   string
 	TerminalState  string
 	ResponseBody   string
+	ResponseContentType string
+	ResponseBodyFiltered bool
 	ErrorMessage   string
 	DurationMS     *int
 	NextPollAt     *time.Time

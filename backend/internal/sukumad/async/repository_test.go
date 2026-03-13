@@ -195,15 +195,16 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		INSERT INTO async_task_polls (
-			async_task_id, polled_at, status_code, remote_status, response_body, error_message, duration_ms
+			async_task_id, polled_at, status_code, remote_status, response_body, response_content_type, response_body_filtered, error_message, duration_ms
 		)
-		VALUES ($1, NOW(), $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6)
+		VALUES ($1, NOW(), $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), $8)
 		RETURNING id, async_task_id, polled_at, status_code, COALESCE(remote_status, '') AS remote_status,
-		          COALESCE(response_body, '') AS response_body, COALESCE(error_message, '') AS error_message, duration_ms
+		          COALESCE(response_body, '') AS response_body, COALESCE(response_content_type, '') AS response_content_type,
+		          response_body_filtered, COALESCE(error_message, '') AS error_message, duration_ms
 	`)).
-		WithArgs(int64(9), intPtr(200), StateSucceeded, `{"done":true}`, "", intPtr(99)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "async_task_id", "polled_at", "status_code", "remote_status", "response_body", "error_message", "duration_ms"}).
-			AddRow(int64(1), int64(9), now, 200, StateSucceeded, `{"done":true}`, "", 99))
+		WithArgs(int64(9), intPtr(200), StateSucceeded, `{"done":true}`, "", false, "", intPtr(99)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "async_task_id", "polled_at", "status_code", "remote_status", "response_body", "response_content_type", "response_body_filtered", "error_message", "duration_ms"}).
+			AddRow(int64(1), int64(9), now, 200, StateSucceeded, `{"done":true}`, "", false, "", 99))
 
 	poll, err := repo.RecordPoll(context.Background(), RecordPollInput{
 		AsyncTaskID:  9,

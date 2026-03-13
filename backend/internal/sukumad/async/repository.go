@@ -263,7 +263,8 @@ func (r *SQLRepository) ListPolls(ctx context.Context, taskID int64, query ListQ
 	rows := []PollRecord{}
 	if err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, async_task_id, polled_at, status_code, COALESCE(remote_status, '') AS remote_status,
-		       COALESCE(response_body, '') AS response_body, COALESCE(error_message, '') AS error_message, duration_ms
+		       COALESCE(response_body, '') AS response_body, COALESCE(response_content_type, '') AS response_content_type,
+		       response_body_filtered, COALESCE(error_message, '') AS error_message, duration_ms
 		FROM async_task_polls
 		WHERE async_task_id = $1
 		ORDER BY polled_at DESC
@@ -284,12 +285,13 @@ func (r *SQLRepository) RecordPoll(ctx context.Context, input RecordPollInput) (
 	var record PollRecord
 	if err := r.db.GetContext(ctx, &record, `
 		INSERT INTO async_task_polls (
-			async_task_id, polled_at, status_code, remote_status, response_body, error_message, duration_ms
+			async_task_id, polled_at, status_code, remote_status, response_body, response_content_type, response_body_filtered, error_message, duration_ms
 		)
-		VALUES ($1, NOW(), $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6)
+		VALUES ($1, NOW(), $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), $8)
 		RETURNING id, async_task_id, polled_at, status_code, COALESCE(remote_status, '') AS remote_status,
-		          COALESCE(response_body, '') AS response_body, COALESCE(error_message, '') AS error_message, duration_ms
-	`, input.AsyncTaskID, input.StatusCode, input.RemoteStatus, input.ResponseBody, input.ErrorMessage, input.DurationMS); err != nil {
+		          COALESCE(response_body, '') AS response_body, COALESCE(response_content_type, '') AS response_content_type,
+		          response_body_filtered, COALESCE(error_message, '') AS error_message, duration_ms
+	`, input.AsyncTaskID, input.StatusCode, input.RemoteStatus, input.ResponseBody, input.ResponseContentType, input.ResponseBodyFiltered, input.ErrorMessage, input.DurationMS); err != nil {
 		return PollRecord{}, fmt.Errorf("record async task poll: %w", err)
 	}
 	return record, nil
@@ -550,14 +552,16 @@ func (r *memoryRepository) RecordPoll(_ context.Context, input RecordPollInput) 
 	id := r.nextPollID
 	r.nextPollID++
 	record := PollRecord{
-		ID:           id,
-		AsyncTaskID:  input.AsyncTaskID,
-		PolledAt:     time.Now().UTC(),
-		StatusCode:   cloneIntPtr(input.StatusCode),
-		RemoteStatus: input.RemoteStatus,
-		ResponseBody: input.ResponseBody,
-		ErrorMessage: input.ErrorMessage,
-		DurationMS:   cloneIntPtr(input.DurationMS),
+		ID:                   id,
+		AsyncTaskID:          input.AsyncTaskID,
+		PolledAt:             time.Now().UTC(),
+		StatusCode:           cloneIntPtr(input.StatusCode),
+		RemoteStatus:         input.RemoteStatus,
+		ResponseBody:         input.ResponseBody,
+		ResponseContentType:  input.ResponseContentType,
+		ResponseBodyFiltered: input.ResponseBodyFiltered,
+		ErrorMessage:         input.ErrorMessage,
+		DurationMS:           cloneIntPtr(input.DurationMS),
 	}
 	r.polls[input.AsyncTaskID] = append(r.polls[input.AsyncTaskID], record)
 	return record, nil

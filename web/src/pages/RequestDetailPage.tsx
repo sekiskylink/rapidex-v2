@@ -16,6 +16,8 @@ export interface RequestDetailRecord {
   payload: unknown
   urlSuffix: string
   status: string
+  statusReason: string
+  deferredUntil?: string | null
   extras: Record<string, unknown>
   createdAt: string
   updatedAt: string
@@ -29,6 +31,31 @@ export interface RequestDetailRecord {
   latestAsyncRemoteJobId: string
   latestAsyncPollUrl: string
   awaitingAsync: boolean
+  targets: Array<{
+    id: number
+    uid: string
+    serverId: number
+    serverName: string
+    serverCode: string
+    targetKind: string
+    status: string
+    blockedReason: string
+    deferredUntil?: string | null
+    latestDeliveryUid: string
+    latestDeliveryStatus: string
+    latestAsyncTaskUid: string
+    latestAsyncState: string
+    awaitingAsync: boolean
+  }>
+  dependencies: Array<{
+    requestId: number
+    dependsOnRequestId: number
+    dependsOnUid: string
+    status: string
+    statusReason: string
+    deferredUntil?: string | null
+    dependsOnDestinationServerName: string
+  }>
 }
 
 function formatDate(value: string) {
@@ -65,6 +92,8 @@ function statusColor(status: string): 'default' | 'warning' | 'success' | 'error
   switch (status) {
     case 'pending':
       return 'warning'
+    case 'blocked':
+      return 'warning'
     case 'processing':
       return 'info'
     case 'completed':
@@ -94,6 +123,7 @@ export function RequestDetailPage({ open, request, events, onClose }: RequestDet
               <Typography variant="h6">{request.uid}</Typography>
               <Chip label={request.status} color={statusColor(request.status)} size="small" />
               {request.awaitingAsync ? <Chip label="Awaiting async" color="info" size="small" /> : null}
+              {(request.targets?.length ?? 0) > 1 ? <Chip label={`${request.targets.length} targets`} size="small" variant="outlined" /> : null}
             </Stack>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               {renderMetadata('Destination Server', request.destinationServerName)}
@@ -120,6 +150,58 @@ export function RequestDetailPage({ open, request, events, onClose }: RequestDet
               {renderMetadata('Remote Job ID', request.latestAsyncRemoteJobId)}
               {renderMetadata('Poll URL', request.latestAsyncPollUrl)}
             </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              {renderMetadata('Status Reason', request.statusReason)}
+              {renderMetadata('Deferred Until', request.deferredUntil ? formatDate(request.deferredUntil) : '-')}
+            </Stack>
+            {(request.targets?.length ?? 0) > 0 ? (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Targets
+                </Typography>
+                <Stack spacing={1}>
+                  {request.targets.map((target) => (
+                    <Stack
+                      key={target.id}
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={2}
+                      sx={{ p: 1.5, borderRadius: 2, bgcolor: 'background.default' }}
+                    >
+                      {renderMetadata('Server', `${target.serverName || '-'}${target.serverCode ? ` (${target.serverCode})` : ''}`)}
+                      {renderMetadata('Role', target.targetKind)}
+                      {renderMetadata('Status', target.status)}
+                      {renderMetadata('Reason', target.blockedReason)}
+                      {renderMetadata('Deferred', target.deferredUntil ? formatDate(target.deferredUntil) : '-')}
+                      {renderMetadata('Delivery', target.latestDeliveryUid || target.latestDeliveryStatus || '-')}
+                      {renderMetadata('Async', target.awaitingAsync ? target.latestAsyncState || 'awaiting' : target.latestAsyncState || '-')}
+                    </Stack>
+                  ))}
+                </Stack>
+              </Box>
+            ) : null}
+            {(request.dependencies?.length ?? 0) > 0 ? (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Dependencies
+                </Typography>
+                <Stack spacing={1}>
+                  {request.dependencies.map((dependency) => (
+                    <Stack
+                      key={`${dependency.requestId}-${dependency.dependsOnRequestId}`}
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={2}
+                      sx={{ p: 1.5, borderRadius: 2, bgcolor: 'background.default' }}
+                    >
+                      {renderMetadata('Depends On', dependency.dependsOnUid)}
+                      {renderMetadata('Status', dependency.status)}
+                      {renderMetadata('Reason', dependency.statusReason)}
+                      {renderMetadata('Server', dependency.dependsOnDestinationServerName)}
+                      {renderMetadata('Deferred', dependency.deferredUntil ? formatDate(dependency.deferredUntil) : '-')}
+                    </Stack>
+                  ))}
+                </Stack>
+              </Box>
+            ) : null}
             <Divider />
             <Box>
               <Typography variant="subtitle2" gutterBottom>
