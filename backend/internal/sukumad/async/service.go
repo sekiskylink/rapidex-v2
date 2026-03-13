@@ -3,6 +3,7 @@ package async
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,8 +14,17 @@ import (
 )
 
 type Service struct {
-	repo         Repository
-	auditService *audit.Service
+	repo            Repository
+	auditService    *audit.Service
+	deliveryUpdater interface {
+		CompleteFromAsyncSuccess(context.Context, int64, string) error
+		CompleteFromAsyncFailure(context.Context, int64, string, string) error
+	}
+	requestStatusUpdater interface {
+		SetProcessing(context.Context, int64) error
+		SetCompleted(context.Context, int64) error
+		SetFailed(context.Context, int64) error
+	}
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -23,6 +33,22 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 		auditSvc = auditService[0]
 	}
 	return &Service{repo: repository, auditService: auditSvc}
+}
+
+func (s *Service) WithReconciliation(
+	deliveryUpdater interface {
+		CompleteFromAsyncSuccess(context.Context, int64, string) error
+		CompleteFromAsyncFailure(context.Context, int64, string, string) error
+	},
+	requestStatusUpdater interface {
+		SetProcessing(context.Context, int64) error
+		SetCompleted(context.Context, int64) error
+		SetFailed(context.Context, int64) error
+	},
+) *Service {
+	s.deliveryUpdater = deliveryUpdater
+	s.requestStatusUpdater = requestStatusUpdater
+	return s
 }
 
 func (s *Service) ListTasks(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -116,7 +142,12 @@ func (s *Service) UpdateTaskStatus(ctx context.Context, input UpdateStatusInput)
 		return Record{}, err
 	}
 
+	if terminalState == "" && s.requestStatusUpdater != nil {
+		_ = s.requestStatusUpdater.SetProcessing(ctx, updated.RequestID)
+	}
+
 	if terminalState == StateSucceeded {
+		s.reconcileTerminalState(ctx, updated)
 		s.logAudit(ctx, audit.Event{
 			Action:      "async_task.completed",
 			ActorUserID: input.ActorID,
@@ -131,6 +162,7 @@ func (s *Service) UpdateTaskStatus(ctx context.Context, input UpdateStatusInput)
 		})
 	}
 	if terminalState == StateFailed {
+		s.reconcileTerminalState(ctx, updated)
 		s.logAudit(ctx, audit.Event{
 			Action:      "async_task.failed",
 			ActorUserID: input.ActorID,
@@ -185,9 +217,9 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				ErrorMessage: message,
 			})
 			_, _ = s.UpdateTaskStatus(ctx, UpdateStatusInput{
-				ID:            task.ID,
-				RemoteStatus:  StatePolling,
-				TerminalState: StateFailed,
+				ID:           task.ID,
+				RemoteStatus: StatePolling,
+				NextPollAt:   nextRetryPollAt(),
 				RemoteResponse: map[string]any{
 					"error": message,
 				},
@@ -246,4 +278,62 @@ func firstNonEmpty(value string, fallback string) string {
 
 func strPtr(v string) *string {
 	return &v
+}
+
+func (s *Service) reconcileTerminalState(ctx context.Context, record Record) {
+	if s.requestStatusUpdater != nil && record.CurrentState == StatePolling {
+		_ = s.requestStatusUpdater.SetProcessing(ctx, record.RequestID)
+	}
+	if record.TerminalState == "" {
+		return
+	}
+	if s.deliveryUpdater != nil {
+		if record.TerminalState == StateSucceeded {
+			_ = s.deliveryUpdater.CompleteFromAsyncSuccess(ctx, record.DeliveryAttemptID, marshalRemoteResponse(record.RemoteResponse))
+		}
+		if record.TerminalState == StateFailed {
+			_ = s.deliveryUpdater.CompleteFromAsyncFailure(
+				ctx,
+				record.DeliveryAttemptID,
+				marshalRemoteResponse(record.RemoteResponse),
+				firstNonEmpty(extractErrorMessage(record.RemoteResponse), "dhis2 async task failed"),
+			)
+		}
+	}
+	if s.requestStatusUpdater != nil {
+		if record.TerminalState == StateSucceeded {
+			_ = s.requestStatusUpdater.SetCompleted(ctx, record.RequestID)
+		}
+		if record.TerminalState == StateFailed {
+			_ = s.requestStatusUpdater.SetFailed(ctx, record.RequestID)
+		}
+	}
+}
+
+func nextRetryPollAt() *time.Time {
+	next := time.Now().UTC().Add(30 * time.Second)
+	return &next
+}
+
+func marshalRemoteResponse(input map[string]any) string {
+	if len(input) == 0 {
+		return ""
+	}
+	bytes, err := json.Marshal(input)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+func extractErrorMessage(input map[string]any) string {
+	for _, key := range []string{"error", "message", "description"} {
+		value, ok := input[key]
+		if ok {
+			if text, isText := value.(string); isText {
+				return text
+			}
+		}
+	}
+	return ""
 }

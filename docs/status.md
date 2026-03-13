@@ -1,5 +1,68 @@
 # Status
 
+## Milestone — DHIS2 Async Submission Integration (Complete)
+
+### What changed
+- Replaced the placeholder DHIS2 integration with a production-shaped submission and polling module under [backend/internal/sukumad/dhis2](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2):
+  - server-driven request preparation from persisted Sukumad server records
+  - structured interpretation for synchronous DHIS2 import responses
+  - structured interpretation for asynchronous DHIS2 task/import-status responses
+  - polling support that normalizes remote terminal and non-terminal states
+- Extended the Sukumad delivery engine under [backend/internal/sukumad/delivery](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery) so DHIS2-targeted requests now:
+  - create and run a delivery attempt from request creation
+  - persist response metadata without exposing secrets
+  - distinguish synchronous success, synchronous failure, and async hand-off
+  - create linked async tasks for DHIS2 async flows
+  - reconcile terminal async outcomes back into delivery state
+- Extended the Sukumad async lifecycle under [backend/internal/sukumad/async](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async) so DHIS2 poll results now:
+  - map into `pending`, `polling`, `succeeded`, and `failed`
+  - keep transient poll failures retryable instead of forcing premature terminal failure
+  - reconcile linked deliveries on terminal completion
+  - roll request status forward to `processing`, `completed`, or `failed`
+- Extended Sukumad request detail loading under [backend/internal/sukumad/request](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request) so list/detail responses expose the latest delivery and async linkage metadata needed by clients.
+- Updated API bootstrap wiring in [backend/cmd/api/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/main.go) so the delivery service, request service, async service, and worker poller share the new DHIS2 dispatcher and reconciliation flow.
+- Extended the web Sukumad pages in [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx), [web/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestDetailPage.tsx), [web/src/pages/DeliveriesPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DeliveriesPage.tsx), and [web/src/pages/DeliveryDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DeliveryDetailPage.tsx):
+  - requests show async-waiting state, latest delivery, latest job state, and remote DHIS2 tracking details
+  - deliveries show system type, submission mode, linked async job, remote job ID, poll URL, and terminal outcome details
+- Reused the existing jobs and servers routes without redesign:
+  - job detail APIs already surface DHIS2 remote job metadata, poll state, and latest response snapshots through the existing jobs UI
+  - server forms continue to expose the DHIS2-relevant persisted fields introduced in earlier milestones
+- Extended the desktop Sukumad pages in [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx), [desktop/frontend/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestDetailPage.tsx), [desktop/frontend/src/pages/DeliveriesPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DeliveriesPage.tsx), and [desktop/frontend/src/pages/DeliveryDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DeliveryDetailPage.tsx) with the same DHIS2-aware visibility, preserving web/desktop parity and backend-only access.
+- Added a DHIS2 async integration note in [docs/notes/sukumad-dhis2-async-integration.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-dhis2-async-integration.md).
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-12-milestone-6-dhis2-async-submission-integration.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/dhis2/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2/service_test.go)
+  - updated [backend/internal/sukumad/delivery/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service_test.go) for DHIS2 submission and async-task creation
+  - updated [backend/internal/sukumad/async/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/service_test.go) for terminal reconciliation and retryable poll errors
+  - updated [backend/internal/sukumad/request/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/repository_test.go) and [backend/internal/sukumad/delivery/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository_test.go) for enriched DHIS2-aware detail projections
+- Web:
+  - updated [web/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/requests-page.test.tsx)
+  - updated [web/src/pages/deliveries-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/deliveries-page.test.tsx)
+  - updated [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx)
+- Desktop:
+  - updated [desktop/frontend/src/components/datagrid/AppDataGrid.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/components/datagrid/AppDataGrid.test.tsx) to stabilize grid state assertions in the full suite
+  - updated [desktop/frontend/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/requests-page.test.tsx)
+  - updated [desktop/frontend/src/pages/deliveries-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/deliveries-page.test.tsx)
+  - updated [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx)
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Jobs pages still inherit existing generic poll-history presentation; a later milestone can add richer DHIS2-specific job-detail fields without changing the underlying reconciliation model.
+- Frontend test logs still include existing non-blocking MUI jsdom `anchorEl` warnings.
+- Frontend build logs still include existing third-party `'use client'` and chunk-size warnings.
+
 ## Milestone — Workers, Async Tasks, and Rate Limiting (Complete)
 
 ### What changed

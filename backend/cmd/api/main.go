@@ -24,6 +24,7 @@ import (
 	"basepro/backend/internal/settings"
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
@@ -126,16 +127,22 @@ func run() error {
 	)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
-	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService)
-	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService).WithDeliveryService(sukumadDeliveryService)
+	sukumadDHIS2Service := dhis2.NewService(nil)
+	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService).WithServerService(sukumadServerService)
+	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
+		WithDispatcher(sukumadDHIS2Service).
+		WithRequestStatusUpdater(sukumadRequestService)
 	sukumadAsyncService := asyncjobs.NewService(asyncjobs.NewRepository(database), auditService)
+	sukumadDeliveryService.WithAsyncService(sukumadAsyncService)
+	sukumadRequestService.WithDeliveryService(sukumadDeliveryService)
+	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService)
 	sukumadRateLimitService := ratelimit.NewService(ratelimit.NewRepository(database))
 	sukumadWorkerService := worker.NewService(worker.NewRepository(database), auditService)
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(sukumadWorkerService, sukumadRateLimitService))
 	_ = worker.NewBootstrap(
 		sukumadWorkerService,
 		worker.NewSendDefinition(nil),
-		worker.NewPollDefinition(sukumadAsyncService, asyncjobs.StaticPoller{}, 10),
+		worker.NewPollDefinition(sukumadAsyncService, sukumadDHIS2Service, 10),
 		worker.NewRetryDefinition(nil),
 	)
 	bootstrapService := bootstrap.NewService(

@@ -32,22 +32,28 @@ func NewRepository(db ...*sqlx.DB) Repository {
 }
 
 type recordRow struct {
-	ID            int64      `db:"id"`
-	UID           string     `db:"uid"`
-	RequestID     int64      `db:"request_id"`
-	RequestUID    string     `db:"request_uid"`
-	ServerID      int64      `db:"server_id"`
-	ServerName    string     `db:"server_name"`
-	AttemptNumber int        `db:"attempt_number"`
-	Status        string     `db:"status"`
-	HTTPStatus    *int       `db:"http_status"`
-	ResponseBody  string     `db:"response_body"`
-	ErrorMessage  string     `db:"error_message"`
-	StartedAt     *time.Time `db:"started_at"`
-	FinishedAt    *time.Time `db:"finished_at"`
-	RetryAt       *time.Time `db:"retry_at"`
-	CreatedAt     time.Time  `db:"created_at"`
-	UpdatedAt     time.Time  `db:"updated_at"`
+	ID                int64      `db:"id"`
+	UID               string     `db:"uid"`
+	RequestID         int64      `db:"request_id"`
+	RequestUID        string     `db:"request_uid"`
+	ServerID          int64      `db:"server_id"`
+	ServerName        string     `db:"server_name"`
+	SystemType        string     `db:"system_type"`
+	AttemptNumber     int        `db:"attempt_number"`
+	Status            string     `db:"status"`
+	HTTPStatus        *int       `db:"http_status"`
+	ResponseBody      string     `db:"response_body"`
+	ErrorMessage      string     `db:"error_message"`
+	AsyncTaskID       *int64     `db:"async_task_id"`
+	AsyncTaskUID      string     `db:"async_task_uid"`
+	AsyncCurrentState string     `db:"async_current_state"`
+	AsyncRemoteJobID  string     `db:"async_remote_job_id"`
+	AsyncPollURL      string     `db:"async_poll_url"`
+	StartedAt         *time.Time `db:"started_at"`
+	FinishedAt        *time.Time `db:"finished_at"`
+	RetryAt           *time.Time `db:"retry_at"`
+	CreatedAt         time.Time  `db:"created_at"`
+	UpdatedAt         time.Time  `db:"updated_at"`
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
@@ -129,6 +135,7 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 	`
 
 	var total int
@@ -140,8 +147,11 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
-		       d.server_id, COALESCE(s.name, '') AS server_name,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
 	` + baseFrom + whereClause + fmt.Sprintf(
 		" ORDER BY %s %s LIMIT $%d OFFSET $%d",
@@ -173,12 +183,16 @@ func (r *SQLRepository) GetDeliveryByID(ctx context.Context, id int64) (Record, 
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
-		       d.server_id, COALESCE(s.name, '') AS server_name,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 		WHERE d.id = $1
 	`, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -277,22 +291,30 @@ func resolveSortColumn(sortField string) string {
 
 func decodeRow(row recordRow) Record {
 	return Record{
-		ID:            row.ID,
-		UID:           row.UID,
-		RequestID:     row.RequestID,
-		RequestUID:    row.RequestUID,
-		ServerID:      row.ServerID,
-		ServerName:    row.ServerName,
-		AttemptNumber: row.AttemptNumber,
-		Status:        row.Status,
-		HTTPStatus:    cloneIntPtr(row.HTTPStatus),
-		ResponseBody:  row.ResponseBody,
-		ErrorMessage:  row.ErrorMessage,
-		StartedAt:     cloneTimePtr(row.StartedAt),
-		FinishedAt:    cloneTimePtr(row.FinishedAt),
-		RetryAt:       cloneTimePtr(row.RetryAt),
-		CreatedAt:     row.CreatedAt,
-		UpdatedAt:     row.UpdatedAt,
+		ID:                row.ID,
+		UID:               row.UID,
+		RequestID:         row.RequestID,
+		RequestUID:        row.RequestUID,
+		ServerID:          row.ServerID,
+		ServerName:        row.ServerName,
+		SystemType:        row.SystemType,
+		AttemptNumber:     row.AttemptNumber,
+		Status:            row.Status,
+		HTTPStatus:        cloneIntPtr(row.HTTPStatus),
+		ResponseBody:      row.ResponseBody,
+		ErrorMessage:      row.ErrorMessage,
+		SubmissionMode:    submissionMode(row.AsyncTaskID),
+		AsyncTaskID:       cloneInt64Ptr(row.AsyncTaskID),
+		AsyncTaskUID:      row.AsyncTaskUID,
+		AsyncCurrentState: row.AsyncCurrentState,
+		AsyncRemoteJobID:  row.AsyncRemoteJobID,
+		AsyncPollURL:      row.AsyncPollURL,
+		AwaitingAsync:     row.AsyncTaskID != nil && row.AsyncCurrentState != "" && row.AsyncCurrentState != StatusSucceeded && row.AsyncCurrentState != StatusFailed,
+		StartedAt:         cloneTimePtr(row.StartedAt),
+		FinishedAt:        cloneTimePtr(row.FinishedAt),
+		RetryAt:           cloneTimePtr(row.RetryAt),
+		CreatedAt:         row.CreatedAt,
+		UpdatedAt:         row.UpdatedAt,
 	}
 }
 
@@ -422,22 +444,23 @@ func (r *memoryRepository) CreateDelivery(_ context.Context, params CreateParams
 	r.nextID++
 	now := time.Now().UTC()
 	record := Record{
-		ID:            id,
-		UID:           params.UID,
-		RequestID:     params.RequestID,
-		RequestUID:    fmt.Sprintf("request-%d", params.RequestID),
-		ServerID:      params.ServerID,
-		ServerName:    fmt.Sprintf("Server #%d", params.ServerID),
-		AttemptNumber: params.AttemptNumber,
-		Status:        params.Status,
-		HTTPStatus:    cloneIntPtr(params.HTTPStatus),
-		ResponseBody:  params.ResponseBody,
-		ErrorMessage:  params.ErrorMessage,
-		StartedAt:     cloneTimePtr(params.StartedAt),
-		FinishedAt:    cloneTimePtr(params.FinishedAt),
-		RetryAt:       cloneTimePtr(params.RetryAt),
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:             id,
+		UID:            params.UID,
+		RequestID:      params.RequestID,
+		RequestUID:     fmt.Sprintf("request-%d", params.RequestID),
+		ServerID:       params.ServerID,
+		ServerName:     fmt.Sprintf("Server #%d", params.ServerID),
+		AttemptNumber:  params.AttemptNumber,
+		Status:         params.Status,
+		HTTPStatus:     cloneIntPtr(params.HTTPStatus),
+		ResponseBody:   params.ResponseBody,
+		ErrorMessage:   params.ErrorMessage,
+		SubmissionMode: "synchronous",
+		StartedAt:      cloneTimePtr(params.StartedAt),
+		FinishedAt:     cloneTimePtr(params.FinishedAt),
+		RetryAt:        cloneTimePtr(params.RetryAt),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil
@@ -488,6 +511,7 @@ func compareOptionalTimes(a *time.Time, b *time.Time) int {
 
 func cloneRecord(input Record) Record {
 	input.HTTPStatus = cloneIntPtr(input.HTTPStatus)
+	input.AsyncTaskID = cloneInt64Ptr(input.AsyncTaskID)
 	input.StartedAt = cloneTimePtr(input.StartedAt)
 	input.FinishedAt = cloneTimePtr(input.FinishedAt)
 	input.RetryAt = cloneTimePtr(input.RetryAt)
@@ -508,6 +532,21 @@ func cloneIntPtr(value *int) *int {
 	}
 	copy := *value
 	return &copy
+}
+
+func cloneInt64Ptr(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func submissionMode(asyncTaskID *int64) string {
+	if asyncTaskID != nil {
+		return "async"
+	}
+	return "synchronous"
 }
 
 func newUID() string {

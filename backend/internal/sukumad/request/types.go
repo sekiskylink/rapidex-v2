@@ -14,23 +14,32 @@ const (
 )
 
 type Record struct {
-	ID                    int64           `db:"id" json:"id"`
-	UID                   string          `db:"uid" json:"uid"`
-	SourceSystem          string          `db:"source_system" json:"sourceSystem"`
-	DestinationServerID   int64           `db:"destination_server_id" json:"destinationServerId"`
-	DestinationServerName string          `json:"destinationServerName"`
-	BatchID               string          `db:"batch_id" json:"batchId"`
-	CorrelationID         string          `db:"correlation_id" json:"correlationId"`
-	IdempotencyKey        string          `db:"idempotency_key" json:"idempotencyKey"`
-	PayloadBody           string          `db:"payload_body" json:"payloadBody"`
-	PayloadFormat         string          `db:"payload_format" json:"payloadFormat"`
-	URLSuffix             string          `db:"url_suffix" json:"urlSuffix"`
-	Status                string          `db:"status" json:"status"`
-	Extras                map[string]any  `json:"extras"`
-	CreatedAt             time.Time       `db:"created_at" json:"createdAt"`
-	UpdatedAt             time.Time       `db:"updated_at" json:"updatedAt"`
-	CreatedBy             *int64          `db:"created_by" json:"createdBy,omitempty"`
-	Payload               json.RawMessage `json:"payload"`
+	ID                     int64           `db:"id" json:"id"`
+	UID                    string          `db:"uid" json:"uid"`
+	SourceSystem           string          `db:"source_system" json:"sourceSystem"`
+	DestinationServerID    int64           `db:"destination_server_id" json:"destinationServerId"`
+	DestinationServerName  string          `json:"destinationServerName"`
+	BatchID                string          `db:"batch_id" json:"batchId"`
+	CorrelationID          string          `db:"correlation_id" json:"correlationId"`
+	IdempotencyKey         string          `db:"idempotency_key" json:"idempotencyKey"`
+	PayloadBody            string          `db:"payload_body" json:"payloadBody"`
+	PayloadFormat          string          `db:"payload_format" json:"payloadFormat"`
+	URLSuffix              string          `db:"url_suffix" json:"urlSuffix"`
+	Status                 string          `db:"status" json:"status"`
+	Extras                 map[string]any  `json:"extras"`
+	CreatedAt              time.Time       `db:"created_at" json:"createdAt"`
+	UpdatedAt              time.Time       `db:"updated_at" json:"updatedAt"`
+	CreatedBy              *int64          `db:"created_by" json:"createdBy,omitempty"`
+	Payload                json.RawMessage `json:"payload"`
+	LatestDeliveryID       *int64          `json:"latestDeliveryId,omitempty"`
+	LatestDeliveryUID      string          `json:"latestDeliveryUid"`
+	LatestDeliveryStatus   string          `json:"latestDeliveryStatus"`
+	LatestAsyncTaskID      *int64          `json:"latestAsyncTaskId,omitempty"`
+	LatestAsyncTaskUID     string          `json:"latestAsyncTaskUid"`
+	LatestAsyncState       string          `json:"latestAsyncState"`
+	LatestAsyncRemoteJobID string          `json:"latestAsyncRemoteJobId"`
+	LatestAsyncPollURL     string          `json:"latestAsyncPollUrl"`
+	AwaitingAsync          bool            `json:"awaitingAsync"`
 }
 
 type ListQuery struct {
@@ -80,4 +89,5 @@ type Repository interface {
 	ListRequests(ctx context.Context, query ListQuery) (ListResult, error)
 	GetRequestByID(ctx context.Context, id int64) (Record, error)
 	CreateRequest(ctx context.Context, params CreateParams) (Record, error)
+	UpdateRequestStatus(ctx context.Context, id int64, status string) (Record, error)
 }

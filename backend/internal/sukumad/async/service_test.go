@@ -2,6 +2,7 @@ package async
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -118,6 +119,111 @@ func TestServicePollDueTasksUpdatesTaskAndHistory(t *testing.T) {
 	}
 	if polls.Total != 1 || len(polls.Items) != 1 {
 		t.Fatalf("expected one poll history row, got %+v", polls)
+	}
+}
+
+type fakeDeliveryUpdater struct {
+	succeeded []int64
+	failed    []int64
+}
+
+func (f *fakeDeliveryUpdater) CompleteFromAsyncSuccess(_ context.Context, deliveryID int64, _ string) error {
+	f.succeeded = append(f.succeeded, deliveryID)
+	return nil
+}
+
+func (f *fakeDeliveryUpdater) CompleteFromAsyncFailure(_ context.Context, deliveryID int64, _ string, _ string) error {
+	f.failed = append(f.failed, deliveryID)
+	return nil
+}
+
+type fakeRequestUpdater struct {
+	processing []int64
+	completed  []int64
+	failed     []int64
+}
+
+func (f *fakeRequestUpdater) SetProcessing(_ context.Context, requestID int64) error {
+	f.processing = append(f.processing, requestID)
+	return nil
+}
+
+func (f *fakeRequestUpdater) SetCompleted(_ context.Context, requestID int64) error {
+	f.completed = append(f.completed, requestID)
+	return nil
+}
+
+func (f *fakeRequestUpdater) SetFailed(_ context.Context, requestID int64) error {
+	f.failed = append(f.failed, requestID)
+	return nil
+}
+
+type errorPoller struct{}
+
+func (errorPoller) Poll(context.Context, Record) (RemotePollResult, error) {
+	return RemotePollResult{}, errors.New("network timeout")
+}
+
+func TestServiceUpdateTaskStatusReconcilesTerminalSuccess(t *testing.T) {
+	deliveryUpdater := &fakeDeliveryUpdater{}
+	requestUpdater := &fakeRequestUpdater{}
+	service := NewService(NewRepository()).WithReconciliation(deliveryUpdater, requestUpdater)
+
+	created, err := service.CreateTask(context.Background(), CreateInput{
+		DeliveryAttemptID: 4,
+		RemoteJobID:       "remote-4",
+		RemoteStatus:      StatePending,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	if _, err := service.UpdateTaskStatus(context.Background(), UpdateStatusInput{
+		ID:            created.ID,
+		RemoteStatus:  StateSucceeded,
+		TerminalState: StateSucceeded,
+		RemoteResponse: map[string]any{
+			"status": "OK",
+		},
+	}); err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+
+	if len(deliveryUpdater.succeeded) != 1 || deliveryUpdater.succeeded[0] != created.DeliveryAttemptID {
+		t.Fatalf("expected delivery success reconciliation, got %+v", deliveryUpdater)
+	}
+	if len(requestUpdater.completed) != 1 || requestUpdater.completed[0] != created.RequestID {
+		t.Fatalf("expected request completion reconciliation, got %+v", requestUpdater)
+	}
+}
+
+func TestServicePollDueTasksKeepsTaskPollingOnTransientError(t *testing.T) {
+	requestUpdater := &fakeRequestUpdater{}
+	service := NewService(NewRepository()).WithReconciliation(&fakeDeliveryUpdater{}, requestUpdater)
+	nextPollAt := time.Now().UTC().Add(-time.Minute)
+	created, err := service.CreateTask(context.Background(), CreateInput{
+		DeliveryAttemptID: 5,
+		RemoteJobID:       "remote-5",
+		RemoteStatus:      StatePolling,
+		NextPollAt:        &nextPollAt,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	if err := service.PollDueTasks(context.Background(), 10, errorPoller{}); err != nil {
+		t.Fatalf("poll due tasks: %v", err)
+	}
+
+	task, err := service.GetTask(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.CurrentState != StatePolling || task.TerminalState != "" || task.NextPollAt == nil {
+		t.Fatalf("expected task to remain polling after transient error, got %+v", task)
+	}
+	if len(requestUpdater.processing) == 0 {
+		t.Fatalf("expected request processing update after transient error")
 	}
 }
 

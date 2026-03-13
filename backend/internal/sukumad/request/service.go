@@ -12,6 +12,7 @@ import (
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/server"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -20,6 +21,10 @@ type Service struct {
 	auditService *audit.Service
 	deliverySvc  interface {
 		CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
+		SubmitDHIS2Delivery(context.Context, delivery.DispatchInput) (delivery.Record, error)
+	}
+	serverSvc interface {
+		GetServer(context.Context, int64) (server.Record, error)
 	}
 }
 
@@ -33,8 +38,16 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 
 func (s *Service) WithDeliveryService(deliverySvc interface {
 	CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
+	SubmitDHIS2Delivery(context.Context, delivery.DispatchInput) (delivery.Record, error)
 }) *Service {
 	s.deliverySvc = deliverySvc
+	return s
+}
+
+func (s *Service) WithServerService(serverSvc interface {
+	GetServer(context.Context, int64) (server.Record, error)
+}) *Service {
+	s.serverSvc = serverSvc
 	return s
 }
 
@@ -80,16 +93,6 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 		return Record{}, err
 	}
 
-	if s.deliverySvc != nil {
-		if _, err := s.deliverySvc.CreatePendingDelivery(ctx, delivery.CreateInput{
-			RequestID: created.ID,
-			ServerID:  created.DestinationServerID,
-			ActorID:   input.ActorID,
-		}); err != nil {
-			return Record{}, err
-		}
-	}
-
 	s.logAudit(ctx, audit.Event{
 		Action:      "request.created",
 		ActorUserID: input.ActorID,
@@ -104,7 +107,62 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 		},
 	})
 
+	if s.deliverySvc != nil {
+		deliveryRecord, err := s.deliverySvc.CreatePendingDelivery(ctx, delivery.CreateInput{
+			RequestID: created.ID,
+			ServerID:  created.DestinationServerID,
+			ActorID:   input.ActorID,
+		})
+		if err != nil {
+			return Record{}, err
+		}
+
+		if s.serverSvc != nil {
+			serverRecord, err := s.serverSvc.GetServer(ctx, created.DestinationServerID)
+			if err != nil {
+				return Record{}, err
+			}
+			if _, err := s.deliverySvc.SubmitDHIS2Delivery(ctx, delivery.DispatchInput{
+				DeliveryID:  deliveryRecord.ID,
+				RequestID:   created.ID,
+				RequestUID:  created.UID,
+				PayloadBody: created.PayloadBody,
+				URLSuffix:   created.URLSuffix,
+				Server: delivery.ServerSnapshot{
+					ID:           serverRecord.ID,
+					Name:         serverRecord.Name,
+					SystemType:   serverRecord.SystemType,
+					BaseURL:      serverRecord.BaseURL,
+					EndpointType: serverRecord.EndpointType,
+					HTTPMethod:   serverRecord.HTTPMethod,
+					UseAsync:     serverRecord.UseAsync,
+					Headers:      serverRecord.Headers,
+					URLParams:    serverRecord.URLParams,
+				},
+				ActorID: input.ActorID,
+			}); err != nil {
+				return Record{}, err
+			}
+			return s.GetRequest(ctx, created.ID)
+		}
+	}
+
 	return created, nil
+}
+
+func (s *Service) SetProcessing(ctx context.Context, requestID int64) error {
+	_, err := s.updateStatus(ctx, requestID, StatusProcessing)
+	return err
+}
+
+func (s *Service) SetCompleted(ctx context.Context, requestID int64) error {
+	_, err := s.updateStatus(ctx, requestID, StatusCompleted)
+	return err
+}
+
+func (s *Service) SetFailed(ctx context.Context, requestID int64) error {
+	_, err := s.updateStatus(ctx, requestID, StatusFailed)
+	return err
 }
 
 func normalizeCreateInput(input CreateInput) (CreateInput, map[string]any) {
@@ -168,6 +226,17 @@ func (s *Service) logAudit(ctx context.Context, event audit.Event) {
 		return
 	}
 	_ = s.auditService.Log(ctx, event)
+}
+
+func (s *Service) updateStatus(ctx context.Context, requestID int64, status string) (Record, error) {
+	record, err := s.repo.UpdateRequestStatus(ctx, requestID, status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"request not found"}})
+		}
+		return Record{}, err
+	}
+	return record, nil
 }
 
 func mapConstraintError(err error) *apperror.AppError {

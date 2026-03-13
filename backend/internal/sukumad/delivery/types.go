@@ -14,22 +14,30 @@ const (
 )
 
 type Record struct {
-	ID            int64      `db:"id" json:"id"`
-	UID           string     `db:"uid" json:"uid"`
-	RequestID     int64      `db:"request_id" json:"requestId"`
-	RequestUID    string     `json:"requestUid"`
-	ServerID      int64      `db:"server_id" json:"serverId"`
-	ServerName    string     `json:"serverName"`
-	AttemptNumber int        `db:"attempt_number" json:"attemptNumber"`
-	Status        string     `db:"status" json:"status"`
-	HTTPStatus    *int       `db:"http_status" json:"httpStatus,omitempty"`
-	ResponseBody  string     `db:"response_body" json:"responseBody"`
-	ErrorMessage  string     `db:"error_message" json:"errorMessage"`
-	StartedAt     *time.Time `db:"started_at" json:"startedAt,omitempty"`
-	FinishedAt    *time.Time `db:"finished_at" json:"finishedAt,omitempty"`
-	RetryAt       *time.Time `db:"retry_at" json:"retryAt,omitempty"`
-	CreatedAt     time.Time  `db:"created_at" json:"createdAt"`
-	UpdatedAt     time.Time  `db:"updated_at" json:"updatedAt"`
+	ID                int64      `db:"id" json:"id"`
+	UID               string     `db:"uid" json:"uid"`
+	RequestID         int64      `db:"request_id" json:"requestId"`
+	RequestUID        string     `json:"requestUid"`
+	ServerID          int64      `db:"server_id" json:"serverId"`
+	ServerName        string     `json:"serverName"`
+	SystemType        string     `json:"systemType"`
+	AttemptNumber     int        `db:"attempt_number" json:"attemptNumber"`
+	Status            string     `db:"status" json:"status"`
+	HTTPStatus        *int       `db:"http_status" json:"httpStatus,omitempty"`
+	ResponseBody      string     `db:"response_body" json:"responseBody"`
+	ErrorMessage      string     `db:"error_message" json:"errorMessage"`
+	SubmissionMode    string     `json:"submissionMode"`
+	AsyncTaskID       *int64     `json:"asyncTaskId,omitempty"`
+	AsyncTaskUID      string     `json:"asyncTaskUid"`
+	AsyncCurrentState string     `json:"asyncCurrentState"`
+	AsyncRemoteJobID  string     `json:"asyncRemoteJobId"`
+	AsyncPollURL      string     `json:"asyncPollUrl"`
+	AwaitingAsync     bool       `json:"awaitingAsync"`
+	StartedAt         *time.Time `db:"started_at" json:"startedAt,omitempty"`
+	FinishedAt        *time.Time `db:"finished_at" json:"finishedAt,omitempty"`
+	RetryAt           *time.Time `db:"retry_at" json:"retryAt,omitempty"`
+	CreatedAt         time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt         time.Time  `db:"updated_at" json:"updatedAt"`
 }
 
 type ListQuery struct {
@@ -87,6 +95,28 @@ type CompletionInput struct {
 	ResponseBody string
 	ErrorMessage string
 	ActorID      *int64
+}
+
+type ServerSnapshot struct {
+	ID           int64
+	Name         string
+	SystemType   string
+	BaseURL      string
+	EndpointType string
+	HTTPMethod   string
+	UseAsync     bool
+	Headers      map[string]string
+	URLParams    map[string]string
+}
+
+type DispatchInput struct {
+	DeliveryID  int64
+	RequestID   int64
+	RequestUID  string
+	PayloadBody string
+	URLSuffix   string
+	Server      ServerSnapshot
+	ActorID     *int64
 }
 
 type Repository interface {

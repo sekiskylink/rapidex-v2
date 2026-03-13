@@ -1,6 +1,5 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppDataGrid, type AppDataGridFetchParams } from './AppDataGrid'
 import { defaultSettings, type AppSettings, type SaveSettingsPatch, type SettingsStore } from '../../settings/types'
@@ -83,40 +82,31 @@ function createMockSettingsStore(seed: AppSettings): SettingsStore & {
 }
 
 function renderGrid(store: SettingsStore, fetchData: (params: AppDataGridFetchParams) => Promise<any>) {
-  interface RouterContext {
-    settingsStore: SettingsStore
-  }
+  return render(<StatefulGrid fetchData={fetchData} settingsStore={store} />)
+}
 
-  const rootRoute = createRootRouteWithContext<RouterContext>()({
-    component: () => {
-      const [queryKey, setQueryKey] = React.useState('initial')
-      return (
-        <>
-          <button type="button" onClick={() => setQueryKey('changed')}>
-            change-query
-          </button>
-          <AppDataGrid
-            storageKey="users-table"
-            columns={[{ field: 'id' }, { field: 'username' }, { field: 'actions' }]}
-            fetchData={fetchData}
-            externalQueryKey={queryKey}
-          />
-        </>
-      )
-    },
-  })
-  const indexRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/',
-    component: () => null,
-  })
-  const router = createRouter({
-    routeTree: rootRoute.addChildren([indexRoute]),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
-    context: { settingsStore: store },
-  })
-
-  return render(<RouterProvider router={router} />)
+function StatefulGrid({
+  fetchData,
+  settingsStore,
+}: {
+  fetchData: (params: AppDataGridFetchParams) => Promise<any>
+  settingsStore: SettingsStore
+}) {
+  const [queryKey, setQueryKey] = React.useState('initial')
+  return (
+    <>
+      <button type="button" onClick={() => setQueryKey('changed')}>
+        change-query
+      </button>
+      <AppDataGrid
+        storageKey="users-table"
+        settingsStore={settingsStore}
+        columns={[{ field: 'id' }, { field: 'username' }, { field: 'actions' }]}
+        fetchData={fetchData}
+        externalQueryKey={queryKey}
+      />
+    </>
+  )
 }
 
 describe('AppDataGrid', () => {

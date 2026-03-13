@@ -122,6 +122,12 @@ export function DeliveriesPage() {
           <Chip label={params.value ?? 'unknown'} size="small" color={statusColor(params.value ?? '')} />
         ),
       },
+      {
+        field: 'asyncCurrentState',
+        headerName: 'Async',
+        minWidth: 140,
+        valueGetter: (_value, row) => (row.awaitingAsync ? row.asyncCurrentState || 'awaiting' : row.asyncCurrentState || '-'),
+      },
       { field: 'attemptNumber', headerName: 'Attempt', minWidth: 110, type: 'number' },
       {
         field: 'startedAt',

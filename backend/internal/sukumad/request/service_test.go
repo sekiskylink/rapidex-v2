@@ -13,6 +13,7 @@ type fakeRepo struct {
 	listFn   func(ctx context.Context, query ListQuery) (ListResult, error)
 	getFn    func(ctx context.Context, id int64) (Record, error)
 	createFn func(ctx context.Context, params CreateParams) (Record, error)
+	updateFn func(ctx context.Context, id int64, status string) (Record, error)
 }
 
 func (f *fakeRepo) ListRequests(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -25,6 +26,13 @@ func (f *fakeRepo) GetRequestByID(ctx context.Context, id int64) (Record, error)
 
 func (f *fakeRepo) CreateRequest(ctx context.Context, params CreateParams) (Record, error) {
 	return f.createFn(ctx, params)
+}
+
+func (f *fakeRepo) UpdateRequestStatus(ctx context.Context, id int64, status string) (Record, error) {
+	if f.updateFn == nil {
+		return Record{}, sql.ErrNoRows
+	}
+	return f.updateFn(ctx, id, status)
 }
 
 type fakeAuditRepo struct {

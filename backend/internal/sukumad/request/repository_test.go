@@ -24,14 +24,26 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 	dataRows := sqlmock.NewRows([]string{
 		"id", "uid", "source_system", "destination_server_id", "destination_server_name", "batch_id", "correlation_id",
 		"idempotency_key", "payload_body", "payload_format", "url_suffix", "status", "extras", "created_at", "updated_at", "created_by",
+		"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 	}).AddRow(
 		8, "11111111-1111-1111-1111-111111111111", "emr", 3, "DHIS2 Uganda", "batch-1", "corr-1",
 		"idem-1", `{"trackedEntity":"123"}`, "json", "/api/data", "pending", []byte(`{"priority":"high"}`), now, now, int64(7),
+		nil, "", "", nil, "", "", "", "",
 	)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) 
 		FROM exchange_requests r
 		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = r.id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
 		 WHERE (
 			r.uid::text ILIKE $1 OR
 			COALESCE(r.source_system, '') ILIKE $1 OR
@@ -49,9 +61,27 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,
-		       r.extras, r.created_at, r.updated_at, r.created_by
+		       r.extras, r.created_at, r.updated_at, r.created_by,
+		       ld.id AS latest_delivery_id,
+		       COALESCE(ld.uid, '') AS latest_delivery_uid,
+		       COALESCE(ld.status, '') AS latest_delivery_status,
+		       a.id AS latest_async_task_id,
+		       COALESCE(a.uid::text, '') AS latest_async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS latest_async_state,
+		       COALESCE(a.remote_job_id, '') AS latest_async_remote_job_id,
+		       COALESCE(a.poll_url, '') AS latest_async_poll_url
 		FROM exchange_requests r
 		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = r.id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
 		 WHERE (
 			r.uid::text ILIKE $1 OR
 			COALESCE(r.source_system, '') ILIKE $1 OR
@@ -100,9 +130,27 @@ func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,
-		       r.extras, r.created_at, r.updated_at, r.created_by
+		       r.extras, r.created_at, r.updated_at, r.created_by,
+		       ld.id AS latest_delivery_id,
+		       COALESCE(ld.uid, '') AS latest_delivery_uid,
+		       COALESCE(ld.status, '') AS latest_delivery_status,
+		       a.id AS latest_async_task_id,
+		       COALESCE(a.uid::text, '') AS latest_async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS latest_async_state,
+		       COALESCE(a.remote_job_id, '') AS latest_async_remote_job_id,
+		       COALESCE(a.poll_url, '') AS latest_async_poll_url
 		FROM exchange_requests r
 		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = r.id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
 		WHERE r.id = $1
 	`)).
 		WithArgs(int64(44)).
@@ -152,18 +200,38 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.url_suffix, r.status,
-		       r.extras, r.created_at, r.updated_at, r.created_by
+		       r.extras, r.created_at, r.updated_at, r.created_by,
+		       ld.id AS latest_delivery_id,
+		       COALESCE(ld.uid, '') AS latest_delivery_uid,
+		       COALESCE(ld.status, '') AS latest_delivery_status,
+		       a.id AS latest_async_task_id,
+		       COALESCE(a.uid::text, '') AS latest_async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS latest_async_state,
+		       COALESCE(a.remote_job_id, '') AS latest_async_remote_job_id,
+		       COALESCE(a.poll_url, '') AS latest_async_poll_url
 		FROM exchange_requests r
 		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = r.id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
 		WHERE r.id = $1
 	`)).
 		WithArgs(int64(15)).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "uid", "source_system", "destination_server_id", "destination_server_name", "batch_id", "correlation_id",
 			"idempotency_key", "payload_body", "payload_format", "url_suffix", "status", "extras", "created_at", "updated_at", "created_by",
+			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 		}).AddRow(
 			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "DHIS2 Uganda", "batch-1", "corr-1",
 			"idem-1", `{"trackedEntity":"123"}`, "json", "/api/data", "pending", []byte(`{"priority":"high"}`), now, now, int64(9),
+			nil, "", "", nil, "", "", "", "",
 		))
 
 	record, err := repo.CreateRequest(context.Background(), CreateParams{

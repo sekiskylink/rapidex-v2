@@ -10,6 +10,7 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	asyncjobs "basepro/backend/internal/sukumad/async"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -18,6 +19,30 @@ const retryDelay = 5 * time.Minute
 type Service struct {
 	repo         Repository
 	auditService *audit.Service
+	dispatcher   interface {
+		Submit(context.Context, DispatchInput) (DispatchResult, error)
+	}
+	asyncService interface {
+		CreateTask(context.Context, asyncjobs.CreateInput) (asyncjobs.Record, error)
+	}
+	requestStatusUpdater interface {
+		SetProcessing(context.Context, int64) error
+		SetCompleted(context.Context, int64) error
+		SetFailed(context.Context, int64) error
+	}
+}
+
+type DispatchResult struct {
+	HTTPStatus     *int
+	ResponseBody   string
+	ErrorMessage   string
+	RemoteJobID    string
+	PollURL        string
+	RemoteStatus   string
+	RemoteResponse map[string]any
+	Async          bool
+	Terminal       bool
+	Succeeded      bool
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -26,6 +51,29 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 		auditSvc = auditService[0]
 	}
 	return &Service{repo: repository, auditService: auditSvc}
+}
+
+func (s *Service) WithDispatcher(dispatcher interface {
+	Submit(context.Context, DispatchInput) (DispatchResult, error)
+}) *Service {
+	s.dispatcher = dispatcher
+	return s
+}
+
+func (s *Service) WithAsyncService(asyncService interface {
+	CreateTask(context.Context, asyncjobs.CreateInput) (asyncjobs.Record, error)
+}) *Service {
+	s.asyncService = asyncService
+	return s
+}
+
+func (s *Service) WithRequestStatusUpdater(updater interface {
+	SetProcessing(context.Context, int64) error
+	SetCompleted(context.Context, int64) error
+	SetFailed(context.Context, int64) error
+}) *Service {
+	s.requestStatusUpdater = updater
+	return s
 }
 
 func (s *Service) ListDeliveries(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -235,6 +283,182 @@ func (s *Service) RetryDelivery(ctx context.Context, actorID *int64, id int64) (
 	return created, nil
 }
 
+func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) (Record, error) {
+	if input.DeliveryID <= 0 {
+		return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"deliveryId": []string{"is required"}})
+	}
+	if strings.TrimSpace(input.Server.SystemType) == "" {
+		return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"systemType": []string{"is required"}})
+	}
+	if s.dispatcher == nil {
+		return s.GetDelivery(ctx, input.DeliveryID)
+	}
+
+	running, err := s.MarkRunning(ctx, input.DeliveryID)
+	if err != nil {
+		return Record{}, err
+	}
+
+	result, err := s.dispatcher.Submit(ctx, input)
+	if err != nil {
+		failed, failErr := s.MarkFailed(ctx, CompletionInput{
+			ID:           input.DeliveryID,
+			ResponseBody: "",
+			ErrorMessage: err.Error(),
+			ActorID:      input.ActorID,
+		})
+		if failErr != nil {
+			return Record{}, failErr
+		}
+		if s.requestStatusUpdater != nil {
+			_ = s.requestStatusUpdater.SetFailed(ctx, input.RequestID)
+		}
+		s.logAudit(ctx, audit.Event{
+			Action:      "dhis2.submission.failed",
+			ActorUserID: input.ActorID,
+			EntityType:  "delivery",
+			EntityID:    strPtr(fmt.Sprintf("%d", failed.ID)),
+			Metadata: map[string]any{
+				"deliveryUid": failed.UID,
+				"requestUid":  input.RequestUID,
+				"serverName":  input.Server.Name,
+			},
+		})
+		return failed, nil
+	}
+
+	s.logAudit(ctx, audit.Event{
+		Action:      "dhis2.submission.started",
+		ActorUserID: input.ActorID,
+		EntityType:  "delivery",
+		EntityID:    strPtr(fmt.Sprintf("%d", running.ID)),
+		Metadata: map[string]any{
+			"deliveryUid": running.UID,
+			"requestUid":  input.RequestUID,
+			"serverName":  input.Server.Name,
+			"systemType":  input.Server.SystemType,
+		},
+	})
+
+	if result.Async {
+		if s.asyncService == nil {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"async": []string{"async service is not configured"}})
+		}
+		if _, err := s.repo.UpdateDelivery(ctx, UpdateParams{
+			ID:           running.ID,
+			Status:       StatusRunning,
+			HTTPStatus:   result.HTTPStatus,
+			ResponseBody: strings.TrimSpace(result.ResponseBody),
+			ErrorMessage: strings.TrimSpace(result.ErrorMessage),
+			StartedAt:    running.StartedAt,
+			FinishedAt:   nil,
+			RetryAt:      nil,
+		}); err != nil {
+			return Record{}, err
+		}
+		task, err := s.asyncService.CreateTask(ctx, asyncjobs.CreateInput{
+			DeliveryAttemptID: running.ID,
+			RemoteJobID:       strings.TrimSpace(result.RemoteJobID),
+			PollURL:           strings.TrimSpace(result.PollURL),
+			RemoteStatus:      firstNonEmpty(strings.TrimSpace(result.RemoteStatus), asyncjobs.StatePending),
+			NextPollAt:        nextPollTime(),
+			RemoteResponse:    cloneJSONMap(result.RemoteResponse),
+			ActorID:           input.ActorID,
+		})
+		if err != nil {
+			return Record{}, err
+		}
+		if s.requestStatusUpdater != nil {
+			_ = s.requestStatusUpdater.SetProcessing(ctx, input.RequestID)
+		}
+		s.logAudit(ctx, audit.Event{
+			Action:      "dhis2.async_task.created",
+			ActorUserID: input.ActorID,
+			EntityType:  "async_task",
+			EntityID:    strPtr(fmt.Sprintf("%d", task.ID)),
+			Metadata: map[string]any{
+				"deliveryUid":  running.UID,
+				"requestUid":   input.RequestUID,
+				"remoteJobId":  task.RemoteJobID,
+				"asyncTaskUid": task.UID,
+			},
+		})
+		return s.GetDelivery(ctx, running.ID)
+	}
+
+	if result.Terminal && result.Succeeded {
+		record, err := s.MarkSucceeded(ctx, CompletionInput{
+			ID:           running.ID,
+			HTTPStatus:   result.HTTPStatus,
+			ResponseBody: result.ResponseBody,
+			ActorID:      input.ActorID,
+		})
+		if err != nil {
+			return Record{}, err
+		}
+		if s.requestStatusUpdater != nil {
+			_ = s.requestStatusUpdater.SetCompleted(ctx, input.RequestID)
+		}
+		s.logAudit(ctx, audit.Event{
+			Action:      "dhis2.submission.succeeded",
+			ActorUserID: input.ActorID,
+			EntityType:  "delivery",
+			EntityID:    strPtr(fmt.Sprintf("%d", record.ID)),
+			Metadata: map[string]any{
+				"deliveryUid": record.UID,
+				"requestUid":  input.RequestUID,
+				"serverName":  input.Server.Name,
+				"httpStatus":  result.HTTPStatus,
+			},
+		})
+		return record, nil
+	}
+
+	record, err := s.MarkFailed(ctx, CompletionInput{
+		ID:           running.ID,
+		HTTPStatus:   result.HTTPStatus,
+		ResponseBody: result.ResponseBody,
+		ErrorMessage: firstNonEmpty(result.ErrorMessage, "dhis2 submission failed"),
+		ActorID:      input.ActorID,
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	if s.requestStatusUpdater != nil {
+		_ = s.requestStatusUpdater.SetFailed(ctx, input.RequestID)
+	}
+	s.logAudit(ctx, audit.Event{
+		Action:      "dhis2.submission.failed",
+		ActorUserID: input.ActorID,
+		EntityType:  "delivery",
+		EntityID:    strPtr(fmt.Sprintf("%d", record.ID)),
+		Metadata: map[string]any{
+			"deliveryUid": record.UID,
+			"requestUid":  input.RequestUID,
+			"serverName":  input.Server.Name,
+			"httpStatus":  result.HTTPStatus,
+		},
+	})
+	return record, nil
+}
+
+func (s *Service) CompleteFromAsyncSuccess(ctx context.Context, deliveryID int64, responseBody string) error {
+	_, err := s.MarkSucceeded(ctx, CompletionInput{
+		ID:           deliveryID,
+		ResponseBody: responseBody,
+	})
+	return err
+}
+
+func (s *Service) CompleteFromAsyncFailure(ctx context.Context, deliveryID int64, responseBody string, errorMessage string) error {
+	_, err := s.MarkFailed(ctx, CompletionInput{
+		ID:           deliveryID,
+		ResponseBody: responseBody,
+		ErrorMessage: errorMessage,
+	})
+	return err
+}
+
 func (s *Service) mustLoadForTransition(ctx context.Context, id int64) (Record, error) {
 	record, err := s.repo.GetDeliveryByID(ctx, id)
 	if err != nil {
@@ -279,4 +503,27 @@ func mapConstraintError(err error) *apperror.AppError {
 
 func strPtr(v string) *string {
 	return &v
+}
+
+func firstNonEmpty(value string, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	return fallback
+}
+
+func nextPollTime() *time.Time {
+	next := time.Now().UTC().Add(15 * time.Second)
+	return &next
+}
+
+func cloneJSONMap(input map[string]any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
 }

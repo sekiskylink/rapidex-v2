@@ -225,6 +225,12 @@ export function RequestsPage() {
           <Chip label={params.value ?? 'unknown'} size="small" color={statusColor(params.value ?? '')} />
         ),
       },
+      {
+        field: 'latestAsyncState',
+        headerName: 'Async',
+        minWidth: 140,
+        valueGetter: (_value, row) => (row.awaitingAsync ? row.latestAsyncState || 'awaiting' : row.latestAsyncState || '-'),
+      },
       { field: 'correlationId', headerName: 'Correlation ID', minWidth: 180, flex: 1 },
       {
         field: 'createdAt',

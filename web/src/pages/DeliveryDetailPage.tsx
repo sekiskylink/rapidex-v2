@@ -13,6 +13,14 @@ export interface DeliveryDetailRecord {
   httpStatus?: number | null
   responseBody: string
   errorMessage: string
+  systemType: string
+  submissionMode: string
+  asyncTaskId?: number | null
+  asyncTaskUid: string
+  asyncCurrentState: string
+  asyncRemoteJobId: string
+  asyncPollUrl: string
+  awaitingAsync: boolean
   startedAt?: string | null
   finishedAt?: string | null
   retryAt?: string | null
@@ -77,6 +85,7 @@ export function DeliveryDetailPage({ open, delivery, canRetry, retrying, onRetry
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }}>
               <Typography variant="h6">{delivery.uid}</Typography>
               <Chip label={delivery.status} color={statusColor(delivery.status)} size="small" />
+              {delivery.awaitingAsync ? <Chip label="Awaiting async" color="info" size="small" /> : null}
             </Stack>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               {renderMetadata('Request Reference', delivery.requestUid)}
@@ -85,6 +94,16 @@ export function DeliveryDetailPage({ open, delivery, canRetry, retrying, onRetry
             </Stack>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               {renderMetadata('HTTP Status', delivery.httpStatus ?? '-')}
+              {renderMetadata('System Type', delivery.systemType)}
+              {renderMetadata('Submission Mode', delivery.submissionMode)}
+            </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              {renderMetadata('Linked Job', delivery.asyncTaskUid || '-')}
+              {renderMetadata('Async State', delivery.asyncCurrentState || '-')}
+              {renderMetadata('Remote Job ID', delivery.asyncRemoteJobId || '-')}
+            </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              {renderMetadata('Poll URL', delivery.asyncPollUrl || '-')}
               {renderMetadata('Started', formatDate(delivery.startedAt))}
               {renderMetadata('Finished', formatDate(delivery.finishedAt))}
             </Stack>

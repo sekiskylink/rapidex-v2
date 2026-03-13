@@ -19,6 +19,15 @@ export interface RequestDetailRecord {
   createdAt: string
   updatedAt: string
   createdBy?: number | null
+  latestDeliveryId?: number | null
+  latestDeliveryUid: string
+  latestDeliveryStatus: string
+  latestAsyncTaskId?: number | null
+  latestAsyncTaskUid: string
+  latestAsyncState: string
+  latestAsyncRemoteJobId: string
+  latestAsyncPollUrl: string
+  awaitingAsync: boolean
 }
 
 function formatDate(value: string) {
@@ -82,6 +91,7 @@ export function RequestDetailPage({ open, request, onClose }: RequestDetailPageP
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }}>
               <Typography variant="h6">{request.uid}</Typography>
               <Chip label={request.status} color={statusColor(request.status)} size="small" />
+              {request.awaitingAsync ? <Chip label="Awaiting async" color="info" size="small" /> : null}
             </Stack>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               {renderMetadata('Destination Server', request.destinationServerName)}
@@ -97,6 +107,16 @@ export function RequestDetailPage({ open, request, onClose }: RequestDetailPageP
               {renderMetadata('Created', formatDate(request.createdAt))}
               {renderMetadata('Updated', formatDate(request.updatedAt))}
               {renderMetadata('Payload Format', request.payloadFormat)}
+            </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              {renderMetadata('Latest Delivery', request.latestDeliveryUid)}
+              {renderMetadata('Delivery Status', request.latestDeliveryStatus)}
+              {renderMetadata('Latest Job', request.latestAsyncTaskUid || request.latestAsyncRemoteJobId)}
+            </Stack>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              {renderMetadata('Job State', request.latestAsyncState)}
+              {renderMetadata('Remote Job ID', request.latestAsyncRemoteJobId)}
+              {renderMetadata('Poll URL', request.latestAsyncPollUrl)}
             </Stack>
             <Divider />
             <Box>

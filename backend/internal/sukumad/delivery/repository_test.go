@@ -22,17 +22,18 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 	now := time.Now().UTC()
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
-		"id", "uid", "request_id", "request_uid", "server_id", "server_name", "attempt_number",
-		"status", "http_status", "response_body", "error_message", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
+		"id", "uid", "request_id", "request_uid", "server_id", "server_name", "system_type", "attempt_number",
+		"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 	}).AddRow(
-		7, "delivery-uid", 3, "request-uid", 9, "DHIS2 Uganda", 1,
-		StatusFailed, 502, "{}", "timeout", now, now, nil, now, now,
+		7, "delivery-uid", 3, "request-uid", 9, "DHIS2 Uganda", "dhis2", 1,
+		StatusFailed, 502, "{}", "timeout", nil, "", "", "", "", now, now, nil, now, now,
 	)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) 
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 		 WHERE (
 			d.uid::text ILIKE $1 OR
 			COALESCE(r.uid::text, '') ILIKE $1 OR
@@ -44,13 +45,17 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
-		       d.server_id, COALESCE(s.name, '') AS server_name,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
 		
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 		 WHERE (
 			d.uid::text ILIKE $1 OR
 			COALESCE(r.uid::text, '') ILIKE $1 OR
@@ -92,12 +97,16 @@ func TestSQLRepositoryGetDeliveryByIDNotFound(t *testing.T) {
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
-		       d.server_id, COALESCE(s.name, '') AS server_name,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 		WHERE d.id = $1
 	`)).
 		WithArgs(int64(41)).
@@ -133,21 +142,25 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
-		       d.server_id, COALESCE(s.name, '') AS server_name,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 		WHERE d.id = $1
 	`)).
 		WithArgs(int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "request_uid", "server_id", "server_name", "attempt_number",
-			"status", "http_status", "response_body", "error_message", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
+			"id", "uid", "request_id", "request_uid", "server_id", "server_name", "system_type", "attempt_number",
+			"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 		}).AddRow(
-			10, "delivery-uid", 4, "request-uid", 8, "DHIS2 Uganda", 1,
-			StatusPending, nil, "", "", nil, nil, nil, now, now,
+			10, "delivery-uid", 4, "request-uid", 8, "DHIS2 Uganda", "dhis2", 1,
+			StatusPending, nil, "", "", nil, "", "", "", "", nil, nil, nil, now, now,
 		))
 
 	record, err := repo.CreateDelivery(context.Background(), CreateParams{
@@ -183,21 +196,25 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
-		       d.server_id, COALESCE(s.name, '') AS server_name,
+		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
+		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
 		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
 		FROM delivery_attempts d
 		LEFT JOIN exchange_requests r ON r.id = d.request_id
 		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
 		WHERE d.id = $1
 	`)).
 		WithArgs(int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "request_uid", "server_id", "server_name", "attempt_number",
-			"status", "http_status", "response_body", "error_message", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
+			"id", "uid", "request_id", "request_uid", "server_id", "server_name", "system_type", "attempt_number",
+			"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 		}).AddRow(
-			10, "delivery-uid", 4, "request-uid", 8, "DHIS2 Uganda", 1,
-			StatusSucceeded, httpStatus, `{"status":"ok"}`, "", started, finished, nil, now, now,
+			10, "delivery-uid", 4, "request-uid", 8, "DHIS2 Uganda", "dhis2", 1,
+			StatusSucceeded, httpStatus, `{"status":"ok"}`, "", nil, "", "", "", "", started, finished, nil, now, now,
 		))
 
 	updated, err := repo.UpdateDelivery(context.Background(), UpdateParams{
