@@ -11,6 +11,7 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/traceevent"
 )
 
 type Service struct {
@@ -25,6 +26,7 @@ type Service struct {
 		SetCompleted(context.Context, int64) error
 		SetFailed(context.Context, int64) error
 	}
+	eventWriter traceevent.Writer
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -48,6 +50,11 @@ func (s *Service) WithReconciliation(
 ) *Service {
 	s.deliveryUpdater = deliveryUpdater
 	s.requestStatusUpdater = requestStatusUpdater
+	return s
+}
+
+func (s *Service) WithEventWriter(eventWriter traceevent.Writer) *Service {
+	s.eventWriter = eventWriter
 	return s
 }
 
@@ -106,6 +113,24 @@ func (s *Service) CreateTask(ctx context.Context, input CreateInput) (Record, er
 			"currentState":      created.CurrentState,
 		},
 	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &created.RequestID,
+		DeliveryAttemptID: &created.DeliveryAttemptID,
+		AsyncTaskID:       &created.ID,
+		EventType:         traceevent.EventAsyncCreated,
+		EventLevel:        "info",
+		Message:           traceevent.Message("Async task created", "Async task %s created", created.UID),
+		CorrelationID:     created.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+		SourceComponent:   "async.service",
+		EventData: map[string]any{
+			"asyncTaskUid": created.UID,
+			"deliveryUid":  created.DeliveryUID,
+			"requestUid":   created.RequestUID,
+			"remoteJobId":  created.RemoteJobID,
+			"state":        created.CurrentState,
+		},
+	})
 
 	return created, nil
 }
@@ -160,6 +185,18 @@ func (s *Service) UpdateTaskStatus(ctx context.Context, input UpdateStatusInput)
 				"remoteStatus": updated.RemoteStatus,
 			},
 		})
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &updated.RequestID,
+			DeliveryAttemptID: &updated.DeliveryAttemptID,
+			AsyncTaskID:       &updated.ID,
+			EventType:         traceevent.EventAsyncCompleted,
+			EventLevel:        "info",
+			Message:           traceevent.Message("Async task completed", "Async task %s completed", updated.UID),
+			CorrelationID:     updated.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+			SourceComponent:   "async.service",
+			EventData:         map[string]any{"asyncTaskUid": updated.UID, "remoteStatus": updated.RemoteStatus},
+		})
 	}
 	if terminalState == StateFailed {
 		s.reconcileTerminalState(ctx, updated)
@@ -174,6 +211,18 @@ func (s *Service) UpdateTaskStatus(ctx context.Context, input UpdateStatusInput)
 				"deliveryUid":  updated.DeliveryUID,
 				"remoteStatus": updated.RemoteStatus,
 			},
+		})
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &updated.RequestID,
+			DeliveryAttemptID: &updated.DeliveryAttemptID,
+			AsyncTaskID:       &updated.ID,
+			EventType:         traceevent.EventAsyncFailed,
+			EventLevel:        "error",
+			Message:           traceevent.Message("Async task failed", "Async task %s failed", updated.UID),
+			CorrelationID:     updated.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+			SourceComponent:   "async.service",
+			EventData:         map[string]any{"asyncTaskUid": updated.UID, "remoteStatus": updated.RemoteStatus},
 		})
 	}
 
@@ -209,6 +258,18 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &task.RequestID,
+			DeliveryAttemptID: &task.DeliveryAttemptID,
+			AsyncTaskID:       &task.ID,
+			EventType:         traceevent.EventAsyncPollStarted,
+			EventLevel:        "info",
+			Message:           traceevent.Message("Async poll started", "Polling async task %s", task.UID),
+			CorrelationID:     task.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+			SourceComponent:   "async.poller",
+			EventData:         map[string]any{"asyncTaskUid": task.UID, "remoteJobId": task.RemoteJobID},
+		})
 		result, pollErr := poller.Poll(ctx, task)
 		if pollErr != nil {
 			message := pollErr.Error()
@@ -223,6 +284,18 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				RemoteResponse: map[string]any{
 					"error": message,
 				},
+			})
+			s.appendEvent(ctx, traceevent.WriteInput{
+				RequestID:         &task.RequestID,
+				DeliveryAttemptID: &task.DeliveryAttemptID,
+				AsyncTaskID:       &task.ID,
+				EventType:         traceevent.EventAsyncPollFailed,
+				EventLevel:        "warning",
+				Message:           traceevent.Message("Async poll failed", "Polling async task %s failed", task.UID),
+				CorrelationID:     task.CorrelationID,
+				Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+				SourceComponent:   "async.poller",
+				EventData:         map[string]any{"asyncTaskUid": task.UID, "error": message},
 			})
 			continue
 		}
@@ -245,6 +318,22 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 		}); err != nil {
 			return err
 		}
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &task.RequestID,
+			DeliveryAttemptID: &task.DeliveryAttemptID,
+			AsyncTaskID:       &task.ID,
+			EventType:         traceevent.EventAsyncPollSucceeded,
+			EventLevel:        "info",
+			Message:           traceevent.Message("Async poll succeeded", "Polling async task %s succeeded", task.UID),
+			CorrelationID:     task.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+			SourceComponent:   "async.poller",
+			EventData: map[string]any{
+				"asyncTaskUid": task.UID,
+				"remoteStatus": result.RemoteStatus,
+				"statusCode":   result.StatusCode,
+			},
+		})
 	}
 	return nil
 }
@@ -336,4 +425,11 @@ func extractErrorMessage(input map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func (s *Service) appendEvent(ctx context.Context, input traceevent.WriteInput) {
+	if s.eventWriter == nil {
+		return
+	}
+	_ = s.eventWriter.AppendEvent(ctx, input)
 }

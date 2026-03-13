@@ -22,10 +22,10 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 	now := time.Now().UTC()
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
-		"id", "uid", "request_id", "request_uid", "server_id", "server_name", "system_type", "attempt_number",
+		"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "system_type", "attempt_number",
 		"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 	}).AddRow(
-		7, "delivery-uid", 3, "request-uid", 9, "DHIS2 Uganda", "dhis2", 1,
+		7, "delivery-uid", 3, "request-uid", "corr-1", 9, "DHIS2 Uganda", "dhis2", 1,
 		StatusFailed, 502, "{}", "timeout", nil, "", "", "", "", now, now, nil, now, now,
 	)
 
@@ -44,7 +44,7 @@ func TestSQLRepositoryListDeliveries(t *testing.T) {
 		WithArgs("%dhis%", StatusFailed, "%dhis%", now.Format("2006-01-02")).
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
 		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
@@ -96,7 +96,7 @@ func TestSQLRepositoryGetDeliveryByIDNotFound(t *testing.T) {
 
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
 		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
@@ -141,7 +141,7 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		WithArgs("delivery-uid", int64(4), int64(8), 1, StatusPending, nil, "", "", nil, nil, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
 		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
@@ -156,10 +156,10 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 	`)).
 		WithArgs(int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "request_uid", "server_id", "server_name", "system_type", "attempt_number",
+			"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "system_type", "attempt_number",
 			"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 		}).AddRow(
-			10, "delivery-uid", 4, "request-uid", 8, "DHIS2 Uganda", "dhis2", 1,
+			10, "delivery-uid", 4, "request-uid", "corr-1", 8, "DHIS2 Uganda", "dhis2", 1,
 			StatusPending, nil, "", "", nil, "", "", "", "", nil, nil, nil, now, now,
 		))
 
@@ -195,7 +195,7 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 		WithArgs(int64(10), StatusSucceeded, &httpStatus, `{"status":"ok"}`, "", &started, &finished, nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
 		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
@@ -210,10 +210,10 @@ func TestSQLRepositoryCreateAndUpdateDelivery(t *testing.T) {
 	`)).
 		WithArgs(int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "request_uid", "server_id", "server_name", "system_type", "attempt_number",
+			"id", "uid", "request_id", "request_uid", "correlation_id", "server_id", "server_name", "system_type", "attempt_number",
 			"status", "http_status", "response_body", "error_message", "async_task_id", "async_task_uid", "async_current_state", "async_remote_job_id", "async_poll_url", "started_at", "finished_at", "retry_at", "created_at", "updated_at",
 		}).AddRow(
-			10, "delivery-uid", 4, "request-uid", 8, "DHIS2 Uganda", "dhis2", 1,
+			10, "delivery-uid", 4, "request-uid", "corr-1", 8, "DHIS2 Uganda", "dhis2", 1,
 			StatusSucceeded, httpStatus, `{"status":"ok"}`, "", nil, "", "", "", "", started, finished, nil, now, now,
 		))
 

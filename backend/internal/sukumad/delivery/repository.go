@@ -36,6 +36,7 @@ type recordRow struct {
 	UID               string     `db:"uid"`
 	RequestID         int64      `db:"request_id"`
 	RequestUID        string     `db:"request_uid"`
+	CorrelationID     string     `db:"correlation_id"`
 	ServerID          int64      `db:"server_id"`
 	ServerName        string     `db:"server_name"`
 	SystemType        string     `db:"system_type"`
@@ -146,7 +147,7 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 	selectArgs := append([]any{}, args...)
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
 		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
@@ -182,7 +183,7 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 func (r *SQLRepository) GetDeliveryByID(ctx context.Context, id int64) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid,
+		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
 		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.system_type, '') AS system_type,
 		       d.attempt_number, d.status, d.http_status, d.response_body, d.error_message,
 		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
@@ -295,6 +296,7 @@ func decodeRow(row recordRow) Record {
 		UID:               row.UID,
 		RequestID:         row.RequestID,
 		RequestUID:        row.RequestUID,
+		CorrelationID:     row.CorrelationID,
 		ServerID:          row.ServerID,
 		ServerName:        row.ServerName,
 		SystemType:        row.SystemType,

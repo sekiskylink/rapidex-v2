@@ -1,5 +1,82 @@
 # Status
 
+## Milestone — Traceability, Event History, and Operational Observability (Complete)
+
+### What changed
+- Added the append-only `request_events` schema in [backend/migrations/000017_create_request_events.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000017_create_request_events.up.sql) and [backend/migrations/000017_create_request_events.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000017_create_request_events.down.sql):
+  - `request_events` table with request, delivery, async-task, worker, correlation, actor, source-component, and structured JSON event metadata
+  - supporting indexes for request, delivery, job, worker, correlation, and created-at lookups
+  - additive correlation-oriented indexes on existing Sukumad tables to keep timeline queries fast
+- Extended [backend/internal/sukumad/observability](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/observability) from worker/rate-limit read APIs into a traceability module with:
+  - structured event persistence and safe metadata masking
+  - `GET /api/v1/observability/events`
+  - `GET /api/v1/observability/events/:id`
+  - `GET /api/v1/observability/trace`
+  - `GET /api/v1/requests/:id/events`
+  - `GET /api/v1/deliveries/:id/events`
+  - `GET /api/v1/jobs/:id/events`
+- Added a shared event-writing contract in [backend/internal/sukumad/traceevent/traceevent.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/traceevent/traceevent.go) so lifecycle modules emit structured operational events without introducing package cycles.
+- Extended the Sukumad request, delivery, async, and worker services under:
+  - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+  - [backend/internal/sukumad/delivery/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service.go)
+  - [backend/internal/sukumad/async/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/service.go)
+  - [backend/internal/sukumad/worker/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/service.go)
+  - requests emit creation, submission, status-change, completion, and failure events
+  - deliveries emit creation, start, response-received, success, failure, retry-scheduled, and retry-started events
+  - async tasks emit creation, poll-started, poll-succeeded, poll-failed, completion, and failure events
+  - worker runs emit started, heartbeat, stopped, and error events
+  - event metadata is structured, append-only, and token/password fields are masked before persistence
+- Updated bootstrap wiring in [backend/cmd/api/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/main.go) so the request, delivery, async, worker, and observability services share the same event writer and correlation-aware trace surface.
+- Extended the web Sukumad pages in:
+  - [web/src/pages/ObservabilityPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/ObservabilityPage.tsx)
+  - [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx)
+  - [web/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestDetailPage.tsx)
+  - [web/src/pages/DeliveriesPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DeliveriesPage.tsx)
+  - [web/src/pages/DeliveryDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DeliveryDetailPage.tsx)
+  - [web/src/pages/JobsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/JobsPage.tsx)
+  - [web/src/pages/JobDetailPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/JobDetailPage.tsx)
+  - [web/src/pages/traceability.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/traceability.tsx)
+  - observability now has an event-history grid, filter controls, correlation trace lookup, and event-detail dialog
+  - request, delivery, and job detail dialogs now show operator-facing event timelines alongside the existing payload/response/poll views
+- Extended the desktop frontend with matching API-backed functionality in:
+  - [desktop/frontend/src/pages/ObservabilityPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/ObservabilityPage.tsx)
+  - [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx)
+  - [desktop/frontend/src/pages/RequestDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestDetailPage.tsx)
+  - [desktop/frontend/src/pages/DeliveriesPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DeliveriesPage.tsx)
+  - [desktop/frontend/src/pages/DeliveryDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DeliveryDetailPage.tsx)
+  - [desktop/frontend/src/pages/JobsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/JobsPage.tsx)
+  - [desktop/frontend/src/pages/JobDetailPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/JobDetailPage.tsx)
+  - [desktop/frontend/src/pages/traceability.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/traceability.tsx)
+  - desktop preserves parity with web and continues to use backend APIs only
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-milestone-7-traceability-event-history-observability.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/observability/tracing_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/observability/tracing_test.go)
+  - updated [backend/internal/sukumad/request/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service_test.go) for request event emission
+  - updated [backend/internal/sukumad/delivery/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository_test.go) and [backend/internal/sukumad/async/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository_test.go) for correlation-aware projections
+  - updated [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go) for observability/request/delivery/job event permission coverage
+- Web:
+  - existing Sukumad page and route tests now exercise the observability/events-enabled pages through the full web suite
+- Desktop:
+  - existing Sukumad page and route tests now exercise the observability/events-enabled pages through the full desktop suite
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- No intentional web/desktop parity gaps remain for this milestone.
+- Frontend test logs still include existing non-blocking MUI jsdom `anchorEl` warnings and one existing MUI X `rowCount` warning in mocked route tests.
+- Frontend build logs still include existing third-party `'use client'` and chunk-size warnings.
+
 ## Milestone — DHIS2 Async Submission Integration (Complete)
 
 ### What changed

@@ -18,6 +18,7 @@ type Record struct {
 	UID               string     `db:"uid" json:"uid"`
 	RequestID         int64      `db:"request_id" json:"requestId"`
 	RequestUID        string     `json:"requestUid"`
+	CorrelationID     string     `json:"correlationId"`
 	ServerID          int64      `db:"server_id" json:"serverId"`
 	ServerName        string     `json:"serverName"`
 	SystemType        string     `json:"systemType"`
@@ -84,9 +85,10 @@ type UpdateParams struct {
 }
 
 type CreateInput struct {
-	RequestID int64
-	ServerID  int64
-	ActorID   *int64
+	RequestID     int64
+	ServerID      int64
+	CorrelationID string
+	ActorID       *int64
 }
 
 type CompletionInput struct {
@@ -110,13 +112,14 @@ type ServerSnapshot struct {
 }
 
 type DispatchInput struct {
-	DeliveryID  int64
-	RequestID   int64
-	RequestUID  string
-	PayloadBody string
-	URLSuffix   string
-	Server      ServerSnapshot
-	ActorID     *int64
+	DeliveryID    int64
+	RequestID     int64
+	RequestUID    string
+	CorrelationID string
+	PayloadBody   string
+	URLSuffix     string
+	Server        ServerSnapshot
+	ActorID       *int64
 }
 
 type Repository interface {

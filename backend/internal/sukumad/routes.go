@@ -25,9 +25,9 @@ type RouteDeps struct {
 
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerServerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ServerHandler)
-	registerRequestRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.RequestHandler)
-	registerDeliveryRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DeliveryHandler)
-	registerAsyncRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.AsyncHandler)
+	registerRequestRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.RequestHandler, deps.ObservabilityHandler)
+	registerDeliveryRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DeliveryHandler, deps.ObservabilityHandler)
+	registerAsyncRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.AsyncHandler, deps.ObservabilityHandler)
 	registerObservabilityRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ObservabilityHandler)
 }
 
@@ -62,6 +62,7 @@ func registerRequestRoutes(
 	jwtManager *auth.JWTManager,
 	rbacService *rbac.Service,
 	handler *requests.Handler,
+	observabilityHandler *observability.Handler,
 ) {
 	if handler == nil {
 		return
@@ -76,6 +77,9 @@ func registerRequestRoutes(
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.Get)
+	if observabilityHandler != nil {
+		group.GET("/:id/events", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), observabilityHandler.ListRequestEvents)
+	}
 	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.Create)
 }
 
@@ -85,6 +89,7 @@ func registerAsyncRoutes(
 	jwtManager *auth.JWTManager,
 	rbacService *rbac.Service,
 	handler *asyncjobs.Handler,
+	observabilityHandler *observability.Handler,
 ) {
 	if handler == nil {
 		return
@@ -99,6 +104,9 @@ func registerAsyncRoutes(
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.Get)
+	if observabilityHandler != nil {
+		group.GET("/:id/events", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), observabilityHandler.ListJobEvents)
+	}
 	group.GET("/:id/polls", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.ListPolls)
 }
 
@@ -108,6 +116,7 @@ func registerDeliveryRoutes(
 	jwtManager *auth.JWTManager,
 	rbacService *rbac.Service,
 	handler *delivery.Handler,
+	observabilityHandler *observability.Handler,
 ) {
 	if handler == nil {
 		return
@@ -122,6 +131,9 @@ func registerDeliveryRoutes(
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.Get)
+	if observabilityHandler != nil {
+		group.GET("/:id/events", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), observabilityHandler.ListDeliveryEvents)
+	}
 	group.POST("/:id/retry", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesWrite), handler.Retry)
 }
 
@@ -146,4 +158,7 @@ func registerObservabilityRoutes(
 	group.GET("/workers", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListWorkers)
 	group.GET("/workers/:id", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetWorker)
 	group.GET("/rate-limits", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListRateLimits)
+	group.GET("/events", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListEvents)
+	group.GET("/events/:id", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetEvent)
+	group.GET("/trace", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.Trace)
 }

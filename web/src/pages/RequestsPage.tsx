@@ -11,6 +11,7 @@ import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
 import { RequestDetailPage, type RequestDetailRecord } from './RequestDetailPage'
 import { RequestForm, type RequestFormErrors, type RequestFormState, type RequestServerOption } from './RequestForm'
+import type { EventRecord } from './traceability'
 
 interface RequestRow extends RequestDetailRecord {}
 
@@ -127,6 +128,7 @@ export function RequestsPage() {
   const [loadingServers, setLoadingServers] = React.useState(false)
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailRequest, setDetailRequest] = React.useState<RequestDetailRecord | null>(null)
+  const [detailEvents, setDetailEvents] = React.useState<EventRecord[]>([])
   const [detailError, setDetailError] = React.useState('')
 
   const refreshGrid = () => setReloadToken((value) => value + 1)
@@ -160,7 +162,7 @@ export function RequestsPage() {
       const query = buildAdminListRequestQuery(params, { search })
       const response = await apiRequest<PaginatedResponse<RequestRow>>(`/requests?${query}`)
       return {
-        rows: response.items,
+        rows: response.items ?? [],
         total: response.totalCount,
       }
     },
@@ -177,11 +179,16 @@ export function RequestsPage() {
   const openDetailDialog = async (row: RequestRow) => {
     setDetailError('')
     try {
-      const detail = await apiRequest<RequestDetailRecord>(`/requests/${row.id}`)
+      const [detail, events] = await Promise.all([
+        apiRequest<RequestDetailRecord>(`/requests/${row.id}`),
+        apiRequest<PaginatedResponse<EventRecord>>(`/requests/${row.id}/events?page=1&pageSize=50&sort=createdAt:asc`),
+      ])
       setDetailRequest(detail)
+      setDetailEvents(events.items ?? [])
       setDetailOpen(true)
     } catch (error) {
       setDetailRequest(null)
+      setDetailEvents([])
       setDetailOpen(false)
       setDetailError('Unable to load request detail.')
       await handleAppError(error, {
@@ -332,9 +339,11 @@ export function RequestsPage() {
       <RequestDetailPage
         open={detailOpen}
         request={detailRequest}
+        events={detailEvents}
         onClose={() => {
           setDetailOpen(false)
           setDetailRequest(null)
+          setDetailEvents([])
         }}
       />
     </Stack>

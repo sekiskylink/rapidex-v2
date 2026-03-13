@@ -38,6 +38,7 @@ type recordRow struct {
 	DeliveryUID       string          `db:"delivery_uid"`
 	RequestID         int64           `db:"request_id"`
 	RequestUID        string          `db:"request_uid"`
+	CorrelationID     string          `db:"correlation_id"`
 	RemoteJobID       string          `db:"remote_job_id"`
 	PollURL           string          `db:"poll_url"`
 	RemoteStatus      string          `db:"remote_status"`
@@ -125,7 +126,7 @@ func (r *SQLRepository) ListTasks(ctx context.Context, query ListQuery) (ListRes
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -159,7 +160,7 @@ func (r *SQLRepository) GetTaskByID(ctx context.Context, id int64) (Record, erro
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -296,7 +297,7 @@ func (r *SQLRepository) ListDueTasks(ctx context.Context, now time.Time, limit i
 	rows := []recordRow{}
 	if err := r.db.SelectContext(ctx, &rows, `
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -362,6 +363,7 @@ func decodeRow(row recordRow) (Record, error) {
 		DeliveryUID:       row.DeliveryUID,
 		RequestID:         row.RequestID,
 		RequestUID:        row.RequestUID,
+		CorrelationID:     row.CorrelationID,
 		RemoteJobID:       row.RemoteJobID,
 		PollURL:           row.PollURL,
 		RemoteStatus:      row.RemoteStatus,

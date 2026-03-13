@@ -11,6 +11,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { EventTimeline, type EventRecord } from './traceability'
 
 export interface JobPollRecord {
   id: number
@@ -83,10 +84,11 @@ interface JobDetailPageProps {
   open: boolean
   job: JobDetailRecord | null
   polls: JobPollRecord[]
+  events: EventRecord[]
   onClose: () => void
 }
 
-export function JobDetailPage({ open, job, polls, onClose }: JobDetailPageProps) {
+export function JobDetailPage({ open, job, polls, events, onClose }: JobDetailPageProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Job Detail</DialogTitle>
@@ -142,6 +144,13 @@ export function JobDetailPage({ open, job, polls, onClose }: JobDetailPageProps)
                   </Box>
                 ))}
               </Stack>
+            </Box>
+            <Divider />
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Event Timeline
+              </Typography>
+              <EventTimeline events={events} emptyMessage="No job events recorded yet." />
             </Box>
           </Stack>
         ) : null}

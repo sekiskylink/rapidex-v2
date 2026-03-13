@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/traceevent"
 )
 
 type fakeRepo struct {
@@ -39,6 +40,15 @@ type fakeAuditRepo struct {
 	events []audit.Event
 }
 
+type fakeEventWriter struct {
+	events []traceevent.WriteInput
+}
+
+func (f *fakeEventWriter) AppendEvent(_ context.Context, input traceevent.WriteInput) error {
+	f.events = append(f.events, input)
+	return nil
+}
+
 func (f *fakeAuditRepo) Insert(_ context.Context, event audit.Event) error {
 	f.events = append(f.events, event)
 	return nil
@@ -62,6 +72,7 @@ func TestServiceCreateRequestValidatesInput(t *testing.T) {
 
 func TestServiceCreateRequestWritesAuditEvent(t *testing.T) {
 	auditRepo := &fakeAuditRepo{}
+	eventWriter := &fakeEventWriter{}
 	service := NewService(&fakeRepo{
 		createFn: func(_ context.Context, params CreateParams) (Record, error) {
 			return Record{
@@ -78,7 +89,7 @@ func TestServiceCreateRequestWritesAuditEvent(t *testing.T) {
 				CreatedBy:             params.CreatedBy,
 			}, nil
 		},
-	}, audit.NewService(auditRepo))
+	}, audit.NewService(auditRepo)).WithEventWriter(eventWriter)
 
 	actorID := int64(8)
 	created, err := service.CreateRequest(context.Background(), CreateInput{
@@ -100,6 +111,9 @@ func TestServiceCreateRequestWritesAuditEvent(t *testing.T) {
 	}
 	if auditRepo.events[0].Action != "request.created" {
 		t.Fatalf("expected request.created, got %s", auditRepo.events[0].Action)
+	}
+	if len(eventWriter.events) != 1 || eventWriter.events[0].EventType != traceevent.EventRequestCreated {
+		t.Fatalf("expected request.created event write, got %+v", eventWriter.events)
 	}
 }
 

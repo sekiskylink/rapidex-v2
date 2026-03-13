@@ -22,10 +22,10 @@ func TestSQLRepositoryListTasks(t *testing.T) {
 	now := time.Now().UTC()
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
-		"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid",
+		"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id",
 		"remote_job_id", "poll_url", "remote_status", "terminal_state", "next_poll_at", "completed_at", "remote_response", "created_at", "updated_at",
 	}).AddRow(
-		7, "job-uid", 3, "delivery-uid", 5, "request-uid",
+		7, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1",
 		"remote-7", "https://remote/jobs/7", StatePolling, "", now, nil, []byte(`{"status":"processing"}`), now, now,
 	)
 
@@ -45,7 +45,7 @@ func TestSQLRepositoryListTasks(t *testing.T) {
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -105,7 +105,7 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -116,9 +116,9 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 	`)).
 		WithArgs(int64(9)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid",
+			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id",
 			"remote_job_id", "poll_url", "remote_status", "terminal_state", "next_poll_at", "completed_at", "remote_response", "created_at", "updated_at",
-		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "remote-3", "https://remote/jobs/3", StatePending, "", nil, nil, []byte(`{"state":"pending"}`), now, now))
+		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "remote-3", "https://remote/jobs/3", StatePending, "", nil, nil, []byte(`{"state":"pending"}`), now, now))
 
 	record, err := repo.CreateTask(context.Background(), CreateParams{
 		UID:               "job-uid",
@@ -155,7 +155,7 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -166,9 +166,9 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 	`)).
 		WithArgs(int64(9)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid",
+			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id",
 			"remote_job_id", "poll_url", "remote_status", "terminal_state", "next_poll_at", "completed_at", "remote_response", "created_at", "updated_at",
-		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "remote-3", "https://remote/jobs/3", StateSucceeded, StateSucceeded, nil, now, []byte(`{"state":"done"}`), now, now))
+		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "remote-3", "https://remote/jobs/3", StateSucceeded, StateSucceeded, nil, now, []byte(`{"state":"done"}`), now, now))
 
 	updated, err := repo.UpdateTask(context.Background(), UpdateParams{
 		ID:             9,
@@ -223,7 +223,7 @@ func TestSQLRepositoryGetTaskNotFound(t *testing.T) {
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
-		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at

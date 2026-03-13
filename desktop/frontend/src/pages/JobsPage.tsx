@@ -8,6 +8,7 @@ import { buildAdminListRequestQuery, useAdminListSearch } from '../components/ad
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
 import { handleAppError } from '../errors/handleAppError'
 import { JobDetailPage, type JobDetailRecord, type JobPollRecord } from './JobDetailPage'
+import type { EventRecord } from './traceability'
 
 interface JobRow extends JobDetailRecord {}
 
@@ -47,6 +48,7 @@ export function JobsPage() {
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailJob, setDetailJob] = React.useState<JobDetailRecord | null>(null)
   const [polls, setPolls] = React.useState<JobPollRecord[]>([])
+  const [events, setEvents] = React.useState<EventRecord[]>([])
   const [detailError, setDetailError] = React.useState('')
 
   const fetchJobs = React.useCallback(
@@ -59,7 +61,7 @@ export function JobsPage() {
       })
       const response = await apiClient.request<PaginatedResponse<JobRow>>(`/api/v1/jobs?${query}`)
       return {
-        rows: response.items,
+        rows: response.items ?? [],
         total: response.totalCount,
       }
     },
@@ -69,16 +71,19 @@ export function JobsPage() {
   const openDetailDialog = async (row: JobRow) => {
     setDetailError('')
     try {
-      const [detail, pollResponse] = await Promise.all([
+      const [detail, pollResponse, eventResponse] = await Promise.all([
         apiClient.request<JobDetailRecord>(`/api/v1/jobs/${row.id}`),
         apiClient.request<PaginatedResponse<JobPollRecord>>(`/api/v1/jobs/${row.id}/polls?page=1&pageSize=50`),
+        apiClient.request<PaginatedResponse<EventRecord>>(`/api/v1/jobs/${row.id}/events?page=1&pageSize=50&sort=createdAt:asc`),
       ])
       setDetailJob(detail)
-      setPolls(pollResponse.items)
+      setPolls(pollResponse.items ?? [])
+      setEvents(eventResponse.items ?? [])
       setDetailOpen(true)
     } catch (error) {
       setDetailJob(null)
       setPolls([])
+      setEvents([])
       setDetailOpen(false)
       setDetailError('Unable to load job detail.')
       await handleAppError(error, { fallbackMessage: 'Unable to load job detail.' })
@@ -189,10 +194,12 @@ export function JobsPage() {
         open={detailOpen}
         job={detailJob}
         polls={polls}
+        events={events}
         onClose={() => {
           setDetailOpen(false)
           setDetailJob(null)
           setPolls([])
+          setEvents([])
           setReloadToken((value) => value + 1)
         }}
       />

@@ -13,6 +13,7 @@ import (
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/traceevent"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -26,6 +27,7 @@ type Service struct {
 	serverSvc interface {
 		GetServer(context.Context, int64) (server.Record, error)
 	}
+	eventWriter traceevent.Writer
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -48,6 +50,11 @@ func (s *Service) WithServerService(serverSvc interface {
 	GetServer(context.Context, int64) (server.Record, error)
 }) *Service {
 	s.serverSvc = serverSvc
+	return s
+}
+
+func (s *Service) WithEventWriter(eventWriter traceevent.Writer) *Service {
+	s.eventWriter = eventWriter
 	return s
 }
 
@@ -92,6 +99,23 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 		}
 		return Record{}, err
 	}
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:       &created.ID,
+		EventType:       traceevent.EventRequestCreated,
+		EventLevel:      "info",
+		Message:         traceevent.Message("Request created", "Request %s created", created.UID),
+		CorrelationID:   created.CorrelationID,
+		Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+		SourceComponent: "request.service",
+		EventData: map[string]any{
+			"requestUid":            created.UID,
+			"status":                created.Status,
+			"destinationServerId":   created.DestinationServerID,
+			"destinationServerName": created.DestinationServerName,
+			"sourceSystem":          created.SourceSystem,
+			"awaitingAsync":         created.AwaitingAsync,
+		},
+	})
 
 	s.logAudit(ctx, audit.Event{
 		Action:      "request.created",
@@ -109,13 +133,29 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 
 	if s.deliverySvc != nil {
 		deliveryRecord, err := s.deliverySvc.CreatePendingDelivery(ctx, delivery.CreateInput{
-			RequestID: created.ID,
-			ServerID:  created.DestinationServerID,
-			ActorID:   input.ActorID,
+			RequestID:     created.ID,
+			ServerID:      created.DestinationServerID,
+			CorrelationID: created.CorrelationID,
+			ActorID:       input.ActorID,
 		})
 		if err != nil {
 			return Record{}, err
 		}
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &created.ID,
+			DeliveryAttemptID: &deliveryRecord.ID,
+			EventType:         traceevent.EventRequestSubmitted,
+			EventLevel:        "info",
+			Message:           traceevent.Message("Request submitted to delivery", "Request %s submitted to delivery %s", created.UID, deliveryRecord.UID),
+			CorrelationID:     created.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+			SourceComponent:   "request.service",
+			EventData: map[string]any{
+				"requestUid":    created.UID,
+				"deliveryUid":   deliveryRecord.UID,
+				"deliveryState": deliveryRecord.Status,
+			},
+		})
 
 		if s.serverSvc != nil {
 			serverRecord, err := s.serverSvc.GetServer(ctx, created.DestinationServerID)
@@ -123,11 +163,12 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 				return Record{}, err
 			}
 			if _, err := s.deliverySvc.SubmitDHIS2Delivery(ctx, delivery.DispatchInput{
-				DeliveryID:  deliveryRecord.ID,
-				RequestID:   created.ID,
-				RequestUID:  created.UID,
-				PayloadBody: created.PayloadBody,
-				URLSuffix:   created.URLSuffix,
+				DeliveryID:    deliveryRecord.ID,
+				RequestID:     created.ID,
+				RequestUID:    created.UID,
+				CorrelationID: created.CorrelationID,
+				PayloadBody:   created.PayloadBody,
+				URLSuffix:     created.URLSuffix,
 				Server: delivery.ServerSnapshot{
 					ID:           serverRecord.ID,
 					Name:         serverRecord.Name,
@@ -229,6 +270,10 @@ func (s *Service) logAudit(ctx context.Context, event audit.Event) {
 }
 
 func (s *Service) updateStatus(ctx context.Context, requestID int64, status string) (Record, error) {
+	current, err := s.GetRequest(ctx, requestID)
+	if err != nil {
+		return Record{}, err
+	}
 	record, err := s.repo.UpdateRequestStatus(ctx, requestID, status)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -236,7 +281,59 @@ func (s *Service) updateStatus(ctx context.Context, requestID int64, status stri
 		}
 		return Record{}, err
 	}
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:       &record.ID,
+		EventType:       traceevent.EventRequestStatusChanged,
+		EventLevel:      levelForRequestStatus(status),
+		Message:         traceevent.Message("Request status changed", "Request %s moved from %s to %s", record.UID, current.Status, status),
+		CorrelationID:   record.CorrelationID,
+		Actor:           traceevent.Actor{Type: traceevent.ActorSystem},
+		SourceComponent: "request.service",
+		EventData: map[string]any{
+			"requestUid": record.UID,
+			"fromStatus": current.Status,
+			"toStatus":   status,
+		},
+	})
+	switch status {
+	case StatusCompleted:
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:       &record.ID,
+			EventType:       traceevent.EventRequestCompleted,
+			EventLevel:      "info",
+			Message:         traceevent.Message("Request completed", "Request %s completed", record.UID),
+			CorrelationID:   record.CorrelationID,
+			Actor:           traceevent.Actor{Type: traceevent.ActorSystem},
+			SourceComponent: "request.service",
+			EventData:       map[string]any{"requestUid": record.UID},
+		})
+	case StatusFailed:
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:       &record.ID,
+			EventType:       traceevent.EventRequestFailed,
+			EventLevel:      "error",
+			Message:         traceevent.Message("Request failed", "Request %s failed", record.UID),
+			CorrelationID:   record.CorrelationID,
+			Actor:           traceevent.Actor{Type: traceevent.ActorSystem},
+			SourceComponent: "request.service",
+			EventData:       map[string]any{"requestUid": record.UID},
+		})
+	}
 	return record, nil
+}
+
+func (s *Service) appendEvent(ctx context.Context, input traceevent.WriteInput) {
+	if s.eventWriter == nil {
+		return
+	}
+	_ = s.eventWriter.AppendEvent(ctx, input)
+}
+
+func levelForRequestStatus(status string) string {
+	if status == StatusFailed {
+		return "error"
+	}
+	return "info"
 }
 
 func mapConstraintError(err error) *apperror.AppError {

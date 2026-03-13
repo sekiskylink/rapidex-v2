@@ -32,7 +32,7 @@ func newSukumadTestAppDeps(jwt *auth.JWTManager, rbacService *rbac.Service) AppD
 		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
 		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
 		AsyncHandler:         asyncjobs.NewHandler(asyncService),
-		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository(workerService, rateLimitService))),
+		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository(nil, workerService, rateLimitService))),
 	}
 }
 
@@ -301,7 +301,7 @@ func TestJobsAndObservabilityRoutes(t *testing.T) {
 
 	deps := newSukumadTestAppDeps(jwt, rbacService)
 	deps.AsyncHandler = asyncjobs.NewHandler(asyncService)
-	deps.ObservabilityHandler = observability.NewHandler(observability.NewService(observability.NewRepository(workerService, rateLimitService)))
+	deps.ObservabilityHandler = observability.NewHandler(observability.NewService(observability.NewRepository(nil, workerService, rateLimitService)))
 	router := newRouter(deps)
 
 	for _, path := range []string{
@@ -388,7 +388,16 @@ func TestJobsAndObservabilityRoutesRequireReadPermissions(t *testing.T) {
 
 	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
 
-	for _, path := range []string{"/api/v1/jobs", "/api/v1/observability/workers", "/api/v1/observability/rate-limits"} {
+	for _, path := range []string{
+		"/api/v1/jobs",
+		"/api/v1/jobs/1/events",
+		"/api/v1/requests/1/events",
+		"/api/v1/deliveries/1/events",
+		"/api/v1/observability/workers",
+		"/api/v1/observability/rate-limits",
+		"/api/v1/observability/events",
+		"/api/v1/observability/trace?correlationId=test",
+	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()

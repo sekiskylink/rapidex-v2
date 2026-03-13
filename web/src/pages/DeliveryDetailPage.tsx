@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, Typography } from '@mui/material'
+import { EventTimeline, type EventRecord } from './traceability'
 
 export interface DeliveryDetailRecord {
   id: number
@@ -69,13 +70,14 @@ function renderMetadata(label: string, value: React.ReactNode) {
 interface DeliveryDetailPageProps {
   open: boolean
   delivery: DeliveryDetailRecord | null
+  events: EventRecord[]
   canRetry: boolean
   retrying: boolean
   onRetry: () => void
   onClose: () => void
 }
 
-export function DeliveryDetailPage({ open, delivery, canRetry, retrying, onRetry, onClose }: DeliveryDetailPageProps) {
+export function DeliveryDetailPage({ open, delivery, events, canRetry, retrying, onRetry, onClose }: DeliveryDetailPageProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Delivery Detail</DialogTitle>
@@ -128,6 +130,13 @@ export function DeliveryDetailPage({ open, delivery, canRetry, retrying, onRetry
               <Box component="pre" sx={{ m: 0, p: 2, borderRadius: 2, bgcolor: 'background.default', overflowX: 'auto' }}>
                 {delivery.errorMessage || '-'}
               </Box>
+            </Box>
+            <Divider />
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Event Timeline
+              </Typography>
+              <EventTimeline events={events} emptyMessage="No delivery events recorded yet." />
             </Box>
           </Stack>
         ) : null}

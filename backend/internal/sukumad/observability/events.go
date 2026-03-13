@@ -1,6 +1,26 @@
 package observability
 
 const (
-	EventWorkerStarted = "worker.started"
-	EventWorkerStopped = "worker.stopped"
+	EventRequestCreated       = "request.created"
+	EventRequestSubmitted     = "request.submitted"
+	EventRequestStatusChanged = "request.status_changed"
+	EventRequestCompleted     = "request.completed"
+	EventRequestFailed        = "request.failed"
+	EventDeliveryCreated      = "delivery.created"
+	EventDeliveryStarted      = "delivery.started"
+	EventDeliverySucceeded    = "delivery.succeeded"
+	EventDeliveryFailed       = "delivery.failed"
+	EventDeliveryRetrySched   = "delivery.retry_scheduled"
+	EventDeliveryRetryStarted = "delivery.retry_started"
+	EventDeliveryResponse     = "delivery.response_received"
+	EventAsyncCreated         = "async.created"
+	EventAsyncPollStarted     = "async.poll_started"
+	EventAsyncPollSucceeded   = "async.poll_succeeded"
+	EventAsyncPollFailed      = "async.poll_failed"
+	EventAsyncCompleted       = "async.completed"
+	EventAsyncFailed          = "async.failed"
+	EventWorkerStarted        = "worker.started"
+	EventWorkerHeartbeat      = "worker.heartbeat"
+	EventWorkerStopped        = "worker.stopped"
+	EventWorkerError          = "worker.error"
 )

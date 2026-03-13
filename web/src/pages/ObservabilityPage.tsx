@@ -1,9 +1,11 @@
 import React from 'react'
-import { Box, Chip, Stack, Typography } from '@mui/material'
+import { Box, Button, Chip, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
 import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
+import { EventDetailDialog, formatTraceDate, traceLevelColor, type EventRecord, type TraceResult } from './traceability'
 
 interface WorkerRow {
   id: number
@@ -28,17 +30,6 @@ interface RateLimitRow {
   isActive: boolean
 }
 
-function formatDate(value?: string | null) {
-  if (!value) {
-    return '-'
-  }
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.valueOf())) {
-    return value
-  }
-  return parsed.toLocaleString()
-}
-
 function statusColor(status: string): 'default' | 'warning' | 'success' | 'error' | 'info' {
   switch (status) {
     case 'starting':
@@ -55,16 +46,52 @@ function statusColor(status: string): 'default' | 'warning' | 'success' | 'error
 }
 
 export function ObservabilityPage() {
+  const [eventType, setEventType] = React.useState('')
+  const [level, setLevel] = React.useState('')
+  const [correlationId, setCorrelationId] = React.useState('')
+  const [from, setFrom] = React.useState('')
+  const [to, setTo] = React.useState('')
+  const [selectedEvent, setSelectedEvent] = React.useState<EventRecord | null>(null)
+  const [traceResult, setTraceResult] = React.useState<TraceResult | null>(null)
+
+  const fetchEvents = React.useCallback(
+    async (params: AppDataGridFetchParams) => {
+      const query = new URLSearchParams({
+        page: String(params.page + 1),
+        pageSize: String(params.pageSize),
+        sort: 'createdAt:desc',
+      })
+      if (eventType.trim()) {
+        query.set('eventType', eventType.trim())
+      }
+      if (level.trim()) {
+        query.set('level', level.trim())
+      }
+      if (correlationId.trim()) {
+        query.set('correlationId', correlationId.trim())
+      }
+      if (from) {
+        query.set('from', new Date(from).toISOString())
+      }
+      if (to) {
+        query.set('to', new Date(to).toISOString())
+      }
+      const response = await apiRequest<PaginatedResponse<EventRecord>>(`/observability/events?${query.toString()}`)
+      return {
+        rows: response.items ?? [],
+        total: response.totalCount,
+      }
+    },
+    [correlationId, eventType, from, level, to],
+  )
+
   const fetchWorkers = React.useCallback(async (params: AppDataGridFetchParams) => {
     const query = new URLSearchParams({
       page: String(params.page + 1),
       pageSize: String(params.pageSize),
     })
     const response = await apiRequest<PaginatedResponse<WorkerRow>>(`/observability/workers?${query.toString()}`)
-    return {
-      rows: response.items,
-      total: response.totalCount,
-    }
+    return { rows: response.items ?? [], total: response.totalCount }
   }, [])
 
   const fetchRateLimits = React.useCallback(async (params: AppDataGridFetchParams) => {
@@ -73,11 +100,66 @@ export function ObservabilityPage() {
       pageSize: String(params.pageSize),
     })
     const response = await apiRequest<PaginatedResponse<RateLimitRow>>(`/observability/rate-limits?${query.toString()}`)
-    return {
-      rows: response.items,
-      total: response.totalCount,
-    }
+    return { rows: response.items ?? [], total: response.totalCount }
   }, [])
+
+  const loadEventDetail = async (id: number) => {
+    const detail = await apiRequest<EventRecord>(`/observability/events/${id}`)
+    setSelectedEvent(detail)
+  }
+
+  const loadTrace = async () => {
+    if (!correlationId.trim()) {
+      setTraceResult(null)
+      return
+    }
+    const trace = await apiRequest<TraceResult>(`/observability/trace?correlationId=${encodeURIComponent(correlationId.trim())}`)
+    setTraceResult(trace)
+  }
+
+  const eventColumns = React.useMemo<GridColDef<EventRecord>[]>(
+    () => [
+      { field: 'createdAt', headerName: 'Timestamp', minWidth: 190, flex: 1, valueGetter: (value) => formatTraceDate(String(value ?? '')) },
+      { field: 'eventType', headerName: 'Event Type', minWidth: 180, flex: 1 },
+      {
+        field: 'eventLevel',
+        headerName: 'Level',
+        minWidth: 120,
+        renderCell: (params: GridRenderCellParams<EventRecord, string>) => (
+          <Chip size="small" label={params.value ?? 'info'} color={traceLevelColor(params.value ?? '')} />
+        ),
+      },
+      { field: 'message', headerName: 'Message', minWidth: 240, flex: 1.5 },
+      { field: 'correlationId', headerName: 'Correlation ID', minWidth: 180, flex: 1 },
+      { field: 'requestUid', headerName: 'Request', minWidth: 160, flex: 1 },
+      { field: 'deliveryUid', headerName: 'Delivery', minWidth: 160, flex: 1 },
+      { field: 'asyncTaskUid', headerName: 'Job', minWidth: 160, flex: 1 },
+      { field: 'sourceComponent', headerName: 'Source', minWidth: 160, flex: 1 },
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        minWidth: 96,
+        sortable: false,
+        filterable: false,
+        renderCell: (params: GridRenderCellParams<EventRecord>) => (
+          <AdminRowActions
+            rowLabel={params.row.eventType}
+            actions={[
+              {
+                id: 'view',
+                label: 'View',
+                icon: 'view',
+                onClick: () => {
+                  void loadEventDetail(params.row.id)
+                },
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [],
+  )
 
   const workerColumns = React.useMemo<GridColDef<WorkerRow>[]>(
     () => [
@@ -91,19 +173,13 @@ export function ObservabilityPage() {
           <Chip label={params.value ?? 'unknown'} size="small" color={statusColor(params.value ?? '')} />
         ),
       },
-      {
-        field: 'startedAt',
-        headerName: 'Started',
-        minWidth: 190,
-        flex: 1,
-        valueGetter: (value) => formatDate(String(value ?? '')),
-      },
+      { field: 'startedAt', headerName: 'Started', minWidth: 190, flex: 1, valueGetter: (value) => formatTraceDate(String(value ?? '')) },
       {
         field: 'lastHeartbeatAt',
         headerName: 'Last Heartbeat',
         minWidth: 190,
         flex: 1,
-        valueGetter: (value) => formatDate(String(value ?? '')),
+        valueGetter: (value) => formatTraceDate(String(value ?? '')),
       },
     ],
     [],
@@ -136,8 +212,46 @@ export function ObservabilityPage() {
           Observability
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Inspect worker activity and active rate-limit policies.
+          Inspect Sukumad event history, correlation traces, workers, and active rate-limit policies.
         </Typography>
+      </Box>
+
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+        <TextField label="Event type" value={eventType} onChange={(event) => setEventType(event.target.value)} />
+        <TextField label="Level" value={level} onChange={(event) => setLevel(event.target.value)} placeholder="info | warning | error" />
+        <TextField label="Correlation ID" value={correlationId} onChange={(event) => setCorrelationId(event.target.value)} />
+        <TextField label="From" type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} InputLabelProps={{ shrink: true }} />
+        <TextField label="To" type="datetime-local" value={to} onChange={(event) => setTo(event.target.value)} InputLabelProps={{ shrink: true }} />
+        <Button variant="outlined" onClick={() => void loadTrace()}>
+          Trace
+        </Button>
+      </Stack>
+
+      {traceResult ? (
+        <Box sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="subtitle2">Trace Summary</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {traceResult.correlationId}
+          </Typography>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="caption">Requests: {traceResult.summary.requests.map((item) => item.uid).join(', ') || '-'}</Typography>
+            <Typography variant="caption">Deliveries: {traceResult.summary.deliveries.map((item) => item.uid).join(', ') || '-'}</Typography>
+            <Typography variant="caption">Jobs: {traceResult.summary.jobs.map((item) => item.uid).join(', ') || '-'}</Typography>
+          </Stack>
+        </Box>
+      ) : null}
+
+      <Box>
+        <Typography variant="h6" gutterBottom>
+          Event History
+        </Typography>
+        <AppDataGrid
+          columns={eventColumns}
+          fetchData={fetchEvents}
+          storageKey="sukumad-observability-events-grid"
+          externalQueryKey={[eventType, level, correlationId, from, to].join('|')}
+          pinActionsToRight
+        />
       </Box>
 
       <Box>
@@ -153,6 +267,8 @@ export function ObservabilityPage() {
         </Typography>
         <AppDataGrid columns={rateLimitColumns} fetchData={fetchRateLimits} storageKey="sukumad-rate-limits-grid" />
       </Box>
+
+      <EventDetailDialog open={Boolean(selectedEvent)} event={selectedEvent} onClose={() => setSelectedEvent(null)} />
     </Stack>
   )
 }

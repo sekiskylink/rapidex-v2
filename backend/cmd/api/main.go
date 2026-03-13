@@ -133,12 +133,13 @@ func run() error {
 		WithDispatcher(sukumadDHIS2Service).
 		WithRequestStatusUpdater(sukumadRequestService)
 	sukumadAsyncService := asyncjobs.NewService(asyncjobs.NewRepository(database), auditService)
-	sukumadDeliveryService.WithAsyncService(sukumadAsyncService)
-	sukumadRequestService.WithDeliveryService(sukumadDeliveryService)
-	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService)
-	sukumadRateLimitService := ratelimit.NewService(ratelimit.NewRepository(database))
 	sukumadWorkerService := worker.NewService(worker.NewRepository(database), auditService)
-	sukumadObservabilityService := observability.NewService(observability.NewRepository(sukumadWorkerService, sukumadRateLimitService))
+	sukumadRateLimitService := ratelimit.NewService(ratelimit.NewRepository(database))
+	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
+	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
+	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithEventWriter(sukumadObservabilityService)
+	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
+	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	_ = worker.NewBootstrap(
 		sukumadWorkerService,
 		worker.NewSendDefinition(nil),

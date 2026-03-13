@@ -11,6 +11,7 @@ import (
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
 	asyncjobs "basepro/backend/internal/sukumad/async"
+	"basepro/backend/internal/sukumad/traceevent"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -30,6 +31,7 @@ type Service struct {
 		SetCompleted(context.Context, int64) error
 		SetFailed(context.Context, int64) error
 	}
+	eventWriter traceevent.Writer
 }
 
 type DispatchResult struct {
@@ -73,6 +75,11 @@ func (s *Service) WithRequestStatusUpdater(updater interface {
 	SetFailed(context.Context, int64) error
 }) *Service {
 	s.requestStatusUpdater = updater
+	return s
+}
+
+func (s *Service) WithEventWriter(eventWriter traceevent.Writer) *Service {
+	s.eventWriter = eventWriter
 	return s
 }
 
@@ -130,6 +137,23 @@ func (s *Service) CreatePendingDelivery(ctx context.Context, input CreateInput) 
 			"status":        created.Status,
 		},
 	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &created.RequestID,
+		DeliveryAttemptID: &created.ID,
+		EventType:         traceevent.EventDeliveryCreated,
+		EventLevel:        "info",
+		Message:           traceevent.Message("Delivery created", "Delivery %s created for request %s", created.UID, created.RequestUID),
+		Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+		SourceComponent:   "delivery.service",
+		CorrelationID:     input.CorrelationID,
+		EventData: map[string]any{
+			"deliveryUid":   created.UID,
+			"requestUid":    created.RequestUID,
+			"serverName":    created.ServerName,
+			"attemptNumber": created.AttemptNumber,
+			"status":        created.Status,
+		},
+	})
 
 	return created, nil
 }
@@ -143,7 +167,7 @@ func (s *Service) MarkRunning(ctx context.Context, id int64) (Record, error) {
 		return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"status": []string{"delivery can only start from pending or retrying"}})
 	}
 	now := time.Now().UTC()
-	return s.repo.UpdateDelivery(ctx, UpdateParams{
+	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
 		ID:           id,
 		Status:       StatusRunning,
 		HTTPStatus:   nil,
@@ -153,6 +177,32 @@ func (s *Service) MarkRunning(ctx context.Context, id int64) (Record, error) {
 		FinishedAt:   nil,
 		RetryAt:      nil,
 	})
+	if err != nil {
+		return Record{}, err
+	}
+	eventType := traceevent.EventDeliveryStarted
+	message := traceevent.Message("Delivery started", "Delivery %s started", updated.UID)
+	if record.Status == StatusRetrying {
+		eventType = traceevent.EventDeliveryRetryStarted
+		message = traceevent.Message("Delivery retry started", "Delivery retry %s started", updated.UID)
+	}
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &updated.RequestID,
+		DeliveryAttemptID: &updated.ID,
+		EventType:         eventType,
+		EventLevel:        "info",
+		Message:           message,
+		SourceComponent:   "delivery.service",
+		CorrelationID:     updated.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+		EventData: map[string]any{
+			"deliveryUid":   updated.UID,
+			"requestUid":    updated.RequestUID,
+			"attemptNumber": updated.AttemptNumber,
+			"status":        updated.Status,
+		},
+	})
+	return updated, nil
 }
 
 func (s *Service) MarkSucceeded(ctx context.Context, input CompletionInput) (Record, error) {
@@ -189,6 +239,36 @@ func (s *Service) MarkSucceeded(ctx context.Context, input CompletionInput) (Rec
 			"serverName":    updated.ServerName,
 			"attemptNumber": updated.AttemptNumber,
 			"httpStatus":    updated.HTTPStatus,
+		},
+	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &updated.RequestID,
+		DeliveryAttemptID: &updated.ID,
+		EventType:         traceevent.EventDeliveryResponse,
+		EventLevel:        "info",
+		Message:           traceevent.Message("Delivery response received", "Delivery %s received a response", updated.UID),
+		SourceComponent:   "delivery.service",
+		CorrelationID:     updated.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+		EventData: map[string]any{
+			"deliveryUid":  updated.UID,
+			"httpStatus":   updated.HTTPStatus,
+			"responseBody": updated.ResponseBody,
+		},
+	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &updated.RequestID,
+		DeliveryAttemptID: &updated.ID,
+		EventType:         traceevent.EventDeliverySucceeded,
+		EventLevel:        "info",
+		Message:           traceevent.Message("Delivery succeeded", "Delivery %s succeeded", updated.UID),
+		SourceComponent:   "delivery.service",
+		CorrelationID:     updated.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+		EventData: map[string]any{
+			"deliveryUid":   updated.UID,
+			"httpStatus":    updated.HTTPStatus,
+			"attemptNumber": updated.AttemptNumber,
 		},
 	})
 
@@ -232,6 +312,37 @@ func (s *Service) MarkFailed(ctx context.Context, input CompletionInput) (Record
 			"errorMessage":  updated.ErrorMessage,
 		},
 	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &updated.RequestID,
+		DeliveryAttemptID: &updated.ID,
+		EventType:         traceevent.EventDeliveryResponse,
+		EventLevel:        "warning",
+		Message:           traceevent.Message("Delivery response received", "Delivery %s received a failure response", updated.UID),
+		SourceComponent:   "delivery.service",
+		CorrelationID:     updated.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+		EventData: map[string]any{
+			"deliveryUid":  updated.UID,
+			"httpStatus":   updated.HTTPStatus,
+			"responseBody": updated.ResponseBody,
+		},
+	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &updated.RequestID,
+		DeliveryAttemptID: &updated.ID,
+		EventType:         traceevent.EventDeliveryFailed,
+		EventLevel:        "error",
+		Message:           traceevent.Message("Delivery failed", "Delivery %s failed", updated.UID),
+		SourceComponent:   "delivery.service",
+		CorrelationID:     updated.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+		EventData: map[string]any{
+			"deliveryUid":   updated.UID,
+			"httpStatus":    updated.HTTPStatus,
+			"errorMessage":  updated.ErrorMessage,
+			"attemptNumber": updated.AttemptNumber,
+		},
+	})
 
 	return updated, nil
 }
@@ -273,6 +384,24 @@ func (s *Service) RetryDelivery(ctx context.Context, actorID *int64, id int64) (
 			"requestUid":          created.RequestUID,
 			"serverName":          created.ServerName,
 			"attemptNumber":       created.AttemptNumber,
+			"retryAt":             created.RetryAt,
+			"sourceDeliveryId":    record.ID,
+			"sourceDeliveryUid":   record.UID,
+			"sourceAttemptNumber": record.AttemptNumber,
+		},
+	})
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:         &created.RequestID,
+		DeliveryAttemptID: &created.ID,
+		EventType:         traceevent.EventDeliveryRetrySched,
+		EventLevel:        "warning",
+		Message:           traceevent.Message("Delivery retry scheduled", "Delivery retry %s scheduled", created.UID),
+		SourceComponent:   "delivery.service",
+		CorrelationID:     created.CorrelationID,
+		Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: actorID},
+		EventData: map[string]any{
+			"deliveryUid":         created.UID,
+			"requestUid":          created.RequestUID,
 			"retryAt":             created.RetryAt,
 			"sourceDeliveryId":    record.ID,
 			"sourceDeliveryUid":   record.UID,
@@ -457,6 +586,13 @@ func (s *Service) CompleteFromAsyncFailure(ctx context.Context, deliveryID int64
 		ErrorMessage: errorMessage,
 	})
 	return err
+}
+
+func (s *Service) appendEvent(ctx context.Context, input traceevent.WriteInput) {
+	if s.eventWriter == nil {
+		return
+	}
+	_ = s.eventWriter.AppendEvent(ctx, input)
 }
 
 func (s *Service) mustLoadForTransition(ctx context.Context, id int64) (Record, error) {

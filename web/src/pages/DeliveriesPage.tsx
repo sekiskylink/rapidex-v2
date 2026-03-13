@@ -10,6 +10,7 @@ import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
 import { DeliveryDetailPage, type DeliveryDetailRecord } from './DeliveryDetailPage'
+import type { EventRecord } from './traceability'
 
 interface DeliveryRow extends DeliveryDetailRecord {}
 
@@ -54,6 +55,7 @@ export function DeliveriesPage() {
   const [dateFilter, setDateFilter] = React.useState('')
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailDelivery, setDetailDelivery] = React.useState<DeliveryDetailRecord | null>(null)
+  const [detailEvents, setDetailEvents] = React.useState<EventRecord[]>([])
   const [detailError, setDetailError] = React.useState('')
   const [retrying, setRetrying] = React.useState(false)
 
@@ -71,7 +73,7 @@ export function DeliveriesPage() {
       })
       const response = await apiRequest<PaginatedResponse<DeliveryRow>>(`/deliveries?${query}`)
       return {
-        rows: response.items,
+        rows: response.items ?? [],
         total: response.totalCount,
       }
     },
@@ -81,11 +83,16 @@ export function DeliveriesPage() {
   const openDetailDialog = async (row: DeliveryRow) => {
     setDetailError('')
     try {
-      const detail = await apiRequest<DeliveryDetailRecord>(`/deliveries/${row.id}`)
+      const [detail, events] = await Promise.all([
+        apiRequest<DeliveryDetailRecord>(`/deliveries/${row.id}`),
+        apiRequest<PaginatedResponse<EventRecord>>(`/deliveries/${row.id}/events?page=1&pageSize=50&sort=createdAt:asc`),
+      ])
       setDetailDelivery(detail)
+      setDetailEvents(events.items ?? [])
       setDetailOpen(true)
     } catch (error) {
       setDetailDelivery(null)
+      setDetailEvents([])
       setDetailOpen(false)
       setDetailError('Unable to load delivery detail.')
       await handleAppError(error, {
@@ -246,6 +253,7 @@ export function DeliveriesPage() {
       <DeliveryDetailPage
         open={detailOpen}
         delivery={detailDelivery}
+        events={detailEvents}
         canRetry={canWrite && detailDelivery?.status === 'failed'}
         retrying={retrying}
         onRetry={() => {
@@ -257,6 +265,7 @@ export function DeliveriesPage() {
         onClose={() => {
           setDetailOpen(false)
           setDetailDelivery(null)
+          setDetailEvents([])
         }}
       />
     </Stack>

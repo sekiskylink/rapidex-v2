@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Button, Stack, Typography } from '@mui/material'
+import { EventTimeline, type EventRecord } from './traceability'
 
 export interface RequestDetailRecord {
   id: number
@@ -78,10 +79,11 @@ function statusColor(status: string): 'default' | 'warning' | 'success' | 'error
 interface RequestDetailPageProps {
   open: boolean
   request: RequestDetailRecord | null
+  events: EventRecord[]
   onClose: () => void
 }
 
-export function RequestDetailPage({ open, request, onClose }: RequestDetailPageProps) {
+export function RequestDetailPage({ open, request, events, onClose }: RequestDetailPageProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Request Detail</DialogTitle>
@@ -134,6 +136,13 @@ export function RequestDetailPage({ open, request, onClose }: RequestDetailPageP
               <Box component="pre" sx={{ m: 0, p: 2, borderRadius: 2, bgcolor: 'background.default', overflowX: 'auto' }}>
                 {formatJSON(request.extras)}
               </Box>
+            </Box>
+            <Divider />
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Event Timeline
+              </Typography>
+              <EventTimeline events={events} emptyMessage="No request events recorded yet." />
             </Box>
           </Stack>
         ) : null}
