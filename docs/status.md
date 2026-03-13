@@ -1,5 +1,66 @@
 # Status
 
+## Milestone — Sukumad Real Worker Execution Model (Complete)
+
+### What changed
+- Introduced a real worker process entrypoint at [backend/cmd/worker/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/worker/main.go):
+  - worker loops now run outside the HTTP server process
+  - the worker process starts send, retry, poll, and retention loops with `signal.NotifyContext` shutdown handling
+  - loop timing and batch sizes are configurable under:
+    - [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go)
+    - [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml)
+- Removed the unused worker bootstrap from the API startup path in [backend/cmd/api/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/main.go) so the API process remains accept-and-persist plus HTTP-only.
+- Implemented real send/retry worker execution in [backend/internal/sukumad/worker](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker):
+  - added a delivery executor that claims work, loads persisted request/server context, emits worker lifecycle events, and submits through the shared delivery service
+  - send worker now claims eligible `pending` deliveries
+  - retry worker now claims due `retrying` deliveries and reuses the exact same submission path
+  - files:
+    - [backend/internal/sukumad/worker/executor.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/executor.go)
+    - [backend/internal/sukumad/worker/send.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/send.go)
+    - [backend/internal/sukumad/worker/retry.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/retry.go)
+- Added durable claim support in [backend/internal/sukumad/delivery](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery):
+  - repository claim methods now atomically select and transition one eligible delivery to `running`
+  - pending claim respects target/dependency/window eligibility
+  - retry claim respects `retry_at <= now`
+  - the shared `SubmitDHIS2Delivery(...)` path now accepts already-claimed `running` deliveries so workers do not need a parallel outbound implementation
+  - files:
+    - [backend/internal/sukumad/delivery/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/types.go)
+    - [backend/internal/sukumad/delivery/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository.go)
+    - [backend/internal/sukumad/delivery/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service.go)
+- Updated Sukumad worker/process documentation:
+  - [docs/notes/sukumad-workers.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers.md)
+  - [docs/notes/sukumad-workers-async.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers-async.md)
+  - [docs/notes/sukumad-how-requests-are-processed.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-how-requests-are-processed.md)
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-sukumad-worker-execution-model.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/delivery/repository_claim_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository_claim_test.go) for concurrency-safe pending/retry claims
+  - updated [backend/internal/sukumad/delivery/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service_test.go) for worker-claimed shared submission behavior
+  - added [backend/internal/sukumad/worker/executor_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/executor_test.go) for send/retry execution and shared submission-path reuse
+- Web:
+  - no code changes required; existing suites were rerun to confirm no regressions
+- Desktop:
+  - no code changes required; existing suites were rerun to confirm no regressions
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/delivery ./internal/sukumad/worker ./internal/config` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./cmd/api ./cmd/worker` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Add stale-running recovery or reconciliation for deliveries claimed into `running` if a worker crashes after claim but before final completion.
+- Poll worker pickup is now process-separated and operational, but async-task claim exclusivity is still based on due-task selection rather than a dedicated async claim column/state model.
+- Frontend test/build logs still include the existing non-blocking MUI `anchorEl`, desktop `useRouter`, third-party `'use client'`, and chunk-size warnings.
+
 ## Milestone — Sukumad Request Creation Accept-and-Persist (Complete)
 
 ### What changed

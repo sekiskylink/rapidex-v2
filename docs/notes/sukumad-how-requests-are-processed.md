@@ -158,11 +158,13 @@ The delivery service is the core state machine for outbound submission.
 Its flow is:
 
 1. Evaluate submission-window policy for the destination.
-2. If allowed, move the delivery from `pending` or `retrying` to `running`.
+2. If allowed, ensure the delivery is `running` for execution.
 3. Call the configured dispatcher.
 4. Interpret the dispatcher result.
 5. Update delivery, target, and request state.
 6. Create an async task if the destination accepted async processing.
+
+When the call comes from a worker-claimed delivery, the delivery may already be in `running`. The shared submission path still handles the rest of the lifecycle without a separate retry/send implementation.
 
 The dispatcher is currently the DHIS2 integration service:
 
@@ -184,11 +186,7 @@ If the window is closed:
 
 This is a defer, not a failure.
 
-Important current limitation:
-
-- there is no active send worker implementation that later resumes these `pending` deliveries automatically
-
-The worker type exists, but `backend/cmd/api/main.go` currently wires `worker.NewSendDefinition(nil)`.
+When the window later becomes due, the separate worker process can claim the same delivery again and re-run the shared submission path.
 
 ## Synchronous destination outcomes
 
@@ -356,30 +354,28 @@ Important current behavior:
 - the original failed attempt remains unchanged
 - the retry is durable and visible through the API/UI
 
-Important current limitation:
-
-- retry execution is not automatically wired yet
-- `backend/cmd/api/main.go` currently wires `worker.NewRetryDefinition(nil)`
-
-So retries are scheduled in data, but no active retry worker is consuming them yet.
+Retries are now consumed by the separate retry worker process once `retry_at <= now`.
 
 ## Worker involvement today
 
-The worker framework exists and worker runs are persisted in `worker_runs`.
+Worker runs are persisted in `worker_runs`.
 
 Current runtime wiring is:
 
-- send worker definition exists but has no run function
-- poll worker is active and calls `async.PollDueTasks(...)`
-- retry worker definition exists but has no run function
-- retention worker is active separately for cleanup
+- `backend/cmd/api/main.go` starts only the HTTP API process
+- `backend/cmd/worker/main.go` starts the worker manager in a separate process
+- send worker claims eligible `pending` deliveries and submits them
+- poll worker calls `async.PollDueTasks(...)`
+- retry worker claims due `retrying` deliveries and resubmits them
+- retention worker handles cleanup scheduling
 
 In practical terms:
 
-- request creation performs the first submission inline
-- dependency release performs resumed submission inline
+- request creation is accept-and-persist only
+- dependency release returns work to durable worker-eligible state
+- send execution is background-worker driven
 - async polling is background-worker driven
-- deferred sends and scheduled retries are not yet background-worker driven
+- scheduled retries are background-worker driven
 
 ## Observability and audit trail
 
@@ -413,10 +409,11 @@ Today, a request moves through the system like this:
 1. A request is created and persisted.
 2. One or more destination targets are created.
 3. A pending delivery attempt is created for each target.
-4. If dependencies allow it, submission is attempted immediately.
+4. If dependencies allow it, a send worker later claims the pending delivery.
 5. The destination either finishes synchronously or returns an async job.
 6. Async jobs are polled by the poll worker until terminal.
-7. Terminal delivery outcomes update target state.
-8. Target states roll up into the final request state.
+7. Failed deliveries can create `retrying` attempts that the retry worker later claims.
+8. Terminal delivery outcomes update target state.
+9. Target states roll up into the final request state.
 
-The important implementation caveat is that polling is automated, but deferred sends and scheduled retries are still only persisted scaffolding until send/retry worker execution is wired in.
+The important operational boundary is now explicit: API intake persists state, and the separate worker process owns outbound execution after that point.

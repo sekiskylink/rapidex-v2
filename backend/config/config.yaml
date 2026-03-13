@@ -89,3 +89,16 @@ sukumad:
       requests_per_second: 2
       burst: 2
     destinations: {}
+  workers:
+    heartbeat_seconds: 10
+    send:
+      interval_seconds: 5
+      batch_size: 10
+    retry:
+      interval_seconds: 5
+      batch_size: 10
+    poll:
+      interval_seconds: 5
+      batch_size: 10
+    retention:
+      interval_seconds: 300

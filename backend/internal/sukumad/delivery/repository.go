@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -16,6 +16,24 @@ import (
 
 	"github.com/jmoiron/sqlx"
 )
+
+const deliverySelectColumns = `
+	SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
+	       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code, COALESCE(s.system_type, '') AS system_type,
+	       d.attempt_number, d.status, d.http_status, COALESCE(d.response_body, '') AS response_body,
+	       COALESCE(d.response_content_type, '') AS response_content_type, d.response_body_filtered, d.response_summary,
+	       COALESCE(d.error_message, '') AS error_message,
+	       COALESCE(d.submission_hold_reason, '') AS submission_hold_reason, d.next_eligible_at, COALESCE(d.hold_policy_source, '') AS hold_policy_source,
+	       COALESCE(d.terminal_reason, '') AS terminal_reason,
+	       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
+	       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
+	       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
+	       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
+		FROM delivery_attempts d
+		LEFT JOIN exchange_requests r ON r.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
+`
 
 type SQLRepository struct {
 	db *sqlx.DB
@@ -33,37 +51,37 @@ func NewRepository(db ...*sqlx.DB) Repository {
 }
 
 type recordRow struct {
-	ID                int64      `db:"id"`
-	UID               string     `db:"uid"`
-	RequestID         int64      `db:"request_id"`
-	RequestUID        string     `db:"request_uid"`
-	CorrelationID     string     `db:"correlation_id"`
-	ServerID          int64      `db:"server_id"`
-	ServerName        string     `db:"server_name"`
-	ServerCode        string     `db:"server_code"`
-	SystemType        string     `db:"system_type"`
-	AttemptNumber     int        `db:"attempt_number"`
-	Status            string     `db:"status"`
-	HTTPStatus        *int       `db:"http_status"`
-	ResponseBody      string     `db:"response_body"`
-	ResponseContentType string   `db:"response_content_type"`
-	ResponseBodyFiltered bool    `db:"response_body_filtered"`
-	ResponseSummary   json.RawMessage `db:"response_summary"`
-	ErrorMessage      string     `db:"error_message"`
-	SubmissionHoldReason string  `db:"submission_hold_reason"`
-	NextEligibleAt    *time.Time `db:"next_eligible_at"`
-	HoldPolicySource  string     `db:"hold_policy_source"`
-	TerminalReason    string     `db:"terminal_reason"`
-	AsyncTaskID       *int64     `db:"async_task_id"`
-	AsyncTaskUID      string     `db:"async_task_uid"`
-	AsyncCurrentState string     `db:"async_current_state"`
-	AsyncRemoteJobID  string     `db:"async_remote_job_id"`
-	AsyncPollURL      string     `db:"async_poll_url"`
-	StartedAt         *time.Time `db:"started_at"`
-	FinishedAt        *time.Time `db:"finished_at"`
-	RetryAt           *time.Time `db:"retry_at"`
-	CreatedAt         time.Time  `db:"created_at"`
-	UpdatedAt         time.Time  `db:"updated_at"`
+	ID                   int64           `db:"id"`
+	UID                  string          `db:"uid"`
+	RequestID            int64           `db:"request_id"`
+	RequestUID           string          `db:"request_uid"`
+	CorrelationID        string          `db:"correlation_id"`
+	ServerID             int64           `db:"server_id"`
+	ServerName           string          `db:"server_name"`
+	ServerCode           string          `db:"server_code"`
+	SystemType           string          `db:"system_type"`
+	AttemptNumber        int             `db:"attempt_number"`
+	Status               string          `db:"status"`
+	HTTPStatus           *int            `db:"http_status"`
+	ResponseBody         string          `db:"response_body"`
+	ResponseContentType  string          `db:"response_content_type"`
+	ResponseBodyFiltered bool            `db:"response_body_filtered"`
+	ResponseSummary      json.RawMessage `db:"response_summary"`
+	ErrorMessage         string          `db:"error_message"`
+	SubmissionHoldReason string          `db:"submission_hold_reason"`
+	NextEligibleAt       *time.Time      `db:"next_eligible_at"`
+	HoldPolicySource     string          `db:"hold_policy_source"`
+	TerminalReason       string          `db:"terminal_reason"`
+	AsyncTaskID          *int64          `db:"async_task_id"`
+	AsyncTaskUID         string          `db:"async_task_uid"`
+	AsyncCurrentState    string          `db:"async_current_state"`
+	AsyncRemoteJobID     string          `db:"async_remote_job_id"`
+	AsyncPollURL         string          `db:"async_poll_url"`
+	StartedAt            *time.Time      `db:"started_at"`
+	FinishedAt           *time.Time      `db:"finished_at"`
+	RetryAt              *time.Time      `db:"retry_at"`
+	CreatedAt            time.Time       `db:"created_at"`
+	UpdatedAt            time.Time       `db:"updated_at"`
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
@@ -195,24 +213,7 @@ func (r *SQLRepository) ListDeliveries(ctx context.Context, query ListQuery) (Li
 
 func (r *SQLRepository) GetDeliveryByID(ctx context.Context, id int64) (Record, error) {
 	var row recordRow
-	if err := r.db.GetContext(ctx, &row, `
-		SELECT d.id, d.uid::text AS uid, d.request_id, COALESCE(r.uid::text, '') AS request_uid, COALESCE(r.correlation_id, '') AS correlation_id,
-		       d.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code, COALESCE(s.system_type, '') AS system_type,
-		       d.attempt_number, d.status, d.http_status, COALESCE(d.response_body, '') AS response_body,
-		       COALESCE(d.response_content_type, '') AS response_content_type, d.response_body_filtered, d.response_summary,
-		       COALESCE(d.error_message, '') AS error_message,
-		       COALESCE(d.submission_hold_reason, '') AS submission_hold_reason, d.next_eligible_at, COALESCE(d.hold_policy_source, '') AS hold_policy_source,
-		       COALESCE(d.terminal_reason, '') AS terminal_reason,
-		       a.id AS async_task_id, COALESCE(a.uid::text, '') AS async_task_uid,
-		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS async_current_state,
-		       COALESCE(a.remote_job_id, '') AS async_remote_job_id, COALESCE(a.poll_url, '') AS async_poll_url,
-		       d.started_at, d.finished_at, d.retry_at, d.created_at, d.updated_at
-		FROM delivery_attempts d
-		LEFT JOIN exchange_requests r ON r.id = d.request_id
-		LEFT JOIN integration_servers s ON s.id = d.server_id
-		LEFT JOIN async_tasks a ON a.delivery_attempt_id = d.id
-		WHERE d.id = $1
-	`, id); err != nil {
+	if err := r.db.GetContext(ctx, &row, deliverySelectColumns+` WHERE d.id = $1`, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Record{}, sql.ErrNoRows
 		}
@@ -259,6 +260,79 @@ func (r *SQLRepository) CreateDelivery(ctx context.Context, params CreateParams)
 	}
 
 	return r.GetDeliveryByID(ctx, id)
+}
+
+func (r *SQLRepository) ClaimNextPendingDelivery(ctx context.Context, now time.Time) (Record, error) {
+	return r.claimNextDelivery(ctx, now, false)
+}
+
+func (r *SQLRepository) ClaimNextRetryDelivery(ctx context.Context, now time.Time) (Record, error) {
+	return r.claimNextDelivery(ctx, now, true)
+}
+
+func (r *SQLRepository) claimNextDelivery(ctx context.Context, now time.Time, retry bool) (Record, error) {
+	var row recordRow
+	query := `
+		WITH candidate AS (
+			SELECT d.id
+			FROM delivery_attempts d
+			LEFT JOIN request_targets rt ON rt.request_id = d.request_id AND rt.server_id = d.server_id
+			WHERE %s
+			ORDER BY %s
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		), claimed AS (
+			UPDATE delivery_attempts d
+			SET status = 'running',
+			    http_status = NULL,
+			    response_body = '',
+			    response_content_type = '',
+			    response_body_filtered = FALSE,
+			    response_summary = '{}'::jsonb,
+			    error_message = '',
+			    submission_hold_reason = '',
+			    next_eligible_at = NULL,
+			    hold_policy_source = '',
+			    terminal_reason = '',
+			    started_at = $1,
+			    finished_at = NULL,
+			    retry_at = NULL,
+			    updated_at = NOW()
+			FROM candidate
+			WHERE d.id = candidate.id
+			RETURNING d.id
+		)
+	` + deliverySelectColumns + ` JOIN claimed ON claimed.id = d.id`
+
+	predicate := `
+		d.status = 'pending'
+		AND (
+			rt.status = 'pending'
+			OR (
+				rt.status = 'blocked'
+				AND rt.blocked_reason = 'window_closed'
+				AND d.submission_hold_reason = 'window_closed'
+				AND (d.next_eligible_at IS NULL OR d.next_eligible_at <= $1)
+			)
+		)
+	`
+	orderBy := "COALESCE(d.next_eligible_at, d.created_at) ASC, d.created_at ASC, d.id ASC"
+	if retry {
+		predicate = `
+			d.status = 'retrying'
+			AND d.retry_at IS NOT NULL
+			AND d.retry_at <= $1
+		`
+		orderBy = "d.retry_at ASC, d.created_at ASC, d.id ASC"
+	}
+
+	if err := r.db.GetContext(ctx, &row, fmt.Sprintf(query, predicate, orderBy), now.UTC()); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, ErrNoEligibleDelivery
+		}
+		return Record{}, fmt.Errorf("claim delivery attempt: %w", err)
+	}
+	return decodeRow(row), nil
 }
 
 func (r *SQLRepository) UpdateDelivery(ctx context.Context, params UpdateParams) (Record, error) {
@@ -343,39 +417,39 @@ func decodeRow(row recordRow) Record {
 		_ = json.Unmarshal(row.ResponseSummary, &responseSummary)
 	}
 	return Record{
-		ID:                row.ID,
-		UID:               row.UID,
-		RequestID:         row.RequestID,
-		RequestUID:        row.RequestUID,
-		CorrelationID:     row.CorrelationID,
-		ServerID:          row.ServerID,
-		ServerName:        row.ServerName,
-		ServerCode:        row.ServerCode,
-		SystemType:        row.SystemType,
-		AttemptNumber:     row.AttemptNumber,
-		Status:            row.Status,
-		HTTPStatus:        cloneIntPtr(row.HTTPStatus),
-		ResponseBody:      row.ResponseBody,
-		ResponseContentType: row.ResponseContentType,
+		ID:                   row.ID,
+		UID:                  row.UID,
+		RequestID:            row.RequestID,
+		RequestUID:           row.RequestUID,
+		CorrelationID:        row.CorrelationID,
+		ServerID:             row.ServerID,
+		ServerName:           row.ServerName,
+		ServerCode:           row.ServerCode,
+		SystemType:           row.SystemType,
+		AttemptNumber:        row.AttemptNumber,
+		Status:               row.Status,
+		HTTPStatus:           cloneIntPtr(row.HTTPStatus),
+		ResponseBody:         row.ResponseBody,
+		ResponseContentType:  row.ResponseContentType,
 		ResponseBodyFiltered: row.ResponseBodyFiltered,
-		ResponseSummary:   responseSummary,
-		ErrorMessage:      row.ErrorMessage,
+		ResponseSummary:      responseSummary,
+		ErrorMessage:         row.ErrorMessage,
 		SubmissionHoldReason: row.SubmissionHoldReason,
-		NextEligibleAt:    cloneTimePtr(row.NextEligibleAt),
-		HoldPolicySource:  row.HoldPolicySource,
-		TerminalReason:    row.TerminalReason,
-		SubmissionMode:    submissionMode(row.AsyncTaskID),
-		AsyncTaskID:       cloneInt64Ptr(row.AsyncTaskID),
-		AsyncTaskUID:      row.AsyncTaskUID,
-		AsyncCurrentState: row.AsyncCurrentState,
-		AsyncRemoteJobID:  row.AsyncRemoteJobID,
-		AsyncPollURL:      row.AsyncPollURL,
-		AwaitingAsync:     row.AsyncTaskID != nil && row.AsyncCurrentState != "" && row.AsyncCurrentState != StatusSucceeded && row.AsyncCurrentState != StatusFailed,
-		StartedAt:         cloneTimePtr(row.StartedAt),
-		FinishedAt:        cloneTimePtr(row.FinishedAt),
-		RetryAt:           cloneTimePtr(row.RetryAt),
-		CreatedAt:         row.CreatedAt,
-		UpdatedAt:         row.UpdatedAt,
+		NextEligibleAt:       cloneTimePtr(row.NextEligibleAt),
+		HoldPolicySource:     row.HoldPolicySource,
+		TerminalReason:       row.TerminalReason,
+		SubmissionMode:       submissionMode(row.AsyncTaskID),
+		AsyncTaskID:          cloneInt64Ptr(row.AsyncTaskID),
+		AsyncTaskUID:         row.AsyncTaskUID,
+		AsyncCurrentState:    row.AsyncCurrentState,
+		AsyncRemoteJobID:     row.AsyncRemoteJobID,
+		AsyncPollURL:         row.AsyncPollURL,
+		AwaitingAsync:        row.AsyncTaskID != nil && row.AsyncCurrentState != "" && row.AsyncCurrentState != StatusSucceeded && row.AsyncCurrentState != StatusFailed,
+		StartedAt:            cloneTimePtr(row.StartedAt),
+		FinishedAt:           cloneTimePtr(row.FinishedAt),
+		RetryAt:              cloneTimePtr(row.RetryAt),
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
 	}
 }
 
@@ -560,6 +634,92 @@ func (r *memoryRepository) UpdateDelivery(_ context.Context, params UpdateParams
 	item.UpdatedAt = time.Now().UTC()
 	r.items[params.ID] = item
 	return cloneRecord(item), nil
+}
+
+func (r *memoryRepository) ClaimNextPendingDelivery(_ context.Context, now time.Time) (Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.claimLocked(now.UTC(), false)
+}
+
+func (r *memoryRepository) ClaimNextRetryDelivery(_ context.Context, now time.Time) (Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.claimLocked(now.UTC(), true)
+}
+
+func (r *memoryRepository) claimLocked(now time.Time, retry bool) (Record, error) {
+	var (
+		selected Record
+		found    bool
+	)
+	for _, item := range r.items {
+		if retry {
+			if item.Status != StatusRetrying || item.RetryAt == nil || item.RetryAt.After(now) {
+				continue
+			}
+			if !found || item.RetryAt.Before(*selected.RetryAt) || (item.RetryAt.Equal(*selected.RetryAt) && item.CreatedAt.Before(selected.CreatedAt)) {
+				selected = item
+				found = true
+			}
+			continue
+		}
+		if item.Status != StatusPending {
+			continue
+		}
+		if item.NextEligibleAt != nil && item.NextEligibleAt.After(now) {
+			continue
+		}
+		if !found || compareClaimOrder(item, selected) < 0 {
+			selected = item
+			found = true
+		}
+	}
+	if !found {
+		return Record{}, ErrNoEligibleDelivery
+	}
+	selected.Status = StatusRunning
+	selected.HTTPStatus = nil
+	selected.ResponseBody = ""
+	selected.ResponseContentType = ""
+	selected.ResponseBodyFiltered = false
+	selected.ResponseSummary = map[string]any{}
+	selected.ErrorMessage = ""
+	selected.SubmissionHoldReason = ""
+	selected.NextEligibleAt = nil
+	selected.HoldPolicySource = ""
+	selected.TerminalReason = ""
+	nowCopy := now
+	selected.StartedAt = &nowCopy
+	selected.FinishedAt = nil
+	selected.RetryAt = nil
+	selected.UpdatedAt = now
+	r.items[selected.ID] = selected
+	return cloneRecord(selected), nil
+}
+
+func compareClaimOrder(a Record, b Record) int {
+	aDue := a.CreatedAt
+	if a.NextEligibleAt != nil {
+		aDue = *a.NextEligibleAt
+	}
+	bDue := b.CreatedAt
+	if b.NextEligibleAt != nil {
+		bDue = *b.NextEligibleAt
+	}
+	if cmp := compareTimes(aDue, bDue); cmp != 0 {
+		return cmp
+	}
+	if cmp := compareTimes(a.CreatedAt, b.CreatedAt); cmp != 0 {
+		return cmp
+	}
+	if a.ID < b.ID {
+		return -1
+	}
+	if a.ID > b.ID {
+		return 1
+	}
+	return 0
 }
 
 func compareTimes(a time.Time, b time.Time) int {

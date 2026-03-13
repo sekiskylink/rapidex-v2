@@ -2,11 +2,24 @@ package worker
 
 import "context"
 
-func NewRetryDefinition(run func(context.Context, Execution) error) Definition {
+func NewRetryDefinition(service interface {
+	RunRetryBatch(context.Context, Execution, int) error
+}, batchSize int) Definition {
+	if batchSize <= 0 {
+		batchSize = 10
+	}
 	return Definition{
 		Type: TypeRetry,
 		Name: "retry-worker",
-		Run:  run,
-		Meta: map[string]any{"purpose": "schedule delivery retries"},
+		Run: func(ctx context.Context, exec Execution) error {
+			if service == nil {
+				return nil
+			}
+			return service.RunRetryBatch(ctx, exec, batchSize)
+		},
+		Meta: map[string]any{
+			"purpose":   "schedule delivery retries",
+			"batchSize": batchSize,
+		},
 	}
 }

@@ -200,21 +200,21 @@ func (s *Service) MarkRunning(ctx context.Context, id int64) (Record, error) {
 	}
 	now := time.Now().UTC()
 	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-		ID:                  id,
-		Status:              StatusRunning,
-		HTTPStatus:          nil,
-		ResponseBody:        record.ResponseBody,
-		ResponseContentType: record.ResponseContentType,
+		ID:                   id,
+		Status:               StatusRunning,
+		HTTPStatus:           nil,
+		ResponseBody:         record.ResponseBody,
+		ResponseContentType:  record.ResponseContentType,
 		ResponseBodyFiltered: record.ResponseBodyFiltered,
-		ResponseSummary:     cloneJSONMap(record.ResponseSummary),
-		ErrorMessage:        "",
+		ResponseSummary:      cloneJSONMap(record.ResponseSummary),
+		ErrorMessage:         "",
 		SubmissionHoldReason: "",
-		NextEligibleAt:      nil,
-		HoldPolicySource:    "",
-		TerminalReason:      "",
-		StartedAt:           &now,
-		FinishedAt:          nil,
-		RetryAt:             nil,
+		NextEligibleAt:       nil,
+		HoldPolicySource:     "",
+		TerminalReason:       "",
+		StartedAt:            &now,
+		FinishedAt:           nil,
+		RetryAt:              nil,
 	})
 	if err != nil {
 		return Record{}, err
@@ -257,21 +257,21 @@ func (s *Service) MarkSucceeded(ctx context.Context, input CompletionInput) (Rec
 	}
 	now := time.Now().UTC()
 	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-		ID:                  input.ID,
-		Status:              StatusSucceeded,
-		HTTPStatus:          input.HTTPStatus,
-		ResponseBody:        strings.TrimSpace(input.ResponseBody),
-		ResponseContentType: firstNonEmpty(input.ResponseContentType, record.ResponseContentType),
+		ID:                   input.ID,
+		Status:               StatusSucceeded,
+		HTTPStatus:           input.HTTPStatus,
+		ResponseBody:         strings.TrimSpace(input.ResponseBody),
+		ResponseContentType:  firstNonEmpty(input.ResponseContentType, record.ResponseContentType),
 		ResponseBodyFiltered: input.ResponseBodyFiltered || record.ResponseBodyFiltered,
-		ResponseSummary:     mergeResponseSummary(record.ResponseSummary, input.ResponseSummary),
-		ErrorMessage:        "",
+		ResponseSummary:      mergeResponseSummary(record.ResponseSummary, input.ResponseSummary),
+		ErrorMessage:         "",
 		SubmissionHoldReason: "",
-		NextEligibleAt:      nil,
-		HoldPolicySource:    "",
-		TerminalReason:      "",
-		StartedAt:           record.StartedAt,
-		FinishedAt:          &now,
-		RetryAt:             nil,
+		NextEligibleAt:       nil,
+		HoldPolicySource:     "",
+		TerminalReason:       "",
+		StartedAt:            record.StartedAt,
+		FinishedAt:           &now,
+		RetryAt:              nil,
 	})
 	if err != nil {
 		return Record{}, err
@@ -337,21 +337,21 @@ func (s *Service) MarkFailed(ctx context.Context, input CompletionInput) (Record
 	}
 	now := time.Now().UTC()
 	updated, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-		ID:                  input.ID,
-		Status:              StatusFailed,
-		HTTPStatus:          input.HTTPStatus,
-		ResponseBody:        strings.TrimSpace(input.ResponseBody),
-		ResponseContentType: record.ResponseContentType,
+		ID:                   input.ID,
+		Status:               StatusFailed,
+		HTTPStatus:           input.HTTPStatus,
+		ResponseBody:         strings.TrimSpace(input.ResponseBody),
+		ResponseContentType:  record.ResponseContentType,
 		ResponseBodyFiltered: record.ResponseBodyFiltered,
-		ResponseSummary:     cloneJSONMap(record.ResponseSummary),
-		ErrorMessage:        strings.TrimSpace(input.ErrorMessage),
+		ResponseSummary:      cloneJSONMap(record.ResponseSummary),
+		ErrorMessage:         strings.TrimSpace(input.ErrorMessage),
 		SubmissionHoldReason: "",
-		NextEligibleAt:      nil,
-		HoldPolicySource:    "",
-		TerminalReason:      strings.TrimSpace(input.ErrorMessage),
-		StartedAt:           record.StartedAt,
-		FinishedAt:          &now,
-		RetryAt:             nil,
+		NextEligibleAt:       nil,
+		HoldPolicySource:     "",
+		TerminalReason:       strings.TrimSpace(input.ErrorMessage),
+		StartedAt:            record.StartedAt,
+		FinishedAt:           &now,
+		RetryAt:              nil,
 	})
 	if err != nil {
 		return Record{}, err
@@ -515,21 +515,21 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 	allowed, nextEligibleAt := windowPolicy.Evaluate(now)
 	if !allowed {
 		record, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-			ID:                  input.DeliveryID,
-			Status:              StatusPending,
-			HTTPStatus:          nil,
-			ResponseBody:        "",
-			ResponseContentType: "",
+			ID:                   input.DeliveryID,
+			Status:               StatusPending,
+			HTTPStatus:           nil,
+			ResponseBody:         "",
+			ResponseContentType:  "",
 			ResponseBodyFiltered: false,
-			ResponseSummary:     map[string]any{},
-			ErrorMessage:        "",
+			ResponseSummary:      map[string]any{},
+			ErrorMessage:         "",
 			SubmissionHoldReason: "window_closed",
-			NextEligibleAt:      nextEligibleAt,
-			HoldPolicySource:    windowPolicy.Source,
-			TerminalReason:      "",
-			StartedAt:           nil,
-			FinishedAt:          nil,
-			RetryAt:             nil,
+			NextEligibleAt:       nextEligibleAt,
+			HoldPolicySource:     windowPolicy.Source,
+			TerminalReason:       "",
+			StartedAt:            nil,
+			FinishedAt:           nil,
+			RetryAt:              nil,
 		})
 		if err != nil {
 			return Record{}, err
@@ -550,19 +550,19 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 			CorrelationID:     record.CorrelationID,
 			Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
 			EventData: map[string]any{
-				"deliveryUid":     record.UID,
-				"serverCode":      input.Server.Code,
-				"policySource":    windowPolicy.Source,
-				"startHour":       windowPolicy.StartHour,
-				"endHour":         windowPolicy.EndHour,
-				"nextEligibleAt":  nextEligibleAt,
-				"deferReason":     "window_closed",
+				"deliveryUid":    record.UID,
+				"serverCode":     input.Server.Code,
+				"policySource":   windowPolicy.Source,
+				"startHour":      windowPolicy.StartHour,
+				"endHour":        windowPolicy.EndHour,
+				"nextEligibleAt": nextEligibleAt,
+				"deferReason":    "window_closed",
 			},
 		})
 		return record, nil
 	}
 
-	running, err := s.MarkRunning(ctx, input.DeliveryID)
+	running, err := s.ensureRunning(ctx, input.DeliveryID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -613,21 +613,21 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"async": []string{"async service is not configured"}})
 		}
 		if _, err := s.repo.UpdateDelivery(ctx, UpdateParams{
-			ID:                  running.ID,
-			Status:              StatusRunning,
-			HTTPStatus:          result.HTTPStatus,
-			ResponseBody:        strings.TrimSpace(result.ResponseBody),
-			ResponseContentType: result.ResponseContentType,
+			ID:                   running.ID,
+			Status:               StatusRunning,
+			HTTPStatus:           result.HTTPStatus,
+			ResponseBody:         strings.TrimSpace(result.ResponseBody),
+			ResponseContentType:  result.ResponseContentType,
 			ResponseBodyFiltered: result.ResponseBodyFiltered,
-			ResponseSummary:     cloneJSONMap(result.ResponseSummary),
-			ErrorMessage:        strings.TrimSpace(result.ErrorMessage),
+			ResponseSummary:      cloneJSONMap(result.ResponseSummary),
+			ErrorMessage:         strings.TrimSpace(result.ErrorMessage),
 			SubmissionHoldReason: "",
-			NextEligibleAt:      nil,
-			HoldPolicySource:    "",
-			TerminalReason:      "",
-			StartedAt:           running.StartedAt,
-			FinishedAt:          nil,
-			RetryAt:             nil,
+			NextEligibleAt:       nil,
+			HoldPolicySource:     "",
+			TerminalReason:       "",
+			StartedAt:            running.StartedAt,
+			FinishedAt:           nil,
+			RetryAt:              nil,
 		}); err != nil {
 			return Record{}, err
 		}
@@ -685,13 +685,13 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 		running.ResponseBodyFiltered = result.ResponseBodyFiltered
 		running.ResponseSummary = cloneJSONMap(result.ResponseSummary)
 		record, err := s.MarkSucceeded(ctx, CompletionInput{
-			ID:                  running.ID,
-			HTTPStatus:          result.HTTPStatus,
-			ResponseBody:        result.ResponseBody,
-			ResponseContentType: result.ResponseContentType,
+			ID:                   running.ID,
+			HTTPStatus:           result.HTTPStatus,
+			ResponseBody:         result.ResponseBody,
+			ResponseContentType:  result.ResponseContentType,
 			ResponseBodyFiltered: result.ResponseBodyFiltered,
-			ResponseSummary:     cloneJSONMap(result.ResponseSummary),
-			ActorID:             input.ActorID,
+			ResponseSummary:      cloneJSONMap(result.ResponseSummary),
+			ActorID:              input.ActorID,
 		})
 		if err != nil {
 			return Record{}, err
@@ -718,14 +718,14 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 	running.ResponseBodyFiltered = result.ResponseBodyFiltered
 	running.ResponseSummary = cloneJSONMap(result.ResponseSummary)
 	record, err := s.MarkFailed(ctx, CompletionInput{
-		ID:                  running.ID,
-		HTTPStatus:          result.HTTPStatus,
-		ResponseBody:        result.ResponseBody,
-		ResponseContentType: result.ResponseContentType,
+		ID:                   running.ID,
+		HTTPStatus:           result.HTTPStatus,
+		ResponseBody:         result.ResponseBody,
+		ResponseContentType:  result.ResponseContentType,
 		ResponseBodyFiltered: result.ResponseBodyFiltered,
-		ResponseSummary:     cloneJSONMap(result.ResponseSummary),
-		ErrorMessage:        firstNonEmpty(result.ErrorMessage, "dhis2 submission failed"),
-		ActorID:             input.ActorID,
+		ResponseSummary:      cloneJSONMap(result.ResponseSummary),
+		ErrorMessage:         firstNonEmpty(result.ErrorMessage, "dhis2 submission failed"),
+		ActorID:              input.ActorID,
 	})
 	if err != nil {
 		return Record{}, err
@@ -746,6 +746,20 @@ func (s *Service) SubmitDHIS2Delivery(ctx context.Context, input DispatchInput) 
 		},
 	})
 	return record, nil
+}
+
+func (s *Service) ensureRunning(ctx context.Context, id int64) (Record, error) {
+	record, err := s.GetDelivery(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	if record.Status == StatusRunning {
+		if s.targetUpdater != nil {
+			_ = s.targetUpdater.SetTargetProcessing(ctx, record.RequestID, record.ServerID)
+		}
+		return record, nil
+	}
+	return s.MarkRunning(ctx, id)
 }
 
 func (s *Service) CompleteFromAsyncSuccess(ctx context.Context, deliveryID int64, responseBody string) error {

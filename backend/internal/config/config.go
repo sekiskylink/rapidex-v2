@@ -96,8 +96,8 @@ type Config struct {
 		Retention struct {
 			Enabled         bool `mapstructure:"enabled"`
 			DryRun          bool `mapstructure:"dry_run"`
-			TerminalAgeDays int `mapstructure:"terminal_age_days"`
-			BatchSize       int `mapstructure:"batch_size"`
+			TerminalAgeDays int  `mapstructure:"terminal_age_days"`
+			BatchSize       int  `mapstructure:"batch_size"`
 		} `mapstructure:"retention"`
 		RateLimit struct {
 			Default struct {
@@ -109,6 +109,24 @@ type Config struct {
 				Burst             int     `mapstructure:"burst"`
 			} `mapstructure:"destinations"`
 		} `mapstructure:"rate_limit"`
+		Workers struct {
+			HeartbeatSeconds int `mapstructure:"heartbeat_seconds"`
+			Send             struct {
+				IntervalSeconds int `mapstructure:"interval_seconds"`
+				BatchSize       int `mapstructure:"batch_size"`
+			} `mapstructure:"send"`
+			Retry struct {
+				IntervalSeconds int `mapstructure:"interval_seconds"`
+				BatchSize       int `mapstructure:"batch_size"`
+			} `mapstructure:"retry"`
+			Poll struct {
+				IntervalSeconds int `mapstructure:"interval_seconds"`
+				BatchSize       int `mapstructure:"batch_size"`
+			} `mapstructure:"poll"`
+			Retention struct {
+				IntervalSeconds int `mapstructure:"interval_seconds"`
+			} `mapstructure:"retention"`
+		} `mapstructure:"workers"`
 	} `mapstructure:"sukumad"`
 }
 
@@ -235,6 +253,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("sukumad.rate_limit.default.requests_per_second", 2.0)
 	v.SetDefault("sukumad.rate_limit.default.burst", 2)
 	v.SetDefault("sukumad.rate_limit.destinations", map[string]any{})
+	v.SetDefault("sukumad.workers.heartbeat_seconds", 10)
+	v.SetDefault("sukumad.workers.send.interval_seconds", 5)
+	v.SetDefault("sukumad.workers.send.batch_size", 10)
+	v.SetDefault("sukumad.workers.retry.interval_seconds", 5)
+	v.SetDefault("sukumad.workers.retry.batch_size", 10)
+	v.SetDefault("sukumad.workers.poll.interval_seconds", 5)
+	v.SetDefault("sukumad.workers.poll.batch_size", 10)
+	v.SetDefault("sukumad.workers.retention.interval_seconds", 300)
 }
 
 func defaultConfig() Config {
@@ -296,6 +322,14 @@ func defaultConfig() Config {
 		RequestsPerSecond float64 `mapstructure:"requests_per_second"`
 		Burst             int     `mapstructure:"burst"`
 	}{}
+	cfg.Sukumad.Workers.HeartbeatSeconds = 10
+	cfg.Sukumad.Workers.Send.IntervalSeconds = 5
+	cfg.Sukumad.Workers.Send.BatchSize = 10
+	cfg.Sukumad.Workers.Retry.IntervalSeconds = 5
+	cfg.Sukumad.Workers.Retry.BatchSize = 10
+	cfg.Sukumad.Workers.Poll.IntervalSeconds = 5
+	cfg.Sukumad.Workers.Poll.BatchSize = 10
+	cfg.Sukumad.Workers.Retention.IntervalSeconds = 300
 	return cfg
 }
 
@@ -417,6 +451,30 @@ func validate(cfg Config) error {
 	}
 	if cfg.Sukumad.Retention.BatchSize <= 0 {
 		return errors.New("sukumad.retention.batch_size must be > 0")
+	}
+	if cfg.Sukumad.Workers.HeartbeatSeconds <= 0 {
+		return errors.New("sukumad.workers.heartbeat_seconds must be > 0")
+	}
+	if cfg.Sukumad.Workers.Send.IntervalSeconds <= 0 {
+		return errors.New("sukumad.workers.send.interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Workers.Send.BatchSize <= 0 {
+		return errors.New("sukumad.workers.send.batch_size must be > 0")
+	}
+	if cfg.Sukumad.Workers.Retry.IntervalSeconds <= 0 {
+		return errors.New("sukumad.workers.retry.interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Workers.Retry.BatchSize <= 0 {
+		return errors.New("sukumad.workers.retry.batch_size must be > 0")
+	}
+	if cfg.Sukumad.Workers.Poll.IntervalSeconds <= 0 {
+		return errors.New("sukumad.workers.poll.interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Workers.Poll.BatchSize <= 0 {
+		return errors.New("sukumad.workers.poll.batch_size must be > 0")
+	}
+	if cfg.Sukumad.Workers.Retention.IntervalSeconds <= 0 {
+		return errors.New("sukumad.workers.retention.interval_seconds must be > 0")
 	}
 	for key, destination := range cfg.Sukumad.RateLimit.Destinations {
 		if strings.TrimSpace(key) == "" {

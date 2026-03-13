@@ -68,9 +68,16 @@ These endpoints are read-only for this milestone and require `observability.read
 
 ## Worker startup strategy
 
-The code includes a bootstrap seam for worker definitions and a generic manager, but automatic background startup is intentionally left as a safe hook rather than forced runtime wiring.
+Worker execution now starts from the dedicated `backend/cmd/worker` entrypoint.
 
-That keeps the milestone production-shaped while avoiding accidental runtime breakage in environments that have not yet enabled or scheduled real worker execution.
+The worker process is separate from the HTTP API process and starts:
+
+- send worker
+- retry worker
+- poll worker
+- retention worker
+
+The async polling path still uses the same `async.Service.PollDueTasks(...)` and remote poller abstraction, but it now runs under the real worker manager and `worker_runs` lifecycle tracking rather than an unused bootstrap seam.
 
 ## Client shape
 

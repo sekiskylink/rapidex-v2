@@ -158,22 +158,6 @@ func run() error {
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
-	_ = worker.NewBootstrap(
-		sukumadWorkerService,
-		worker.NewSendDefinition(nil),
-		worker.NewPollDefinition(sukumadAsyncService, sukumadDHIS2Service, 10),
-		worker.NewRetryDefinition(nil),
-		worker.NewRetentionDefinition(
-			sukumadRetentionService,
-			cfg.Sukumad.Retention.Enabled,
-			func() time.Time {
-				nextCfg := config.Get()
-				return time.Now().UTC().Add(-time.Duration(nextCfg.Sukumad.Retention.TerminalAgeDays) * 24 * time.Hour)
-			},
-			cfg.Sukumad.Retention.BatchSize,
-			cfg.Sukumad.Retention.DryRun,
-		),
-	)
 	bootstrapService := bootstrap.NewService(
 		bootstrap.AppInfo{
 			Version:   Version,

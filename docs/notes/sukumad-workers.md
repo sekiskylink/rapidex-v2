@@ -1,473 +1,246 @@
-# Sukumad Worker Architecture Recommendation
+# Sukumad Worker Execution Model
 
 ## Purpose
 
-This note documents:
+This note is the implementation contract for Sukumad background execution.
 
-- the current Sukumad request-processing model as it exists in the codebase today
-- the recommended production worker model for long-running outbound processing
-- a practical migration path from the current accept-and-persist API flow to fully worker-driven execution
+It now describes the real worker model in the codebase:
 
-The description below is based on the current code in:
+- the API process accepts and persists requests only
+- a separate worker process runs send, retry, poll, and retention loops
+- send and retry both reuse the same shared delivery submission path
+- delivery pickup is concurrency-safe through durable claim semantics
 
-- `backend/internal/sukumad/request`
-- `backend/internal/sukumad/delivery`
-- `backend/internal/sukumad/async`
-- `backend/internal/sukumad/dhis2`
-- `backend/internal/sukumad/worker`
+Relevant code:
+
 - `backend/cmd/api/main.go`
+- `backend/cmd/worker/main.go`
+- `backend/internal/sukumad/delivery`
+- `backend/internal/sukumad/request`
+- `backend/internal/sukumad/async`
+- `backend/internal/sukumad/worker`
 
-## 1. Current model
+## 1. Process split
 
-### Request creation via API
+### API process
 
-New requests are created through `POST /api/v1/requests`.
+`backend/cmd/api/main.go` starts the Gin HTTP server only.
 
-`request.Service.CreateRequest(...)` now performs accept-and-persist orchestration only:
+Its responsibilities remain:
 
-1. validates and normalizes payload, destination IDs, and dependency IDs
-2. persists the `exchange_requests` row with initial request status `pending`
-3. persists `request_targets` rows for the primary destination and any fan-out destinations
+- validation
+- authorization
+- persistence
+- request acceptance
+- API visibility for deliveries, jobs, observability, and related domain state
+
+The API process does not start send, retry, poll, or retention loops.
+
+### Worker process
+
+`backend/cmd/worker/main.go` is the operational worker entrypoint.
+
+It starts a dedicated worker manager with these loops:
+
+- send worker
+- retry worker
+- poll worker
+- retention worker
+
+This process uses `signal.NotifyContext`, the shared DB/config bootstrap, and the existing `worker_runs` lifecycle table for heartbeats and run visibility.
+
+## 2. Request intake model
+
+`request.Service.CreateRequest(...)` remains accept-and-persist only.
+
+The API path:
+
+1. validates request input
+2. persists `exchange_requests`
+3. persists `request_targets`
 4. persists dependency links
-5. evaluates dependency state
-6. creates one `delivery_attempts` row per target with `attempt_number = 1` and delivery status `pending`
-7. leaves each first attempt in durable `pending` for later worker pickup, or marks dependency-blocked targets and the request as `blocked`
+5. creates initial `delivery_attempts` with status `pending`
+6. returns the persisted request immediately
 
-This means request acceptance and first outbound submission are now decoupled in the API path.
+No outbound submission happens inline during API request creation.
 
-### Persistence of request records
+## 3. Shared submission path
 
-The persistence model is already durable-first:
+`delivery.Service.SubmitDHIS2Delivery(...)` remains the single outbound submission path for delivery execution.
 
-- `exchange_requests` is written before outbound submission
-- `request_targets` is written before outbound submission
-- `delivery_attempts` is written before outbound submission
-- `async_tasks` and `async_task_polls` are written durably once async work begins
+That shared path is used by:
 
-That part of the shape is already compatible with a worker model.
+- send worker first submissions
+- retry worker due retries
+- any future controlled replay or resubmit flow
 
-### Current outbound execution behavior
+The shared path continues to own:
 
-Outbound submission still lives in `delivery.Service.SubmitDHIS2Delivery(...)`, but request creation no longer calls it directly.
+- submission-window evaluation
+- transition to terminal success or failure
+- async task creation and handoff
+- request/target roll-up updates
+- destination-scoped rate limiting through the shared DHIS2 client
+- response content-type filtering
+- trace/audit event emission
 
-`delivery.Service.SubmitDHIS2Delivery(...)` currently:
+The submission path now accepts a delivery that was already claimed into `running` by a worker, so worker claim and outbound dispatch stay unified without duplicating delivery logic.
 
-1. evaluates the submission-window policy
-2. if the destination is closed, leaves the delivery in `pending`, stores `submission_hold_reason` and `next_eligible_at`, and blocks the target/request roll-up
-3. if allowed, marks the delivery `running`
-4. calls the shared dispatcher, currently the DHIS2 service
-5. finalizes the attempt as sync success, sync failure, or async waiting
+## 4. Send worker
 
-Important consequence: API latency no longer includes the first outbound dispatch attempt. Pending deliveries remain durable and eligible for later worker pickup.
+The send worker runs in the separate worker process and:
 
-### Delivery attempt creation
+1. claims one eligible `delivery_attempts` row in `pending`
+2. loads the persisted request and destination server context
+3. emits worker pickup/claim/submission events
+4. calls `SubmitDHIS2Delivery(...)`
+5. lets the shared delivery service finalize the result
 
-Every concrete submission attempt is represented by a `delivery_attempts` row.
+Eligible pending deliveries are:
 
-Current delivery statuses are:
+- `delivery_attempts.status = 'pending'`
+- linked target is `pending`
+- or linked target is `blocked` for `window_closed` and the delivery is now due by `next_eligible_at`
 
-- `pending`
-- `running`
+Dependency-blocked targets are not claimable by the send worker until the dependency release flow returns the target to `pending`.
+
+Possible send outcomes:
+
 - `succeeded`
 - `failed`
-- `retrying`
+- `running` with durable `async_tasks` for async downstream work
+- back to `pending` plus blocked request/target state when the submission window still prevents dispatch
 
-First attempts are created as `pending`. Retries create a new row rather than mutating history.
+## 5. Retry worker
 
-### Retry behavior
+The retry worker runs in the separate worker process and:
 
-Retry creation already exists, but retry execution is not worker-driven yet.
+1. claims one `delivery_attempts` row in `retrying`
+2. requires `retry_at <= now`
+3. loads the same persisted request and server context
+4. emits retry pickup/claim/executed events
+5. calls the exact same `SubmitDHIS2Delivery(...)` path used by the send worker
 
-`delivery.Service.RetryDelivery(...)` currently:
+Retry execution does not implement a separate outbound code path.
 
-- only accepts a failed delivery
-- enforces max retries
-- creates a new delivery row with status `retrying`
-- sets `retry_at` about 5 minutes in the future
+That preserves identical behavior for:
 
-What is missing today:
+- rate limiting
+- submission windows
+- response filtering
+- async creation
+- success/failure reconciliation
 
-- there is no active retry worker that scans due `retrying` deliveries and resubmits them
-- there is no delivery pickup repository path for due retries or pending deliveries
+## 6. Claim and pickup model
 
-So retries are durably represented, but automated retry execution is still incomplete.
+Claiming is durable and exclusive.
 
-### Async polling behavior
+The delivery repository now exposes:
 
-Async polling is the most worker-shaped flow already present.
+- `ClaimNextPendingDelivery(...)`
+- `ClaimNextRetryDelivery(...)`
 
-When a destination accepts async processing:
+### SQL claim behavior
 
-- the delivery remains `running`
-- an `async_tasks` row is created
-- the request roll-up becomes `processing`
-- the first `next_poll_at` is scheduled about 15 seconds later
+For PostgreSQL-backed execution, claims use an atomic SQL pattern:
 
-`async.Service.PollDueTasks(...)` then:
+- select one eligible candidate with `FOR UPDATE SKIP LOCKED`
+- update that row to `running` in the same statement
+- clear stale response/hold/retry fields
+- set `started_at`
+- return the claimed delivery row
 
-1. loads due tasks from `async.Repository.ListDueTasks(...)`
-2. polls the remote system through the shared DHIS2 poller
-3. persists poll history in `async_task_polls`
-4. updates async task state
-5. reconciles terminal success/failure back into delivery and request state
+This prevents two worker loops from submitting the same delivery attempt concurrently.
 
-This is durable and production-shaped, but it is not yet actually running as an independently started worker process.
+### Memory/test claim behavior
 
-### Partial or incomplete worker wiring
+The in-memory repository applies the same semantics under a mutex so service tests can assert the same concurrency assumptions.
 
-The worker module currently provides:
+### Current recovery note
 
-- worker run persistence in `worker_runs`
-- lifecycle tracking (`starting`, `running`, `stopped`, `failed`)
-- a generic manager loop
-- definitions for send, poll, retry, and retention workers
+The current durable claim model protects against duplicate live pickup. It does not yet add stale-running recovery after a crash between claim and completion. That remains a follow-up concern, but pending and retrying rows remain durable and resumable across worker restarts.
 
-Current bootstrap reality in `backend/cmd/api/main.go`:
+## 7. Observability
 
-- `worker.NewPollDefinition(...)` is constructed with a real `PollDueTasks(...)` path
-- `worker.NewSendDefinition(nil)` is wired with no execution logic
-- `worker.NewRetryDefinition(nil)` is wired with no execution logic
-- `worker.NewBootstrap(...)` is created, but `Manager.Start(...)` is not called
+Worker execution now emits worker-specific request events in addition to the existing delivery/request/async events, including:
 
-So today:
+- `delivery.worker.picked`
+- `delivery.worker.claimed`
+- `delivery.submission.started`
+- `delivery.submission.deferred`
+- `delivery.submission.completed`
+- `delivery.retry.executed`
+- `delivery.retry.deferred`
 
-- no send worker is running
-- no retry worker is running
-- no poll worker process is running automatically
-- request creation stops after durable persistence, so pending deliveries wait for worker/runtime execution wiring
+Existing worker lifecycle events remain in place:
 
-## 2. Recommended production model
+- `worker.started`
+- `worker.heartbeat`
+- `worker.stopped`
+- `worker.error`
 
-### Top-level split
+No secrets or tokens are written into event payloads.
 
-Recommended long-term responsibility split:
+## 8. Configuration and startup
 
-- API process handles validation, authorization, idempotency checks, persistence, and request acceptance
-- worker process handles outbound execution, retries, async polling, and state reconciliation
+Worker loop timing lives under `sukumad.workers` in backend config:
 
-The API should stop after accept-and-persist. Workers should own all outbound work after that point.
+```yaml
+sukumad:
+  workers:
+    heartbeat_seconds: 10
+    send:
+      interval_seconds: 5
+      batch_size: 10
+    retry:
+      interval_seconds: 5
+      batch_size: 10
+    poll:
+      interval_seconds: 5
+      batch_size: 10
+    retention:
+      interval_seconds: 300
+```
 
-### Separate worker process or binary
+Start the worker process separately from the API process, for example:
 
-Workers should run as a separate process or binary, not inside the main HTTP server loop.
+```bash
+cd backend
+go run ./cmd/worker -config ./config/config.yaml
+```
 
-Recommended deployment shape:
+Start the API separately:
 
-- `api` binary/process for Gin HTTP traffic
-- `worker` binary/process for background execution
+```bash
+cd backend
+go run ./cmd/api -config ./config/config.yaml
+```
 
-It is acceptable for one worker process to host multiple worker loops, but it should still be operationally separate from the HTTP server.
+## 9. Testing expectations
 
-### Send worker
+Backend coverage for this worker model must include:
 
-The send worker should:
+- pending delivery pickup by the send worker
+- due retry pickup by the retry worker
+- concurrency-safe claim behavior
+- reuse of the same submission path for send and retry
+- deferred window handling without corrupting delivery/request state
+- worker process bootstrap/build validity
 
-1. pick delivery attempts eligible for first submission
-2. claim them durably
-3. mark them `running`
-4. execute outbound submission through the same shared submission path used today
-5. finalize each attempt to:
-   - `succeeded`
-   - `failed`
-   - async waiting state (`delivery running` plus durable `async_tasks`)
-   - deferred `pending` if submission windows still block execution
+Current tests cover these areas in:
 
-Eligibility should include:
+- `backend/internal/sukumad/delivery/repository_claim_test.go`
+- `backend/internal/sukumad/delivery/service_test.go`
+- `backend/internal/sukumad/worker/executor_test.go`
 
-- delivery status `pending`
-- dependency gate satisfied
-- submission window eligible now, or reevaluated immediately before dispatch
-- no conflicting active claim by another worker
+## 10. Summary
 
-### Poll worker
-
-The poll worker should:
-
-1. pick due async tasks
-2. claim them safely
-3. poll downstream systems
-4. persist poll history
-5. update async task state
-6. reconcile terminal async outcome back into delivery and request state
-
-This should keep using the existing async service and remote poller abstraction. The poll path already matches the desired long-term ownership model; it mainly needs real worker deployment and safe pickup semantics.
-
-### Retry worker
-
-The retry worker should:
-
-1. pick deliveries in `retrying` state whose `retry_at` is due
-2. claim them safely
-3. resubmit them through the same shared submission path used by the send worker
-4. reuse the same rate limiting, submission-window, and response-handling logic as first sends
-
-Retry logic should not be a separate outbound implementation. It should reuse the exact same dispatch and reconciliation path as normal sends.
-
-## 3. Why this is preferred
-
-This model is preferred in production because it gives:
-
-- predictable API latency: request acceptance is no longer tied to downstream network calls
-- durable request creation: the request, targets, and deliveries exist before workers act
-- background processing independent of HTTP timeouts and reverse-proxy timeouts
-- independent scaling: worker capacity can scale separately from API capacity
-- safer restarts and deploys: API restarts do not interrupt in-flight orchestration design
-- clearer operations: sends, retries, and polls become explicit background responsibilities
-- cleaner retry and async semantics: durable state, pickup, and reconciliation all live in one operational model
-
-## 4. Status semantics
-
-### Recommended request semantics
-
-Recommended worker-driven request semantics:
-
-- `pending` = accepted and persisted, awaiting worker pickup
-- `processing` = at least one target is actively submitting or awaiting async completion
-- `completed` = all required targets reached terminal success
-- `failed` = terminal failure based on target roll-up
-
-The current codebase also uses `blocked`, and that should remain meaningful:
-
-- `blocked` = accepted and persisted, but currently ineligible to proceed because of dependency gating or a submission window
-
-In practice, `blocked` is useful and already encoded in the current roll-up logic, so the recommended production model should keep it even if the simplified lifecycle is described as pending/processing/completed/failed.
-
-When dependencies complete, blocked targets should return to `pending` so execution resumes through the worker path rather than an inline API shortcut.
-
-### Recommended delivery semantics
-
-Delivery-level expectations:
-
-- `pending` = durable attempt exists but no worker has started outbound execution yet
-- `running` = worker claimed the attempt and is actively submitting, or the attempt is awaiting async completion
-- `succeeded` = terminal success for that attempt
-- `failed` = terminal failure for that attempt
-- `retrying` = a follow-up attempt has been created and is scheduled for later worker pickup
-
-Additional expectations:
-
-- `submission_hold_reason` and `next_eligible_at` explain why a delivery is not yet executable
-- async work should continue to link back to the same delivery attempt rather than inventing a parallel state machine
-- request roll-up should continue deriving from target state, not from ad hoc worker memory
-
-## 5. Refactor path
-
-Recommended staged migration with minimal disruption:
-
-### Stage 1. Preserve the current persistence model
-
-Keep the existing durable-first shape:
-
-- request row first
-- target rows first
-- delivery attempt rows first
-- async task rows durable when needed
-
-This part is already in place and should not be redesigned.
-
-### Stage 2. Add durable worker pickup for pending deliveries
-
-Add repository support for worker pickup of eligible deliveries, for example:
-
-- pending first attempts ready to send
-- retrying attempts whose `retry_at` is due
-
-Pickup should be safe for concurrent workers and should use claim semantics rather than optimistic duplicate scanning.
-
-### Stage 3. Share one submission path
-
-Keep `delivery.Service.SubmitDHIS2Delivery(...)` as the shared submission path.
-
-Execution paths that do send work should all converge here:
-
-- future send worker path
-- future retry worker path
-- any controlled replay/resubmit path
-
-### Stage 4. Preserve accept-and-persist request intake
-
-This stage is now implemented:
-
-- `request.Service.CreateRequest(...)` no longer calls `SubmitDHIS2Delivery(...)` directly
-- dependency release no longer submits inline
-- released targets return to worker-eligible `pending` state
-
-### Stage 5. Make request creation purely accept-and-persist
-
-Final API behavior:
-
-1. validate
-2. authorize
-3. persist request, targets, dependencies, and initial deliveries
-4. return accepted response
-
-After this stage, all outbound execution belongs to workers only.
-
-## 6. Operational considerations
-
-### Worker deployment model
-
-Recommended default:
-
-- one dedicated worker process running send, poll, retry, and optionally retention loops
-
-Alternative later:
-
-- separate binaries or separately scaled deployments for send-heavy versus poll-heavy workloads
-
-The key requirement is process separation from the HTTP server.
-
-### One process vs separate binaries
-
-One worker process with multiple loops is simpler first.
-
-Separate binaries become attractive when:
-
-- send throughput and poll throughput need different scaling
-- retry traffic must be isolated
-- operators want fault isolation between worker roles
-
-The architecture should support both without changing persistence or service contracts.
-
-### Idempotency and safe pickup
-
-Workers must be safe under concurrency and restarts.
-
-Recommended expectations:
-
-- request idempotency remains enforced at API acceptance time
-- worker pickup claims should be durable and exclusive
-- delivery submission should tolerate duplicate worker wakeups without double-submitting the same attempt
-- claim records or atomic state transitions should prevent two workers from executing one delivery simultaneously
-
-### Crash recovery
-
-Crash recovery should be based on durable state, not in-memory queues.
-
-Recommended rules:
-
-- `pending` deliveries remain eligible for later pickup after worker restarts
-- `retrying` deliveries remain eligible once `retry_at` is due
-- async tasks remain pollable based on `next_poll_at`
-- stale `running` deliveries may need a recovery or reconciliation rule if a worker crashes after claim but before terminal update
-
-### Concurrency controls
-
-Concurrency should be explicit and configurable per worker role.
-
-Recommended controls:
-
-- max concurrent send submissions
-- max concurrent poll calls
-- batch size for pickup scans
-- per-destination fairness where practical
-
-### Interaction with rate limiting
-
-Workers must continue using the existing shared destination-scoped outbound limiter.
-
-That means:
-
-- send worker submissions pass through the same DHIS2 client limiter path
-- retry submissions pass through the same limiter path
-- poll traffic keeps using the same limiter path it already uses today
-
-Rate limiting should stay at the outbound client boundary, not be reimplemented separately inside worker loops.
-
-### Interaction with retries
-
-Retry creation and retry execution are separate concerns:
-
-- delivery service can continue creating retry attempts
-- retry worker should own execution of due retries
-
-Retry policy checks should remain shared so manual retry and worker retry do not drift.
-
-### Interaction with submission windows
-
-Submission windows should remain an execution-time gate.
-
-Recommended behavior:
-
-- a worker can pick a candidate delivery
-- eligibility is reevaluated immediately before dispatch
-- if still blocked, the delivery remains or returns to `pending` with `submission_hold_reason` and `next_eligible_at`
-- workers later re-check when the delivery becomes due again
-
-### Observability expectations
-
-Production worker operation should expose:
-
-- worker run lifecycle and heartbeats
-- counts of picked, started, deferred, succeeded, failed, and retried deliveries
-- async poll success/failure counts
-- queue depth indicators for pending deliveries, due retries, and due polls
-- correlation between request, delivery, async task, and worker run events
-
-Existing request, delivery, async, and worker event streams provide a useful base and should be extended rather than replaced.
-
-## 7. Testing expectations
-
-Worker-driven Sukumad architecture should be tested at several levels.
-
-### Backend service tests
-
-Test:
-
-- API request creation persists request, targets, dependencies, and deliveries without outbound submission
-- send worker picks eligible pending deliveries and calls the shared submission path
-- retry worker picks due retrying deliveries and reuses the same submission path
-- poll worker picks due async tasks and reconciles terminal outcomes correctly
-
-### Repository tests
-
-Test:
-
-- safe pickup queries for pending deliveries
-- safe pickup queries for due retries
-- due async polling selection
-- idempotent claim/update behavior under concurrent access assumptions
-
-### Handler and API tests
-
-Test:
-
-- request creation returns accepted persisted state
-- delivery and request status surfaces reflect worker-driven transitions
-- observability endpoints show worker runs and lifecycle data correctly
-
-### Failure and recovery tests
-
-Test:
-
-- worker restart with pending work still in the database
-- worker crash after claim but before completion
-- downstream timeout or transport failure
-- async poll failures that reschedule rather than terminate immediately
-- blocked-by-window and blocked-by-dependency transitions back to executable state
-
-### End-to-end expectations
-
-Test end-to-end flows for:
-
-- sync success
-- sync failure
-- async success
-- async failure
-- retry success after an initial failure
-- fan-out requests with mixed target outcomes
-- dependency-blocked requests released later by dependency completion
-
-## Recommended conclusion
-
-Sukumad already has the correct durable persistence shape for worker-driven processing, but it still executes the first send inline in the API path and does not start real send or retry workers.
-
-The recommended production model is:
+Sukumad now runs with the intended production split:
 
 - API accepts and persists
-- send worker executes first submissions
-- poll worker reconciles async work
-- retry worker executes due retries
-- workers run outside the HTTP server as a separate operational process
-
-That approach keeps the current data model, reuses the existing submission and polling services, and removes the main production weakness of the current inline-first design.
+- worker process executes background work
+- send worker performs first submissions
+- retry worker performs due retries
+- poll worker reconciles async tasks
+- send and retry share one delivery submission path
+- delivery claim/pickup is safe under concurrent workers

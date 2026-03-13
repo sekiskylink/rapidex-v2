@@ -2,7 +2,7 @@
 
 ## 1. Context
 
-Current Sukumad request processing is durable-first but not yet worker-executed end to end.
+Current Sukumad request processing is durable-first and worker-executed end to end through the separate worker process, while preserving one shared delivery submission path.
 
 Today the request path:
 
@@ -15,8 +15,8 @@ Today the request path:
 
 That matters for addon design because any new gate must work in two execution modes:
 
-- current mode: request intake is accept-and-persist, while execution still belongs to the shared delivery submission path
-- future mode: workers become the primary execution boundary for initial send, retry send, and deferred replay
+- request intake is accept-and-persist, while execution belongs to the shared delivery submission path
+- workers are the primary execution boundary for initial send, retry send, and deferred replay
 
 The design below keeps one rule for both modes: request and delivery state remain durable first, and eligibility to submit is evaluated immediately before outbound dispatch. Worker execution paths should call the same eligibility checks instead of implementing separate logic.
 

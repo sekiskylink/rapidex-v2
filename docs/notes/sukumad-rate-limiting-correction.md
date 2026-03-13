@@ -23,7 +23,7 @@ The limiter now applies to:
 - manual resubmissions that reuse the delivery submission service
 - async follow-up traffic to destination systems through the DHIS2 poller
 
-Current worker bootstrap definitions still control whether send/retry workers are active, but any path that reaches the shared DHIS2 outbound client is rate limited by the same registry.
+The dedicated worker process now owns send/retry/poll execution, and any path that reaches the shared DHIS2 outbound client is rate limited by the same registry.
 
 ### Configuration
 

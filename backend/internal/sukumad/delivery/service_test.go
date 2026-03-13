@@ -343,6 +343,49 @@ func TestServiceRetrySubmissionUsesSameRateLimitedDispatcher(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitDHIS2DeliveryAllowsWorkerClaimedRunningDelivery(t *testing.T) {
+	dispatcher := &fakeDispatcher{
+		result: DispatchResult{
+			HTTPStatus:   intPtr(200),
+			ResponseBody: `{"status":"OK"}`,
+			Terminal:     true,
+			Succeeded:    true,
+		},
+	}
+	service := NewService(NewRepository()).WithDispatcher(dispatcher)
+
+	created, err := service.CreatePendingDelivery(context.Background(), CreateInput{
+		RequestID: 44,
+		ServerID:  9,
+	})
+	if err != nil {
+		t.Fatalf("create delivery: %v", err)
+	}
+	claimed, err := service.repo.ClaimNextPendingDelivery(context.Background(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("claim delivery: %v", err)
+	}
+
+	record, err := service.SubmitDHIS2Delivery(context.Background(), DispatchInput{
+		DeliveryID:  claimed.ID,
+		RequestID:   created.RequestID,
+		RequestUID:  created.RequestUID,
+		PayloadBody: `{"trackedEntity":"123"}`,
+		Server: ServerSnapshot{
+			Code:       "dhis2-ug",
+			SystemType: "dhis2",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: "POST",
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit claimed delivery: %v", err)
+	}
+	if record.Status != StatusSucceeded {
+		t.Fatalf("expected succeeded worker-claimed delivery, got %+v", record)
+	}
+}
+
 func intPtr(value int) *int {
 	return &value
 }
