@@ -19,6 +19,8 @@ export interface RequestServerOption {
 
 export interface RequestFormState {
   destinationServerId: string
+  destinationServerIdsText: string
+  dependencyRequestIdsText: string
   sourceSystem: string
   correlationId: string
   batchId: string
@@ -84,6 +86,24 @@ export function RequestForm({
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              label="Additional Destination Server IDs"
+              value={form.destinationServerIdsText}
+              onChange={(event) => onChange({ destinationServerIdsText: event.target.value })}
+              error={Boolean(errors.destinationServerIdsText)}
+              helperText={errors.destinationServerIdsText || 'Optional comma-separated server IDs for fan-out.'}
+              fullWidth
+            />
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              label="Dependency Request IDs"
+              value={form.dependencyRequestIdsText}
+              onChange={(event) => onChange({ dependencyRequestIdsText: event.target.value })}
+              error={Boolean(errors.dependencyRequestIdsText)}
+              helperText={errors.dependencyRequestIdsText || 'Optional comma-separated request IDs that must complete first.'}
+              fullWidth
+            />
             <TextField
               label="Source System"
               value={form.sourceSystem}

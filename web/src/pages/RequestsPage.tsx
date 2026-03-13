@@ -17,6 +17,8 @@ interface RequestRow extends RequestDetailRecord {}
 
 const defaultForm: RequestFormState = {
   destinationServerId: '',
+  destinationServerIdsText: '',
+  dependencyRequestIdsText: '',
   sourceSystem: '',
   correlationId: '',
   batchId: '',
@@ -75,6 +77,8 @@ function mapValidationFieldErrors(details?: Record<string, string[]>): RequestFo
   const first = (key: string) => details?.[key]?.[0] ?? ''
   return {
     destinationServerId: first('destinationServerId'),
+    destinationServerIdsText: first('destinationServerIds'),
+    dependencyRequestIdsText: first('dependencyRequestIds'),
     sourceSystem: first('sourceSystem'),
     correlationId: first('correlationId'),
     batchId: first('batchId'),
@@ -85,10 +89,39 @@ function mapValidationFieldErrors(details?: Record<string, string[]>): RequestFo
   }
 }
 
+function parseIDList(value: string): { parsed?: number[]; error?: string } {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return { parsed: [] }
+  }
+  const items = trimmed
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const parsed: number[] = []
+  for (const item of items) {
+    const next = Number(item)
+    if (!Number.isInteger(next) || next <= 0) {
+      return { error: 'Values must be comma-separated positive integers.' }
+    }
+    parsed.push(next)
+  }
+  return { parsed }
+}
+
 function validateForm(form: RequestFormState): RequestFormErrors {
   const errors: RequestFormErrors = {}
   if (!form.destinationServerId.trim()) {
     errors.destinationServerId = 'Destination server is required.'
+  }
+  const destinationIDs = parseIDList(form.destinationServerIdsText)
+  if (destinationIDs.error) {
+    errors.destinationServerIdsText = destinationIDs.error
+  }
+  const dependencyIDs = parseIDList(form.dependencyRequestIdsText)
+  if (dependencyIDs.error) {
+    errors.dependencyRequestIdsText = dependencyIDs.error
   }
   const payload = parseJSONValue(form.payloadText)
   if (payload.error) {
@@ -104,6 +137,8 @@ function validateForm(form: RequestFormState): RequestFormErrors {
 function toRequestPayload(form: RequestFormState) {
   return {
     destinationServerId: Number(form.destinationServerId),
+    destinationServerIds: parseIDList(form.destinationServerIdsText).parsed ?? [],
+    dependencyRequestIds: parseIDList(form.dependencyRequestIdsText).parsed ?? [],
     sourceSystem: form.sourceSystem.trim(),
     correlationId: form.correlationId.trim(),
     batchId: form.batchId.trim(),

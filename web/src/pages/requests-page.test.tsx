@@ -174,6 +174,8 @@ describe('requests page', () => {
     expect(within(dialog).getByTestId('web-request-create-form-grid')).toBeInTheDocument()
     fireEvent.mouseDown(within(dialog).getByLabelText('Destination Server'))
     fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Uganda (dhis2-ug)' }))
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Additional Destination Server IDs' }), { target: { value: '9, 12' } })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Dependency Request IDs' }), { target: { value: '7, 8' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Source System' }), { target: { value: 'emr' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Correlation ID' }), { target: { value: 'corr-22' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Payload JSON' }), {
@@ -184,6 +186,8 @@ describe('requests page', () => {
     await waitFor(() => expect(createPayload).not.toBeNull())
     expect(createPayload).toMatchObject({
       destinationServerId: 4,
+      destinationServerIds: [9, 12],
+      dependencyRequestIds: [7, 8],
       sourceSystem: 'emr',
       correlationId: 'corr-22',
       payload: { trackedEntity: 'abc' },

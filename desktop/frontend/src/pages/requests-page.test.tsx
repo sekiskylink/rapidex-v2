@@ -193,6 +193,7 @@ describe('desktop requests page', () => {
       expiresAt: Date.now() + 60_000,
     })
 
+    let createPayload: Record<string, unknown> | null = null
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/api/v1/auth/me')) {
@@ -299,6 +300,7 @@ describe('desktop requests page', () => {
         )
       }
       if (url.endsWith('/api/v1/requests') && init?.method === 'POST') {
+        createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
         return new Response(JSON.stringify({ id: 9, uid: 'req-9' }), { status: 201, headers: { 'Content-Type': 'application/json' } })
       }
       if (url.includes('/api/v1/bootstrap')) {
@@ -315,17 +317,19 @@ describe('desktop requests page', () => {
     expect(within(dialog).getByTestId('desktop-request-create-form-grid')).toBeInTheDocument()
     fireEvent.mouseDown(within(dialog).getByLabelText('Destination Server'))
     fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Uganda (dhis2-ug)' }))
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Additional Destination Server IDs' }), { target: { value: '9, 12' } })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Dependency Request IDs' }), { target: { value: '7, 8' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Payload JSON' }), {
       target: { value: '{"trackedEntity":"xyz"}' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
 
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          (call) => String(call[0]).endsWith('/api/v1/requests') && (call[1] as RequestInit | undefined)?.method === 'POST',
-        ),
-      ).toBe(true)
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      destinationServerId: 3,
+      destinationServerIds: [9, 12],
+      dependencyRequestIds: [7, 8],
+      payload: { trackedEntity: 'xyz' },
     })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Actions for req-4' }))
