@@ -34,12 +34,13 @@ func (s *Service) Submit(ctx context.Context, input delivery.DispatchInput) (del
 		return delivery.DispatchResult{}, err
 	}
 
-	interpreted := interpretSubmission(response, body, input.Server.UseAsync)
+	interpreted := interpretSubmission(response, body, input.Server.UseAsync, input.Server.BaseURL)
 	policy := delivery.ResolveResponseFilter(input.Server.Code)
 	if !delivery.ShouldAllowContentType(policy, interpreted.ResponseContentType) {
 		interpreted.ResponseBodyFiltered = true
 		interpreted.ResponseSummary = summarizeBody(interpreted.ResponseContentType, body)
 		interpreted.ResponseBody = ""
+		interpreted.RemoteResponse = filteredRemoteResponse(interpreted.ResponseContentType, interpreted.HTTPStatus, interpreted.ResponseSummary)
 	}
 	return delivery.DispatchResult{
 		HTTPStatus:           interpreted.HTTPStatus,
@@ -70,17 +71,18 @@ func (s *Service) Poll(ctx context.Context, task asyncjobs.Record) (asyncjobs.Re
 		interpreted.ResponseBodyFiltered = true
 		interpreted.ResponseSummary = summarizeBody(interpreted.ResponseContentType, body)
 		interpreted.ResponseBody = ""
+		interpreted.RemoteResponse = filteredRemoteResponse(interpreted.ResponseContentType, interpreted.StatusCode, interpreted.ResponseSummary)
 	}
 	return asyncjobs.RemotePollResult{
-		StatusCode:          interpreted.StatusCode,
-		RemoteStatus:        interpreted.RemoteStatus,
-		TerminalState:       strings.TrimSpace(interpreted.TerminalState),
-		ResponseBody:        interpreted.ResponseBody,
-		ResponseContentType: delivery.NormalizeContentType(interpreted.ResponseContentType),
+		StatusCode:           interpreted.StatusCode,
+		RemoteStatus:         interpreted.RemoteStatus,
+		TerminalState:        strings.TrimSpace(interpreted.TerminalState),
+		ResponseBody:         interpreted.ResponseBody,
+		ResponseContentType:  delivery.NormalizeContentType(interpreted.ResponseContentType),
 		ResponseBodyFiltered: interpreted.ResponseBodyFiltered,
-		ErrorMessage:        interpreted.ErrorMessage,
-		NextPollAt:          interpreted.NextPollAt,
-		RemoteResponse:      interpreted.RemoteResponse,
+		ErrorMessage:         interpreted.ErrorMessage,
+		NextPollAt:           interpreted.NextPollAt,
+		RemoteResponse:       interpreted.RemoteResponse,
 	}, nil
 }
 
@@ -120,4 +122,18 @@ func destinationKeyFromTask(task asyncjobs.Record) string {
 		return strings.ToLower(code)
 	}
 	return destinationKeyFromPollURL(task.PollURL)
+}
+
+func filteredRemoteResponse(contentType string, statusCode *int, summary map[string]any) map[string]any {
+	safe := map[string]any{
+		"filtered": true,
+		"summary":  summary,
+	}
+	if normalized := delivery.NormalizeContentType(contentType); normalized != "" {
+		safe["contentType"] = normalized
+	}
+	if statusCode != nil {
+		safe["httpStatus"] = *statusCode
+	}
+	return safe
 }

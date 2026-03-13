@@ -91,6 +91,85 @@ func TestServiceSubmitAsyncResponse(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitAsyncResponseUsesBodyLocation(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{
+			"httpStatus":"OK",
+			"httpStatusCode":200,
+			"status":"OK",
+			"message":"Tracker job added",
+			"response":{
+				"id":"cHh2OCTJvRw",
+				"location":"https://play.im.dhis2.org/dev/api/tracker/jobs/cHh2OCTJvRw"
+			}
+		}`, nil), nil
+	}), nil)
+
+	result, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody: `{"trackedEntity":"123"}`,
+		URLSuffix:   "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: http.MethodPost,
+			UseAsync:   true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if !result.Async {
+		t.Fatalf("expected async result, got %+v", result)
+	}
+	if result.RemoteJobID != "cHh2OCTJvRw" {
+		t.Fatalf("expected remote job id from response body, got %+v", result)
+	}
+	if result.PollURL != "https://play.im.dhis2.org/dev/api/tracker/jobs/cHh2OCTJvRw" {
+		t.Fatalf("expected poll url from response.location, got %+v", result)
+	}
+}
+
+func TestServiceSubmitAsyncResponseUsesRelativeNotifierEndpoint(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{
+			"httpStatus":"OK",
+			"httpStatusCode":200,
+			"status":"OK",
+			"message":"Initiated dataValueImport",
+			"response":{
+				"name":"dataValueImport",
+				"id":"YR1UxOUXmzT",
+				"created":"2018-08-20T14:17:28.429",
+				"jobType":"DATAVALUE_IMPORT",
+				"relativeNotifierEndpoint":"/api/system/tasks/DATAVALUE_IMPORT/YR1UxOUXmzT"
+			}
+		}`, nil), nil
+	}), nil)
+
+	result, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody: `{"dataValues":[]}`,
+		URLSuffix:   "/dataValueSets",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://play.im.dhis2.org/dev",
+			HTTPMethod: http.MethodPost,
+			UseAsync:   true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if !result.Async {
+		t.Fatalf("expected async result, got %+v", result)
+	}
+	if result.RemoteJobID != "YR1UxOUXmzT" {
+		t.Fatalf("expected remote job id from response body, got %+v", result)
+	}
+	if result.PollURL != "https://play.im.dhis2.org/dev/api/system/tasks/DATAVALUE_IMPORT/YR1UxOUXmzT" {
+		t.Fatalf("expected resolved poll url from relative notifier endpoint, got %+v", result)
+	}
+}
+
 func TestServicePollTerminalFailure(t *testing.T) {
 	limiter := &spyLimiter{}
 	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
@@ -128,11 +207,111 @@ func TestServicePollMalformedBodyKeepsPolling(t *testing.T) {
 	}
 }
 
+func TestServicePollTaskCollectionCompletedSucceeds(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `[{
+			"uid":"hpiaeMy7wFX",
+			"level":"INFO",
+			"category":"DATAVALUE_IMPORT",
+			"time":"2015-09-02T07:43:14.595+0000",
+			"message":"Import done",
+			"completed":true
+		}]`, nil), nil
+	}), nil)
+
+	result, err := service.Poll(context.Background(), asyncjobs.Record{
+		PollURL:         "https://play.im.dhis2.org/api/system/tasks/DATAVALUE_IMPORT/YR1UxOUXmzT",
+		DestinationCode: "dhis2-ug",
+	})
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if result.TerminalState != asyncjobs.StateSucceeded {
+		t.Fatalf("expected completed task collection to succeed, got %+v", result)
+	}
+	if result.NextPollAt != nil {
+		t.Fatalf("expected no next poll for completed task collection, got %+v", result)
+	}
+}
+
+func TestServiceSubmitFilteredAsyncResponseSanitizesRemoteResponse(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		header := map[string]string{
+			"Content-Type": "text/html; charset=utf-8",
+			"Location":     "https://dhis.example.com/tracker/jobs/job-77",
+		}
+		return jsonResponseWithContentType(http.StatusAccepted, `<!doctype html><html><body>Proxy Error</body></html>`, header), nil
+	}), nil)
+
+	result, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody: `{"trackedEntity":"123"}`,
+		URLSuffix:   "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: http.MethodPost,
+			UseAsync:   true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if !result.ResponseBodyFiltered {
+		t.Fatalf("expected filtered response, got %+v", result)
+	}
+	if raw, ok := result.RemoteResponse["raw"]; ok {
+		t.Fatalf("expected sanitized remote response, found raw body %v", raw)
+	}
+	if filtered, ok := result.RemoteResponse["filtered"].(bool); !ok || !filtered {
+		t.Fatalf("expected filtered marker in remote response, got %+v", result.RemoteResponse)
+	}
+}
+
+func TestServicePollFilteredResponseSanitizesRemoteResponse(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponseWithContentType(http.StatusBadGateway, `<!doctype html><html><body>Bad Gateway</body></html>`, map[string]string{
+			"Content-Type": "text/html; charset=utf-8",
+		}), nil
+	}), nil)
+
+	result, err := service.Poll(context.Background(), asyncjobs.Record{
+		PollURL:         "https://dhis.example.com/tracker/jobs/job-9",
+		DestinationCode: "dhis2-ug",
+	})
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if !result.ResponseBodyFiltered {
+		t.Fatalf("expected filtered poll response, got %+v", result)
+	}
+	if raw, ok := result.RemoteResponse["raw"]; ok {
+		t.Fatalf("expected sanitized poll remote response, found raw body %v", raw)
+	}
+	if filtered, ok := result.RemoteResponse["filtered"].(bool); !ok || !filtered {
+		t.Fatalf("expected filtered marker in poll remote response, got %+v", result.RemoteResponse)
+	}
+}
+
 func jsonResponse(status int, body string, headers map[string]string) *http.Response {
 	header := make(http.Header)
 	header.Set("Content-Type", "application/json")
 	for key, value := range headers {
 		header.Set(key, value)
+	}
+	return &http.Response{
+		StatusCode: status,
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func jsonResponseWithContentType(status int, body string, headers map[string]string) *http.Response {
+	header := make(http.Header)
+	for key, value := range headers {
+		header.Set(key, value)
+	}
+	if header.Get("Content-Type") == "" {
+		header.Set("Content-Type", "application/json")
 	}
 	return &http.Response{
 		StatusCode: status,

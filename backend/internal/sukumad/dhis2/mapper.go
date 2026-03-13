@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func interpretSubmission(response *http.Response, body []byte, useAsync bool) SubmissionResult {
+func interpretSubmission(response *http.Response, body []byte, useAsync bool, baseURL string) SubmissionResult {
 	statusCode := response.StatusCode
 	contentType := response.Header.Get("Content-Type")
 	result := SubmissionResult{
@@ -22,7 +22,7 @@ func interpretSubmission(response *http.Response, body []byte, useAsync bool) Su
 	result.RemoteResponse = payload
 	result.RemoteStatus = detectRemoteStatus(payload)
 	result.RemoteJobID = detectRemoteJobID(payload)
-	result.PollURL = detectPollURL(response, payload)
+	result.PollURL = detectPollURL(response, payload, baseURL)
 
 	pending := isPendingState(result.RemoteStatus)
 	failed := isFailedState(result.RemoteStatus)
@@ -65,9 +65,6 @@ func interpretPollResponse(response *http.Response, body []byte) PollResult {
 	statusCode := response.StatusCode
 	payload := decodeBody(body)
 	remoteStatus := detectRemoteStatus(payload)
-	if remoteStatus == "" {
-		remoteStatus = "polling"
-	}
 
 	result := PollResult{
 		StatusCode:         intPtr(statusCode),
@@ -77,10 +74,20 @@ func interpretPollResponse(response *http.Response, body []byte) PollResult {
 		RemoteResponse:     payload,
 	}
 
+	if remoteStatus == "" {
+		remoteStatus = detectTaskCollectionStatus(payload)
+		result.RemoteStatus = remoteStatus
+	}
+	if remoteStatus == "" {
+		remoteStatus = "polling"
+		result.RemoteStatus = remoteStatus
+	}
+
 	switch {
 	case isFailedState(remoteStatus) || statusCode >= http.StatusBadRequest:
 		result.TerminalState = "failed"
 		result.ErrorMessage = firstText(
+			detectTaskCollectionError(payload),
 			stringValue(payload["message"]),
 			stringValue(payload["description"]),
 			stringValue(payload["error"]),
@@ -132,19 +139,33 @@ func looksLikeHTML(contentType string, body string) bool {
 }
 
 func decodeBody(body []byte) map[string]any {
-	if len(strings.TrimSpace(string(body))) == 0 {
+	trimmed := strings.TrimSpace(string(body))
+	if len(trimmed) == 0 {
 		return map[string]any{}
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
+
+	var generic any
+	if err := json.Unmarshal(body, &generic); err != nil {
 		return map[string]any{
 			"raw": string(body),
 		}
 	}
-	if payload == nil {
-		return map[string]any{}
+
+	switch typed := generic.(type) {
+	case map[string]any:
+		if typed == nil {
+			return map[string]any{}
+		}
+		return typed
+	case []any:
+		return map[string]any{
+			"items": typed,
+		}
+	default:
+		return map[string]any{
+			"value": typed,
+		}
 	}
-	return payload
 }
 
 func detectRemoteStatus(payload map[string]any) string {
@@ -181,27 +202,109 @@ func detectRemoteJobID(payload map[string]any) string {
 	return ""
 }
 
-func detectPollURL(response *http.Response, payload map[string]any) string {
+func detectPollURL(response *http.Response, payload map[string]any, baseURL string) string {
 	location := strings.TrimSpace(response.Header.Get("Location"))
 	if location != "" {
-		return location
+		return normalizePollURL(baseURL, location)
 	}
 	for _, candidate := range []string{
 		stringValue(payload["pollUrl"]),
 		stringValue(payload["href"]),
 		stringValue(payload["url"]),
+		stringValue(payload["location"]),
 		nestedString(payload, "response", "pollUrl"),
 		nestedString(payload, "response", "href"),
 		nestedString(payload, "response", "url"),
+		nestedString(payload, "response", "location"),
+		nestedString(payload, "response", "relativeNotifierEndpoint"),
 	} {
 		if candidate == "" {
 			continue
 		}
-		if _, err := url.Parse(candidate); err == nil {
-			return candidate
+		if normalized := normalizePollURL(baseURL, candidate); normalized != "" {
+			return normalized
 		}
 	}
 	return ""
+}
+
+func normalizePollURL(baseURL string, candidate string) string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return ""
+	}
+	parsedCandidate, err := url.Parse(candidate)
+	if err != nil {
+		return ""
+	}
+	if parsedCandidate.IsAbs() {
+		return parsedCandidate.String()
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		return ""
+	}
+	parsedBase, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return ""
+	}
+	if strings.HasPrefix(candidate, "/") {
+		basePath := strings.TrimRight(parsedBase.Path, "/")
+		parsedBase.Path = basePath + candidate
+		parsedBase.RawPath = ""
+		parsedBase.RawQuery = ""
+		parsedBase.Fragment = ""
+		return parsedBase.String()
+	}
+	return parsedBase.ResolveReference(parsedCandidate).String()
+}
+
+func detectTaskCollectionStatus(payload map[string]any) string {
+	items := taskCollectionItems(payload)
+	if len(items) == 0 {
+		return ""
+	}
+
+	allCompleted := true
+	for _, item := range items {
+		completed, hasCompleted := boolValue(item["completed"])
+		level := strings.ToUpper(stringValue(item["level"]))
+		if hasCompleted && !completed {
+			allCompleted = false
+		}
+		if completed && (level == "ERROR" || level == "FATAL") {
+			return "failed"
+		}
+	}
+	if allCompleted {
+		return "succeeded"
+	}
+	return "polling"
+}
+
+func detectTaskCollectionError(payload map[string]any) string {
+	for _, item := range taskCollectionItems(payload) {
+		level := strings.ToUpper(stringValue(item["level"]))
+		if level == "ERROR" || level == "FATAL" {
+			return stringValue(item["message"])
+		}
+	}
+	return ""
+}
+
+func taskCollectionItems(payload map[string]any) []map[string]any {
+	rawItems, ok := payload["items"].([]any)
+	if !ok {
+		return nil
+	}
+	items := make([]map[string]any, 0, len(rawItems))
+	for _, raw := range rawItems {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 func nestedString(value map[string]any, keys ...string) string {
@@ -222,6 +325,11 @@ func stringValue(value any) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+func boolValue(value any) (bool, bool) {
+	boolean, ok := value.(bool)
+	return boolean, ok
 }
 
 func normalizeStatus(value string) string {
