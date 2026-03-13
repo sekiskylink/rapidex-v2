@@ -1,5 +1,61 @@
 # Status
 
+## Milestone — Sukumad Rate-Limiting Correction (Complete)
+
+### What changed
+- Added a reusable destination-scoped outbound limiter in [backend/internal/ratelimit/ratelimit.go](/Users/sam/projects/go/sukumadpro/backend/internal/ratelimit/ratelimit.go):
+  - central registry backed by `golang.org/x/time/rate`
+  - thread-safe per-destination limiter lookup and replacement
+  - safe default policy when no destination override is configured
+- Extended backend runtime config in [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go) and [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml):
+  - `sukumad.rate_limit.default.requests_per_second`
+  - `sukumad.rate_limit.default.burst`
+  - `sukumad.rate_limit.destinations.<server_code>`
+- Updated API bootstrap wiring in [backend/cmd/api/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/main.go) so the shared DHIS2 dispatcher receives the top-level outbound limiter with config-driven destination policies.
+- Refactored the DHIS2 outbound client under:
+  - [backend/internal/sukumad/dhis2/client.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2/client.go)
+  - [backend/internal/sukumad/dhis2/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2/service.go)
+  - outbound `Submit` and async `Poll` requests now wait on the shared destination limiter immediately before `http.Client.Do(...)`
+  - destination keys prefer the persisted Sukumad server code and fall back to host only if no code is available
+- Threaded destination server codes through the delivery/request/async path in:
+  - [backend/internal/sukumad/delivery/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/types.go)
+  - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+  - [backend/internal/sukumad/async/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/types.go)
+  - [backend/internal/sukumad/async/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository.go)
+  - this keeps initial submissions and async follow-up traffic under the same destination-scoped limiter
+- No web or desktop code changes were required; existing request, delivery, retry, and observability pages continued to work against the unchanged API surface.
+- Updated the architecture note in [docs/notes/sukumad-rate-limiting-correction.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-rate-limiting-correction.md).
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-milestone-8-rate-limiting-correction.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/ratelimit/ratelimit_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/ratelimit/ratelimit_test.go)
+  - updated [backend/internal/config/config_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config_test.go) for Sukumad outbound rate-limit config validation
+  - updated [backend/internal/sukumad/dhis2/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2/service_test.go) for destination-key limiter coverage on submit and poll
+  - updated [backend/internal/sukumad/delivery/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service_test.go) for retry-path reuse of the same destination-scoped dispatcher path
+  - updated [backend/internal/sukumad/async/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository_test.go) for destination-code projections
+- Web:
+  - no code changes required; existing suites verified request status visibility, delivery visibility, and retry/detail flows still pass
+- Desktop:
+  - no code changes required; existing suites verified the matching visibility and retry/detail flows still pass
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go mod tidy` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Web and desktop needed no parity fixes for this correction.
+- Frontend test logs still include the existing non-blocking MUI jsdom `anchorEl` warnings and one existing MUI X `rowCount` warning in mocked route tests.
+- Frontend build logs still include existing third-party `'use client'` and chunk-size warnings.
+
 ## Milestone — Traceability, Event History, and Operational Observability (Complete)
 
 ### What changed

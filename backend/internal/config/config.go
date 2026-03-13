@@ -64,6 +64,18 @@ type Config struct {
 	Modules struct {
 		Flags map[string]bool `mapstructure:"flags"`
 	} `mapstructure:"modules"`
+	Sukumad struct {
+		RateLimit struct {
+			Default struct {
+				RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+				Burst             int     `mapstructure:"burst"`
+			} `mapstructure:"default"`
+			Destinations map[string]struct {
+				RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+				Burst             int     `mapstructure:"burst"`
+			} `mapstructure:"destinations"`
+		} `mapstructure:"rate_limit"`
+	} `mapstructure:"sukumad"`
 }
 
 type Options struct {
@@ -174,6 +186,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.cors.allow_credentials", false)
 	v.SetDefault("seed.enable_dev_bootstrap", false)
 	v.SetDefault("modules.flags", map[string]bool{})
+	v.SetDefault("sukumad.rate_limit.default.requests_per_second", 2.0)
+	v.SetDefault("sukumad.rate_limit.default.burst", 2)
+	v.SetDefault("sukumad.rate_limit.destinations", map[string]any{})
 }
 
 func defaultConfig() Config {
@@ -209,6 +224,12 @@ func defaultConfig() Config {
 	cfg.Security.CORS.AllowCredentials = false
 	cfg.Seed.EnableDevBootstrap = false
 	cfg.Modules.Flags = map[string]bool{}
+	cfg.Sukumad.RateLimit.Default.RequestsPerSecond = 2
+	cfg.Sukumad.RateLimit.Default.Burst = 2
+	cfg.Sukumad.RateLimit.Destinations = map[string]struct {
+		RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+		Burst             int     `mapstructure:"burst"`
+	}{}
 	return cfg
 }
 
@@ -301,6 +322,23 @@ func validate(cfg Config) error {
 			if cfg.Security.CORS.AllowCredentials && strings.Contains(trimmed, "*") {
 				return errors.New("security.cors.allowed_origins must not contain wildcards when allow_credentials is true")
 			}
+		}
+	}
+	if cfg.Sukumad.RateLimit.Default.RequestsPerSecond <= 0 {
+		return errors.New("sukumad.rate_limit.default.requests_per_second must be > 0")
+	}
+	if cfg.Sukumad.RateLimit.Default.Burst <= 0 {
+		return errors.New("sukumad.rate_limit.default.burst must be > 0")
+	}
+	for key, destination := range cfg.Sukumad.RateLimit.Destinations {
+		if strings.TrimSpace(key) == "" {
+			return errors.New("sukumad.rate_limit.destinations must not contain empty keys")
+		}
+		if destination.RequestsPerSecond <= 0 {
+			return fmt.Errorf("sukumad.rate_limit.destinations.%s.requests_per_second must be > 0", key)
+		}
+		if destination.Burst <= 0 {
+			return fmt.Errorf("sukumad.rate_limit.destinations.%s.burst must be > 0", key)
 		}
 	}
 	if err := moduleenablement.ValidateOverrides(cfg.Modules.Flags); err != nil {

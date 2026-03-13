@@ -171,6 +171,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 				URLSuffix:     created.URLSuffix,
 				Server: delivery.ServerSnapshot{
 					ID:           serverRecord.ID,
+					Code:         serverRecord.Code,
 					Name:         serverRecord.Name,
 					SystemType:   serverRecord.SystemType,
 					BaseURL:      serverRecord.BaseURL,

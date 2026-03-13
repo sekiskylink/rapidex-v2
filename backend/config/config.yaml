@@ -12,7 +12,7 @@ server:
     - "wails://wails.localhost:*"
 
 database:
-  dsn: "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+  dsn: "postgres://postgres:postgres@127.0.0.1:5432/sukumadpro?sslmode=disable"
   max_open_conns: 10
   max_idle_conns: 5
   auto_migrate: false
@@ -59,3 +59,10 @@ seed:
 
 modules:
   flags: {}
+
+sukumad:
+  rate_limit:
+    default:
+      requests_per_second: 2
+      burst: 2
+    destinations: {}

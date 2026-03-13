@@ -101,6 +101,7 @@ type CompletionInput struct {
 
 type ServerSnapshot struct {
 	ID           int64
+	Code         string
 	Name         string
 	SystemType   string
 	BaseURL      string

@@ -20,6 +20,7 @@ type Record struct {
 	RequestID         int64          `json:"requestId"`
 	RequestUID        string         `json:"requestUid"`
 	CorrelationID     string         `json:"correlationId"`
+	DestinationCode   string         `json:"destinationCode"`
 	RemoteJobID       string         `db:"remote_job_id" json:"remoteJobId"`
 	PollURL           string         `db:"poll_url" json:"pollUrl"`
 	RemoteStatus      string         `db:"remote_status" json:"remoteStatus"`

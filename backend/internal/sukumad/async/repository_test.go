@@ -22,10 +22,10 @@ func TestSQLRepositoryListTasks(t *testing.T) {
 	now := time.Now().UTC()
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
-		"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id",
+		"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id", "destination_code",
 		"remote_job_id", "poll_url", "remote_status", "terminal_state", "next_poll_at", "completed_at", "remote_response", "created_at", "updated_at",
 	}).AddRow(
-		7, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1",
+		7, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "dhis2-ug",
 		"remote-7", "https://remote/jobs/7", StatePolling, "", now, nil, []byte(`{"status":"processing"}`), now, now,
 	)
 
@@ -33,6 +33,7 @@ func TestSQLRepositoryListTasks(t *testing.T) {
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
 		 WHERE (
 			a.uid::text ILIKE $1 OR
 			COALESCE(d.uid::text, '') ILIKE $1 OR
@@ -46,6 +47,7 @@ func TestSQLRepositoryListTasks(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
+		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
@@ -53,6 +55,7 @@ func TestSQLRepositoryListTasks(t *testing.T) {
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
 		 WHERE (
 			a.uid::text ILIKE $1 OR
 			COALESCE(d.uid::text, '') ILIKE $1 OR
@@ -106,19 +109,21 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
+		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
 		WHERE a.id = $1
 	`)).
 		WithArgs(int64(9)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id",
+			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id", "destination_code",
 			"remote_job_id", "poll_url", "remote_status", "terminal_state", "next_poll_at", "completed_at", "remote_response", "created_at", "updated_at",
-		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "remote-3", "https://remote/jobs/3", StatePending, "", nil, nil, []byte(`{"state":"pending"}`), now, now))
+		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "dhis2-ug", "remote-3", "https://remote/jobs/3", StatePending, "", nil, nil, []byte(`{"state":"pending"}`), now, now))
 
 	record, err := repo.CreateTask(context.Background(), CreateParams{
 		UID:               "job-uid",
@@ -156,19 +161,21 @@ func TestSQLRepositoryCreateUpdateAndRecordPoll(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
+		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
 		WHERE a.id = $1
 	`)).
 		WithArgs(int64(9)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id",
+			"id", "uid", "delivery_attempt_id", "delivery_uid", "request_id", "request_uid", "correlation_id", "destination_code",
 			"remote_job_id", "poll_url", "remote_status", "terminal_state", "next_poll_at", "completed_at", "remote_response", "created_at", "updated_at",
-		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "remote-3", "https://remote/jobs/3", StateSucceeded, StateSucceeded, nil, now, []byte(`{"state":"done"}`), now, now))
+		}).AddRow(9, "job-uid", 3, "delivery-uid", 5, "request-uid", "corr-1", "dhis2-ug", "remote-3", "https://remote/jobs/3", StateSucceeded, StateSucceeded, nil, now, []byte(`{"state":"done"}`), now, now))
 
 	updated, err := repo.UpdateTask(context.Background(), UpdateParams{
 		ID:             9,
@@ -224,12 +231,14 @@ func TestSQLRepositoryGetTaskNotFound(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
+		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
 		WHERE a.id = $1
 	`)).
 		WithArgs(int64(99)).

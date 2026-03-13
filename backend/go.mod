@@ -12,6 +12,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.45.0
+	golang.org/x/time v0.14.0
 )
 
 require (

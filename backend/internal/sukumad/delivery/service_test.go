@@ -117,9 +117,11 @@ func TestServiceRetryRequiresFailedStatus(t *testing.T) {
 type fakeDispatcher struct {
 	result DispatchResult
 	err    error
+	keys   []string
 }
 
-func (f fakeDispatcher) Submit(context.Context, DispatchInput) (DispatchResult, error) {
+func (f *fakeDispatcher) Submit(_ context.Context, input DispatchInput) (DispatchResult, error) {
+	f.keys = append(f.keys, input.Server.Code)
 	return f.result, f.err
 }
 
@@ -164,18 +166,19 @@ func (f *fakeRequestStatusUpdater) SetFailed(_ context.Context, requestID int64)
 func TestServiceSubmitDHIS2DeliveryCreatesAsyncTask(t *testing.T) {
 	asyncService := &fakeAsyncService{}
 	requestUpdater := &fakeRequestStatusUpdater{}
+	dispatcher := &fakeDispatcher{
+		result: DispatchResult{
+			HTTPStatus:     intPtr(202),
+			ResponseBody:   `{"status":"PENDING"}`,
+			RemoteJobID:    "remote-22",
+			PollURL:        "https://dhis.example.com/jobs/22",
+			RemoteStatus:   asyncjobs.StatePending,
+			RemoteResponse: map[string]any{"status": "PENDING"},
+			Async:          true,
+		},
+	}
 	service := NewService(NewRepository()).
-		WithDispatcher(fakeDispatcher{
-			result: DispatchResult{
-				HTTPStatus:     intPtr(202),
-				ResponseBody:   `{"status":"PENDING"}`,
-				RemoteJobID:    "remote-22",
-				PollURL:        "https://dhis.example.com/jobs/22",
-				RemoteStatus:   asyncjobs.StatePending,
-				RemoteResponse: map[string]any{"status": "PENDING"},
-				Async:          true,
-			},
-		}).
+		WithDispatcher(dispatcher).
 		WithAsyncService(asyncService).
 		WithRequestStatusUpdater(requestUpdater)
 
@@ -195,6 +198,7 @@ func TestServiceSubmitDHIS2DeliveryCreatesAsyncTask(t *testing.T) {
 		URLSuffix:   "/tracker",
 		Server: ServerSnapshot{
 			ID:         created.ServerID,
+			Code:       "dhis2-ug",
 			Name:       created.ServerName,
 			SystemType: "dhis2",
 			BaseURL:    "https://dhis.example.com",
@@ -211,6 +215,9 @@ func TestServiceSubmitDHIS2DeliveryCreatesAsyncTask(t *testing.T) {
 	if len(asyncService.created) != 1 || asyncService.created[0].RemoteJobID != "remote-22" {
 		t.Fatalf("unexpected async task creation: %+v", asyncService.created)
 	}
+	if len(dispatcher.keys) != 1 || dispatcher.keys[0] != "dhis2-ug" {
+		t.Fatalf("expected dispatch call to capture destination key, got %+v", dispatcher.keys)
+	}
 	if len(requestUpdater.processing) != 1 || requestUpdater.processing[0] != created.RequestID {
 		t.Fatalf("expected request processing update, got %+v", requestUpdater)
 	}
@@ -218,15 +225,16 @@ func TestServiceSubmitDHIS2DeliveryCreatesAsyncTask(t *testing.T) {
 
 func TestServiceSubmitDHIS2DeliveryMarksSyncFailure(t *testing.T) {
 	requestUpdater := &fakeRequestStatusUpdater{}
+	dispatcher := &fakeDispatcher{
+		result: DispatchResult{
+			HTTPStatus:   intPtr(400),
+			ResponseBody: `{"status":"ERROR"}`,
+			ErrorMessage: "validation failed",
+			Terminal:     true,
+		},
+	}
 	service := NewService(NewRepository()).
-		WithDispatcher(fakeDispatcher{
-			result: DispatchResult{
-				HTTPStatus:   intPtr(400),
-				ResponseBody: `{"status":"ERROR"}`,
-				ErrorMessage: "validation failed",
-				Terminal:     true,
-			},
-		}).
+		WithDispatcher(dispatcher).
 		WithRequestStatusUpdater(requestUpdater)
 
 	created, err := service.CreatePendingDelivery(context.Background(), CreateInput{
@@ -243,6 +251,7 @@ func TestServiceSubmitDHIS2DeliveryMarksSyncFailure(t *testing.T) {
 		RequestUID:  created.RequestUID,
 		PayloadBody: `{"trackedEntity":"123"}`,
 		Server: ServerSnapshot{
+			Code:       "dhis2-ug",
 			SystemType: "dhis2",
 			BaseURL:    "https://dhis.example.com",
 			HTTPMethod: "POST",
@@ -256,6 +265,75 @@ func TestServiceSubmitDHIS2DeliveryMarksSyncFailure(t *testing.T) {
 	}
 	if len(requestUpdater.failed) != 1 || requestUpdater.failed[0] != created.RequestID {
 		t.Fatalf("expected request failure update, got %+v", requestUpdater)
+	}
+}
+
+func TestServiceRetrySubmissionUsesSameRateLimitedDispatcher(t *testing.T) {
+	dispatcher := &fakeDispatcher{
+		result: DispatchResult{
+			HTTPStatus:   intPtr(200),
+			ResponseBody: `{"status":"OK","response":{"status":"SUCCESS"}}`,
+			Terminal:     true,
+			Succeeded:    true,
+		},
+	}
+	service := NewService(NewRepository()).WithDispatcher(dispatcher)
+
+	created, err := service.CreatePendingDelivery(context.Background(), CreateInput{
+		RequestID: 30,
+		ServerID:  8,
+	})
+	if err != nil {
+		t.Fatalf("create delivery: %v", err)
+	}
+
+	input := DispatchInput{
+		RequestID:   created.RequestID,
+		RequestUID:  created.RequestUID,
+		PayloadBody: `{"trackedEntity":"123"}`,
+		Server: ServerSnapshot{
+			ID:         created.ServerID,
+			Code:       "dhis2-ug",
+			Name:       created.ServerName,
+			SystemType: "dhis2",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: "POST",
+		},
+	}
+
+	input.DeliveryID = created.ID
+	if _, err := service.SubmitDHIS2Delivery(context.Background(), input); err != nil {
+		t.Fatalf("submit original delivery: %v", err)
+	}
+
+	failed, err := service.CreatePendingDelivery(context.Background(), CreateInput{
+		RequestID: created.RequestID,
+		ServerID:  created.ServerID,
+	})
+	if err != nil {
+		t.Fatalf("create second delivery: %v", err)
+	}
+	if _, err := service.MarkRunning(context.Background(), failed.ID); err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	if _, err := service.MarkFailed(context.Background(), CompletionInput{
+		ID:           failed.ID,
+		ErrorMessage: "timeout",
+	}); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+	retried, err := service.RetryDelivery(context.Background(), nil, failed.ID)
+	if err != nil {
+		t.Fatalf("retry delivery: %v", err)
+	}
+
+	input.DeliveryID = retried.ID
+	if _, err := service.SubmitDHIS2Delivery(context.Background(), input); err != nil {
+		t.Fatalf("submit retried delivery: %v", err)
+	}
+
+	if got := dispatcher.keys; len(got) != 2 || got[0] != "dhis2-ug" || got[1] != "dhis2-ug" {
+		t.Fatalf("expected original and retry submissions to use the same destination-scoped dispatcher path, got %+v", got)
 	}
 }
 

@@ -165,6 +165,30 @@ func TestValidateSecurityConfig(t *testing.T) {
 	if err := validate(cfg); err == nil {
 		t.Fatal("expected invalid rate limit config to fail validation")
 	}
+
+	cfg = defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Sukumad.RateLimit.Default.RequestsPerSecond = 0
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid sukumad default rate limit config to fail validation")
+	}
+
+	cfg = defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Sukumad.RateLimit.Destinations = map[string]struct {
+		RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+		Burst             int     `mapstructure:"burst"`
+	}{
+		"dhis2-ug": {
+			RequestsPerSecond: 0,
+			Burst:             1,
+		},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid sukumad destination rate limit config to fail validation")
+	}
 }
 
 func TestLoadInvalidConfigFails(t *testing.T) {

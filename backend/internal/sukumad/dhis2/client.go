@@ -11,17 +11,37 @@ import (
 )
 
 type Client struct {
-	httpClient *http.Client
+	executor RequestExecutor
 }
 
-func NewClient(httpClient *http.Client) *Client {
+type RequestExecutor interface {
+	Do(context.Context, string, *http.Request) (*http.Response, error)
+}
+
+type outboundExecutor struct {
+	httpClient interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	limiter interface {
+		Wait(context.Context, string) error
+	}
+}
+
+func NewClient(httpClient *http.Client, limiter interface {
+	Wait(context.Context, string) error
+}) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &Client{httpClient: httpClient}
+	return &Client{
+		executor: outboundExecutor{
+			httpClient: httpClient,
+			limiter:    limiter,
+		},
+	}
 }
 
-func (c *Client) Submit(ctx context.Context, input SubmissionInput) (*http.Response, []byte, error) {
+func (c *Client) Submit(ctx context.Context, destinationKey string, input SubmissionInput) (*http.Response, []byte, error) {
 	requestURL, err := resolveURL(input.BaseURL, input.URLSuffix, input.URLParams)
 	if err != nil {
 		return nil, nil, err
@@ -42,7 +62,7 @@ func (c *Client) Submit(ctx context.Context, input SubmissionInput) (*http.Respo
 		req.Header.Set(key, value)
 	}
 
-	response, err := c.httpClient.Do(req)
+	response, err := c.executor.Do(ctx, destinationKey, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("submit to dhis2: %w", err)
 	}
@@ -55,7 +75,7 @@ func (c *Client) Submit(ctx context.Context, input SubmissionInput) (*http.Respo
 	return response, bytes, nil
 }
 
-func (c *Client) Poll(ctx context.Context, pollURL string, headers map[string]string) (*http.Response, []byte, error) {
+func (c *Client) Poll(ctx context.Context, destinationKey string, pollURL string, headers map[string]string) (*http.Response, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(pollURL), nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build dhis2 poll request: %w", err)
@@ -64,7 +84,7 @@ func (c *Client) Poll(ctx context.Context, pollURL string, headers map[string]st
 		req.Header.Set(key, value)
 	}
 
-	response, err := c.httpClient.Do(req)
+	response, err := c.executor.Do(ctx, destinationKey, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("poll dhis2 async task: %w", err)
 	}
@@ -75,6 +95,15 @@ func (c *Client) Poll(ctx context.Context, pollURL string, headers map[string]st
 		return nil, nil, fmt.Errorf("read dhis2 poll response: %w", err)
 	}
 	return response, bytes, nil
+}
+
+func (e outboundExecutor) Do(ctx context.Context, destinationKey string, req *http.Request) (*http.Response, error) {
+	if e.limiter != nil {
+		if err := e.limiter.Wait(ctx, destinationKey); err != nil {
+			return nil, fmt.Errorf("wait for destination rate limit %q: %w", destinationKey, err)
+		}
+	}
+	return e.httpClient.Do(req)
 }
 
 func resolveURL(baseURL string, suffix string, params map[string]string) (string, error) {

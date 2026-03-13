@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,13 +21,14 @@ import (
 	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/migrate"
 	"basepro/backend/internal/moduleenablement"
+	outboundratelimit "basepro/backend/internal/ratelimit"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/observability"
-	"basepro/backend/internal/sukumad/ratelimit"
+	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
@@ -127,14 +129,27 @@ func run() error {
 	)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
-	sukumadDHIS2Service := dhis2.NewService(nil)
+	outboundLimiter := outboundratelimit.NewRegistry(func(destinationKey string) outboundratelimit.Policy {
+		cfg := config.Get()
+		lookupKey := strings.ToLower(strings.TrimSpace(destinationKey))
+		policy := outboundratelimit.Policy{
+			RequestsPerSecond: cfg.Sukumad.RateLimit.Default.RequestsPerSecond,
+			Burst:             cfg.Sukumad.RateLimit.Default.Burst,
+		}
+		if destination, ok := cfg.Sukumad.RateLimit.Destinations[lookupKey]; ok {
+			policy.RequestsPerSecond = destination.RequestsPerSecond
+			policy.Burst = destination.Burst
+		}
+		return policy
+	})
+	sukumadDHIS2Service := dhis2.NewService(nil, outboundLimiter)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService).WithServerService(sukumadServerService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
 		WithRequestStatusUpdater(sukumadRequestService)
 	sukumadAsyncService := asyncjobs.NewService(asyncjobs.NewRepository(database), auditService)
 	sukumadWorkerService := worker.NewService(worker.NewRepository(database), auditService)
-	sukumadRateLimitService := ratelimit.NewService(ratelimit.NewRepository(database))
+	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithEventWriter(sukumadObservabilityService)
