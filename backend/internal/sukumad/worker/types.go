@@ -72,7 +72,21 @@ type Repository interface {
 }
 
 type Execution struct {
-	RunID int64
+	RunID    int64
+	AddCount func(string, int)
+	SetMeta  func(string, any)
+}
+
+func (e Execution) Increment(name string) {
+	if e.AddCount != nil && name != "" {
+		e.AddCount(name, 1)
+	}
+}
+
+func (e Execution) PutMeta(key string, value any) {
+	if e.SetMeta != nil && key != "" {
+		e.SetMeta(key, value)
+	}
 }
 
 type Definition struct {

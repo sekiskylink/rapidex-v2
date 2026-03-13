@@ -91,6 +91,8 @@ sukumad:
     destinations: {}
   workers:
     heartbeat_seconds: 10
+    recovery:
+      stale_delivery_after_seconds: 300
     send:
       interval_seconds: 5
       batch_size: 10
@@ -100,5 +102,6 @@ sukumad:
     poll:
       interval_seconds: 5
       batch_size: 10
+      claim_timeout_seconds: 60
     retention:
       interval_seconds: 300

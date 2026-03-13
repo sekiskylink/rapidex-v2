@@ -1,5 +1,86 @@
 # Status
 
+## Milestone — Sukumad Durable Poll Worker And Recovery Model (Complete)
+
+### What changed
+- Hardened the separate worker process in [backend/cmd/worker/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/worker/main.go):
+  - worker startup now performs two durable recovery passes before normal looping:
+    - reconcile terminal async tasks that were persisted but not fully rolled up
+    - requeue stale `running` deliveries that have no async task
+  - poll worker startup now passes a configured async-claim timeout into the real poll loop
+- Extended worker configuration in:
+  - [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go)
+  - [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml)
+  - new settings:
+    - `sukumad.workers.recovery.stale_delivery_after_seconds`
+    - `sukumad.workers.poll.claim_timeout_seconds`
+- Added durable async poll claim persistence through:
+  - [backend/migrations/000019_add_async_poll_claims.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000019_add_async_poll_claims.up.sql)
+  - [backend/migrations/000019_add_async_poll_claims.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000019_add_async_poll_claims.down.sql)
+  - [backend/internal/sukumad/async/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository.go)
+  - async tasks now claim via `poll_claimed_at` and `poll_claimed_by_worker_run_id`
+  - stale async claims are recoverable after the configured timeout
+- Reworked async polling in:
+  - [backend/internal/sukumad/async/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/service.go)
+  - [backend/internal/sukumad/async/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/types.go)
+  - poll execution is worker-run aware
+  - poll events now carry `worker_run_id`
+  - poll history still persists in `async_task_polls`
+  - terminal async reconciliation can be replayed during recovery
+- Added stale-running delivery recovery in:
+  - [backend/internal/sukumad/delivery/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/repository.go)
+  - [backend/internal/sukumad/delivery/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service.go)
+  - initial `running` deliveries recover back to `pending`
+  - retry-attempt `running` deliveries recover back to `retrying` with a due `retry_at`
+  - recovered deliveries re-drive request/target roll-up through the existing target updater
+- Improved worker observability in:
+  - [backend/internal/sukumad/worker/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/service.go)
+  - [backend/internal/sukumad/worker/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/types.go)
+  - [backend/internal/sukumad/worker/executor.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/executor.go)
+  - [backend/internal/sukumad/worker/poll.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/poll.go)
+  - worker runs now persist activity counts in `worker_runs.meta.counts`
+  - send/retry/poll execution increments per-run counters and keeps request/delivery/async correlation on worker-generated events
+- No web or desktop code changes were required; existing pages already read the durable request/delivery/job state correctly once the backend transitions were fixed.
+- Updated worker documentation:
+  - [docs/notes/sukumad-workers.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers.md)
+  - [docs/notes/sukumad-workers-async.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers-async.md)
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-sukumad-worker-recovery-and-poll-wiring.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - updated [backend/internal/sukumad/async/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/service_test.go) for:
+    - poll claim/clear behavior
+    - poll counter observation
+    - terminal async recovery reconciliation
+  - updated [backend/internal/sukumad/delivery/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/delivery/service_test.go) for stale-running delivery recovery
+  - updated [backend/internal/sukumad/worker/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/service_test.go) for persisted worker-run counts
+  - added [backend/internal/sukumad/worker/lifecycle_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/lifecycle_test.go) for:
+    - durable pending work surviving worker restart
+    - async accepted then later success through the poll worker path
+    - failed first submission then successful retry-worker completion
+  - updated [backend/internal/sukumad/async/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/repository_test.go) for the new async claim columns
+  - updated [backend/internal/sukumad/worker/executor_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/executor_test.go) for the expanded delivery executor contract
+- Web:
+  - no code changes required; full existing test/build verification rerun
+- Desktop:
+  - no code changes required; full existing test/build verification rerun
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/async ./internal/sukumad/delivery ./internal/sukumad/worker ./internal/config ./cmd/worker` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Worker recovery currently requeues stale `running` deliveries without an async task and replays terminal async reconciliation; if later workflows introduce more mid-flight delivery sub-states, recovery rules should be extended explicitly rather than inferred from attempt number.
+- Web and desktop verification still emit the existing non-blocking MUI `anchorEl`, desktop `useRouter`, third-party `'use client'`, and chunk-size warnings.
+
 ## Milestone — Sukumad Real Worker Execution Model (Complete)
 
 ### What changed

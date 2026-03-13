@@ -149,6 +149,13 @@ type fakeRequestStatusUpdater struct {
 	blocked    []int64
 }
 
+type fakeTargetUpdater struct {
+	pending []struct {
+		requestID int64
+		serverID  int64
+	}
+}
+
 func (f *fakeRequestStatusUpdater) SetProcessing(_ context.Context, requestID int64) error {
 	f.processing = append(f.processing, requestID)
 	return nil
@@ -166,6 +173,30 @@ func (f *fakeRequestStatusUpdater) SetFailed(_ context.Context, requestID int64)
 
 func (f *fakeRequestStatusUpdater) SetBlocked(_ context.Context, requestID int64, _ string, _ *time.Time) error {
 	f.blocked = append(f.blocked, requestID)
+	return nil
+}
+
+func (f *fakeTargetUpdater) SetTargetPending(_ context.Context, requestID int64, serverID int64) error {
+	f.pending = append(f.pending, struct {
+		requestID int64
+		serverID  int64
+	}{requestID: requestID, serverID: serverID})
+	return nil
+}
+
+func (f *fakeTargetUpdater) SetTargetBlocked(context.Context, int64, int64, string, *time.Time) error {
+	return nil
+}
+
+func (f *fakeTargetUpdater) SetTargetProcessing(context.Context, int64, int64) error {
+	return nil
+}
+
+func (f *fakeTargetUpdater) SetTargetSucceeded(context.Context, int64, int64) error {
+	return nil
+}
+
+func (f *fakeTargetUpdater) SetTargetFailed(context.Context, int64, int64, string) error {
 	return nil
 }
 
@@ -383,6 +414,118 @@ func TestServiceSubmitDHIS2DeliveryAllowsWorkerClaimedRunningDelivery(t *testing
 	}
 	if record.Status != StatusSucceeded {
 		t.Fatalf("expected succeeded worker-claimed delivery, got %+v", record)
+	}
+}
+
+func TestServiceRecoverStaleRunningDeliveriesRequeuesInitialAndRetryAttempts(t *testing.T) {
+	targetUpdater := &fakeTargetUpdater{}
+	service := NewService(NewRepository()).WithTargetUpdater(targetUpdater)
+
+	initial, err := service.CreatePendingDelivery(context.Background(), CreateInput{
+		RequestID: 70,
+		ServerID:  8,
+	})
+	if err != nil {
+		t.Fatalf("create initial delivery: %v", err)
+	}
+	runningInitial, err := service.MarkRunning(context.Background(), initial.ID)
+	if err != nil {
+		t.Fatalf("mark initial running: %v", err)
+	}
+	staleStart := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := service.repo.UpdateDelivery(context.Background(), UpdateParams{
+		ID:                   runningInitial.ID,
+		Status:               StatusRunning,
+		HTTPStatus:           nil,
+		ResponseBody:         "",
+		ResponseContentType:  "",
+		ResponseBodyFiltered: false,
+		ResponseSummary:      map[string]any{},
+		ErrorMessage:         "",
+		SubmissionHoldReason: "",
+		NextEligibleAt:       nil,
+		HoldPolicySource:     "",
+		TerminalReason:       "",
+		StartedAt:            &staleStart,
+		FinishedAt:           nil,
+		RetryAt:              nil,
+	}); err != nil {
+		t.Fatalf("seed stale initial delivery: %v", err)
+	}
+
+	retryBase, err := service.CreatePendingDelivery(context.Background(), CreateInput{
+		RequestID: 71,
+		ServerID:  9,
+	})
+	if err != nil {
+		t.Fatalf("create retry base delivery: %v", err)
+	}
+	if _, err := service.MarkRunning(context.Background(), retryBase.ID); err != nil {
+		t.Fatalf("mark retry base running: %v", err)
+	}
+	failed, err := service.MarkFailed(context.Background(), CompletionInput{
+		ID:           retryBase.ID,
+		ErrorMessage: "timeout",
+	})
+	if err != nil {
+		t.Fatalf("mark retry base failed: %v", err)
+	}
+	retried, err := service.RetryDelivery(context.Background(), nil, failed.ID)
+	if err != nil {
+		t.Fatalf("create retry attempt: %v", err)
+	}
+	runningRetry, err := service.repo.ClaimNextRetryDelivery(context.Background(), time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("claim retry delivery: %v", err)
+	}
+	if runningRetry.ID != retried.ID {
+		t.Fatalf("expected retry claim to pick retry attempt, got %+v", runningRetry)
+	}
+	if _, err := service.repo.UpdateDelivery(context.Background(), UpdateParams{
+		ID:                   runningRetry.ID,
+		Status:               StatusRunning,
+		HTTPStatus:           nil,
+		ResponseBody:         "",
+		ResponseContentType:  "",
+		ResponseBodyFiltered: false,
+		ResponseSummary:      map[string]any{},
+		ErrorMessage:         "",
+		SubmissionHoldReason: "",
+		NextEligibleAt:       nil,
+		HoldPolicySource:     "",
+		TerminalReason:       "",
+		StartedAt:            &staleStart,
+		FinishedAt:           nil,
+		RetryAt:              nil,
+	}); err != nil {
+		t.Fatalf("seed stale retry delivery: %v", err)
+	}
+
+	recovered, err := service.RecoverStaleRunningDeliveries(context.Background(), time.Now().UTC().Add(-5*time.Minute))
+	if err != nil {
+		t.Fatalf("recover stale running deliveries: %v", err)
+	}
+	if len(recovered) != 2 {
+		t.Fatalf("expected two recovered deliveries, got %+v", recovered)
+	}
+
+	initialReloaded, err := service.GetDelivery(context.Background(), runningInitial.ID)
+	if err != nil {
+		t.Fatalf("reload initial delivery: %v", err)
+	}
+	if initialReloaded.Status != StatusPending || initialReloaded.StartedAt != nil {
+		t.Fatalf("expected initial delivery to return to pending, got %+v", initialReloaded)
+	}
+
+	retryReloaded, err := service.GetDelivery(context.Background(), runningRetry.ID)
+	if err != nil {
+		t.Fatalf("reload retry delivery: %v", err)
+	}
+	if retryReloaded.Status != StatusRetrying || retryReloaded.RetryAt == nil {
+		t.Fatalf("expected retry delivery to return to retrying, got %+v", retryReloaded)
+	}
+	if len(targetUpdater.pending) < 2 {
+		t.Fatalf("expected target pending resets for recovered deliveries, got %+v", targetUpdater.pending)
 	}
 }
 

@@ -25,6 +25,7 @@ type DeliveryExecutor struct {
 	}
 	deliveryService interface {
 		SubmitDHIS2Delivery(context.Context, delivery.DispatchInput) (delivery.Record, error)
+		RecoverStaleRunningDeliveries(context.Context, time.Time) ([]delivery.Record, error)
 	}
 	eventWriter traceevent.Writer
 	now         func() time.Time
@@ -43,6 +44,7 @@ func NewDeliveryExecutor(
 	},
 	deliveryService interface {
 		SubmitDHIS2Delivery(context.Context, delivery.DispatchInput) (delivery.Record, error)
+		RecoverStaleRunningDeliveries(context.Context, time.Time) ([]delivery.Record, error)
 	},
 ) *DeliveryExecutor {
 	return &DeliveryExecutor{
@@ -100,6 +102,7 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 			"requestUid":  requestRecord.UID,
 			"workerType":  workerType(retry),
 		})
+		exec.Increment("deliveries_picked")
 		e.appendWorkerEvent(ctx, exec.RunID, record, retry, "delivery.worker.claimed", "info", "Worker claimed delivery", map[string]any{
 			"deliveryUid": record.UID,
 			"requestUid":  requestRecord.UID,
@@ -160,8 +163,36 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 		}
 		if submitted.Status == delivery.StatusFailed {
 			eventLevel = "warning"
+			exec.Increment("deliveries_failed")
+		} else if submitted.Status == delivery.StatusPending && submitted.SubmissionHoldReason != "" {
+			exec.Increment("deliveries_deferred")
+		} else {
+			exec.Increment("deliveries_completed")
+		}
+		if retry {
+			exec.Increment("retries_executed")
 		}
 		e.appendWorkerEvent(ctx, exec.RunID, submitted, retry, eventType, eventLevel, message, data)
+	}
+	return nil
+}
+
+func (e *DeliveryExecutor) RecoverStaleRunning(ctx context.Context, exec Execution, staleAfter time.Duration) error {
+	if e == nil || e.deliveryService == nil || staleAfter <= 0 {
+		return nil
+	}
+	cutoff := e.now().Add(-staleAfter)
+	recovered, err := e.deliveryService.RecoverStaleRunningDeliveries(ctx, cutoff)
+	if err != nil {
+		return err
+	}
+	for _, record := range recovered {
+		exec.Increment("stale_running_recovered")
+		e.appendWorkerEvent(ctx, exec.RunID, record, record.AttemptNumber > 1, "delivery.recovered.stale_running", "warning", "Recovered stale running delivery", map[string]any{
+			"deliveryUid": record.UID,
+			"requestUid":  record.RequestUID,
+			"recoverTo":   record.Status,
+		})
 	}
 	return nil
 }

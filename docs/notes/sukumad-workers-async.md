@@ -23,15 +23,18 @@ Rate-limit policies are modeled separately so workers can resolve policy state w
 
 - owns async task list/detail/query operations
 - creates async tasks linked to delivery attempts
+- durably claims due async tasks for poll workers
 - records poll history
 - updates remote state, terminal state, next poll, completion, and response snapshots
 - exposes a generic `PollDueTasks` workflow through a `RemotePoller` abstraction
+- exposes recovery reconciliation for terminal async tasks that need delivery/request roll-up replay
 
 ### `backend/internal/sukumad/worker`
 
 - owns worker run persistence and lifecycle transitions
 - starts worker runs in `starting` then `running`
 - writes periodic heartbeats to `worker_runs`
+- persists per-run activity counts in `worker_runs.meta`
 - stops workers cleanly on context cancellation
 - provides production-shaped definitions for send, poll, and retry workers
 - exposes a bootstrap seam without forcing startup auto-execution
@@ -78,6 +81,17 @@ The worker process is separate from the HTTP API process and starts:
 - retention worker
 
 The async polling path still uses the same `async.Service.PollDueTasks(...)` and remote poller abstraction, but it now runs under the real worker manager and `worker_runs` lifecycle tracking rather than an unused bootstrap seam.
+
+Poll pickup is now durable:
+
+- due tasks are claimed through `async_tasks.poll_claimed_at` and `poll_claimed_by_worker_run_id`
+- stale claims are recoverable after the configured claim timeout
+- each poll still writes `async_task_polls` history and then clears the claim as part of the async-task status update
+
+Worker startup also performs recovery work before the normal loops:
+
+- terminal async tasks still attached to `running` deliveries are reconciled
+- stale `running` deliveries with no async task are requeued for send/retry pickup
 
 ## Client shape
 

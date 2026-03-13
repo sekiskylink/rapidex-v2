@@ -120,6 +120,18 @@ func run() error {
 	).WithEventWriter(sukumadObservabilityService)
 
 	workerCfg := config.Get().Sukumad.Workers
+	recoveryExec := worker.Execution{
+		RunID:    0,
+		AddCount: func(string, int) {},
+		SetMeta:  func(string, any) {},
+	}
+	if err := executor.RecoverStaleRunning(ctx, recoveryExec, time.Duration(workerCfg.Recovery.StaleDeliveryAfterSeconds)*time.Second); err != nil {
+		return fmt.Errorf("recover stale running deliveries: %w", err)
+	}
+	if err := sukumadAsyncService.ReconcileTerminalTasks(ctx, workerCfg.Poll.BatchSize); err != nil {
+		return fmt.Errorf("reconcile terminal async tasks: %w", err)
+	}
+
 	sendDef := worker.NewSendDefinition(executor, workerCfg.Send.BatchSize)
 	sendDef.Interval = time.Duration(workerCfg.Send.IntervalSeconds) * time.Second
 	sendDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
@@ -128,7 +140,12 @@ func run() error {
 	retryDef.Interval = time.Duration(workerCfg.Retry.IntervalSeconds) * time.Second
 	retryDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 
-	pollDef := worker.NewPollDefinition(sukumadAsyncService, sukumadDHIS2Service, workerCfg.Poll.BatchSize)
+	pollDef := worker.NewPollDefinition(
+		sukumadAsyncService,
+		sukumadDHIS2Service,
+		workerCfg.Poll.BatchSize,
+		time.Duration(workerCfg.Poll.ClaimTimeoutSeconds)*time.Second,
+	)
 	pollDef.Interval = time.Duration(workerCfg.Poll.IntervalSeconds) * time.Second
 	pollDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 

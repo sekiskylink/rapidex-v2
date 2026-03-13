@@ -77,3 +77,43 @@ func TestManagerHandlesContextCancellationAndFailures(t *testing.T) {
 		t.Fatalf("unexpected worker list after shutdown: %+v", list)
 	}
 }
+
+func TestManagerPersistsExecutionCountsInWorkerMeta(t *testing.T) {
+	service := NewService(NewRepository())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	manager := NewManager(service, Definition{
+		Type:              TypePoll,
+		Name:              "poll-worker",
+		Interval:          10 * time.Millisecond,
+		HeartbeatInterval: 5 * time.Millisecond,
+		Run: func(_ context.Context, exec Execution) error {
+			exec.Increment("polls_picked")
+			exec.Increment("polls_completed")
+			exec.PutMeta("last_task_uid", "job-17")
+			cancel()
+			return nil
+		},
+	})
+
+	for range manager.Start(ctx) {
+	}
+
+	list, err := service.ListRuns(context.Background(), ListQuery{Page: 1, PageSize: 25})
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if list.Total != 1 {
+		t.Fatalf("expected one worker run, got %+v", list)
+	}
+	counts, ok := list.Items[0].Meta["counts"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected counts in worker meta, got %+v", list.Items[0].Meta)
+	}
+	if counts["polls_picked"] != 1 || counts["polls_completed"] != 1 {
+		t.Fatalf("expected poll counts in worker meta, got %+v", counts)
+	}
+	if list.Items[0].Meta["last_task_uid"] != "job-17" {
+		t.Fatalf("expected custom worker meta, got %+v", list.Items[0].Meta)
+	}
+}

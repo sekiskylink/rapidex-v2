@@ -32,23 +32,25 @@ func NewRepository(db ...*sqlx.DB) Repository {
 }
 
 type recordRow struct {
-	ID                int64           `db:"id"`
-	UID               string          `db:"uid"`
-	DeliveryAttemptID int64           `db:"delivery_attempt_id"`
-	DeliveryUID       string          `db:"delivery_uid"`
-	RequestID         int64           `db:"request_id"`
-	RequestUID        string          `db:"request_uid"`
-	CorrelationID     string          `db:"correlation_id"`
-	DestinationCode   string          `db:"destination_code"`
-	RemoteJobID       string          `db:"remote_job_id"`
-	PollURL           string          `db:"poll_url"`
-	RemoteStatus      string          `db:"remote_status"`
-	TerminalState     string          `db:"terminal_state"`
-	NextPollAt        *time.Time      `db:"next_poll_at"`
-	CompletedAt       *time.Time      `db:"completed_at"`
-	RemoteResponse    json.RawMessage `db:"remote_response"`
-	CreatedAt         time.Time       `db:"created_at"`
-	UpdatedAt         time.Time       `db:"updated_at"`
+	ID                 int64           `db:"id"`
+	UID                string          `db:"uid"`
+	DeliveryAttemptID  int64           `db:"delivery_attempt_id"`
+	DeliveryUID        string          `db:"delivery_uid"`
+	RequestID          int64           `db:"request_id"`
+	RequestUID         string          `db:"request_uid"`
+	CorrelationID      string          `db:"correlation_id"`
+	DestinationCode    string          `db:"destination_code"`
+	RemoteJobID        string          `db:"remote_job_id"`
+	PollURL            string          `db:"poll_url"`
+	RemoteStatus       string          `db:"remote_status"`
+	TerminalState      string          `db:"terminal_state"`
+	NextPollAt         *time.Time      `db:"next_poll_at"`
+	CompletedAt        *time.Time      `db:"completed_at"`
+	PollClaimedAt      *time.Time      `db:"poll_claimed_at"`
+	PollClaimedByRunID *int64          `db:"poll_claimed_by_worker_run_id"`
+	RemoteResponse     json.RawMessage `db:"remote_response"`
+	CreatedAt          time.Time       `db:"created_at"`
+	UpdatedAt          time.Time       `db:"updated_at"`
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
@@ -132,7 +134,7 @@ func (r *SQLRepository) ListTasks(ctx context.Context, query ListQuery) (ListRes
 		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
-		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
+		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
 	` + baseFrom + whereClause + fmt.Sprintf(
 		" ORDER BY %s %s LIMIT $%d OFFSET $%d",
 		resolveSortColumn(q.SortField),
@@ -167,7 +169,7 @@ func (r *SQLRepository) GetTaskByID(ctx context.Context, id int64) (Record, erro
 		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
-		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
+		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
@@ -192,9 +194,9 @@ func (r *SQLRepository) CreateTask(ctx context.Context, params CreateParams) (Re
 	if err := r.db.GetContext(ctx, &id, `
 		INSERT INTO async_tasks (
 			uid, delivery_attempt_id, remote_job_id, poll_url, remote_status, terminal_state,
-			next_poll_at, completed_at, remote_response, created_at, updated_at
+			next_poll_at, completed_at, poll_claimed_at, poll_claimed_by_worker_run_id, remote_response, created_at, updated_at
 		)
-		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), $7, $8, $9::jsonb, NOW(), NOW())
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), $7, $8, NULL, NULL, $9::jsonb, NOW(), NOW())
 		RETURNING id
 	`,
 		params.UID,
@@ -228,6 +230,8 @@ func (r *SQLRepository) UpdateTask(ctx context.Context, params UpdateParams) (Re
 		    terminal_state = NULLIF($5, ''),
 		    next_poll_at = $6,
 		    completed_at = $7,
+		    poll_claimed_at = NULL,
+		    poll_claimed_by_worker_run_id = NULL,
 		    remote_response = $8::jsonb,
 		    updated_at = NOW()
 		WHERE id = $1
@@ -308,7 +312,7 @@ func (r *SQLRepository) ListDueTasks(ctx context.Context, now time.Time, limit i
 		       COALESCE(s.code, '') AS destination_code,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
-		       a.next_poll_at, a.completed_at, a.remote_response, a.created_at, a.updated_at
+		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
 		FROM async_tasks a
 		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
 		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
@@ -319,6 +323,79 @@ func (r *SQLRepository) ListDueTasks(ctx context.Context, now time.Time, limit i
 		LIMIT $2
 	`, now, limit); err != nil {
 		return nil, fmt.Errorf("list due async tasks: %w", err)
+	}
+	return decodeRows(rows)
+}
+
+func (r *SQLRepository) ClaimNextDueTask(ctx context.Context, now time.Time, claimTimeout time.Duration, workerRunID int64) (Record, error) {
+	staleBefore := now.UTC().Add(-claimTimeout)
+	var row recordRow
+	if err := r.db.GetContext(ctx, &row, `
+		WITH candidate AS (
+			SELECT a.id
+			FROM async_tasks a
+			WHERE a.terminal_state IS NULL
+			  AND (a.next_poll_at IS NULL OR a.next_poll_at <= $1)
+			  AND (a.poll_claimed_at IS NULL OR a.poll_claimed_at <= $2)
+			ORDER BY a.next_poll_at ASC NULLS FIRST, a.created_at ASC, a.id ASC
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		), claimed AS (
+			UPDATE async_tasks a
+			SET remote_status = CASE
+					WHEN COALESCE(a.terminal_state, '') <> '' THEN a.remote_status
+					WHEN COALESCE(NULLIF(a.remote_status, ''), '') = '' THEN 'polling'
+					ELSE a.remote_status
+				END,
+			    poll_claimed_at = $1,
+			    poll_claimed_by_worker_run_id = NULLIF($3, 0),
+			    updated_at = NOW()
+			FROM candidate
+			WHERE a.id = candidate.id
+			RETURNING a.id
+		)
+		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
+		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
+		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
+		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
+		FROM async_tasks a
+		LEFT JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
+		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
+		JOIN claimed ON claimed.id = a.id
+	`, now.UTC(), staleBefore, workerRunID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, ErrNoEligibleTask
+		}
+		return Record{}, fmt.Errorf("claim async task: %w", err)
+	}
+	return decodeRow(row)
+}
+
+func (r *SQLRepository) ListTerminalTasksForRecovery(ctx context.Context, limit int) ([]Record, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	rows := []recordRow{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
+		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
+		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
+		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
+		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
+		FROM async_tasks a
+		JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
+		LEFT JOIN exchange_requests rq ON rq.id = d.request_id
+		LEFT JOIN integration_servers s ON s.id = d.server_id
+		WHERE COALESCE(a.terminal_state, '') <> ''
+		  AND d.status = 'running'
+		ORDER BY a.completed_at ASC NULLS FIRST, a.updated_at ASC, a.id ASC
+		LIMIT $1
+	`, limit); err != nil {
+		return nil, fmt.Errorf("list terminal async tasks for recovery: %w", err)
 	}
 	return decodeRows(rows)
 }
@@ -366,24 +443,26 @@ func decodeRow(row recordRow) (Record, error) {
 		return Record{}, fmt.Errorf("decode async remote response: %w", err)
 	}
 	return Record{
-		ID:                row.ID,
-		UID:               row.UID,
-		DeliveryAttemptID: row.DeliveryAttemptID,
-		DeliveryUID:       row.DeliveryUID,
-		RequestID:         row.RequestID,
-		RequestUID:        row.RequestUID,
-		CorrelationID:     row.CorrelationID,
-		DestinationCode:   row.DestinationCode,
-		RemoteJobID:       row.RemoteJobID,
-		PollURL:           row.PollURL,
-		RemoteStatus:      row.RemoteStatus,
-		TerminalState:     row.TerminalState,
-		CurrentState:      deriveCurrentState(row.RemoteStatus, row.TerminalState),
-		NextPollAt:        cloneTimePtr(row.NextPollAt),
-		CompletedAt:       cloneTimePtr(row.CompletedAt),
-		RemoteResponse:    response,
-		CreatedAt:         row.CreatedAt,
-		UpdatedAt:         row.UpdatedAt,
+		ID:                 row.ID,
+		UID:                row.UID,
+		DeliveryAttemptID:  row.DeliveryAttemptID,
+		DeliveryUID:        row.DeliveryUID,
+		RequestID:          row.RequestID,
+		RequestUID:         row.RequestUID,
+		CorrelationID:      row.CorrelationID,
+		DestinationCode:    row.DestinationCode,
+		RemoteJobID:        row.RemoteJobID,
+		PollURL:            row.PollURL,
+		RemoteStatus:       row.RemoteStatus,
+		TerminalState:      row.TerminalState,
+		CurrentState:       deriveCurrentState(row.RemoteStatus, row.TerminalState),
+		NextPollAt:         cloneTimePtr(row.NextPollAt),
+		CompletedAt:        cloneTimePtr(row.CompletedAt),
+		PollClaimedAt:      cloneTimePtr(row.PollClaimedAt),
+		PollClaimedByRunID: cloneInt64Ptr(row.PollClaimedByRunID),
+		RemoteResponse:     response,
+		CreatedAt:          row.CreatedAt,
+		UpdatedAt:          row.UpdatedAt,
 	}, nil
 }
 
@@ -475,22 +554,24 @@ func (r *memoryRepository) CreateTask(_ context.Context, params CreateParams) (R
 	id := r.nextID
 	r.nextID++
 	record := Record{
-		ID:                id,
-		UID:               params.UID,
-		DeliveryAttemptID: params.DeliveryAttemptID,
-		DeliveryUID:       fmt.Sprintf("delivery-%d", params.DeliveryAttemptID),
-		RequestID:         params.DeliveryAttemptID,
-		RequestUID:        fmt.Sprintf("request-%d", params.DeliveryAttemptID),
-		RemoteJobID:       params.RemoteJobID,
-		PollURL:           params.PollURL,
-		RemoteStatus:      params.RemoteStatus,
-		TerminalState:     params.TerminalState,
-		CurrentState:      deriveCurrentState(params.RemoteStatus, params.TerminalState),
-		NextPollAt:        cloneTimePtr(params.NextPollAt),
-		CompletedAt:       cloneTimePtr(params.CompletedAt),
-		RemoteResponse:    cloneJSONMap(params.RemoteResponse),
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ID:                 id,
+		UID:                params.UID,
+		DeliveryAttemptID:  params.DeliveryAttemptID,
+		DeliveryUID:        fmt.Sprintf("delivery-%d", params.DeliveryAttemptID),
+		RequestID:          params.DeliveryAttemptID,
+		RequestUID:         fmt.Sprintf("request-%d", params.DeliveryAttemptID),
+		RemoteJobID:        params.RemoteJobID,
+		PollURL:            params.PollURL,
+		RemoteStatus:       params.RemoteStatus,
+		TerminalState:      params.TerminalState,
+		CurrentState:       deriveCurrentState(params.RemoteStatus, params.TerminalState),
+		NextPollAt:         cloneTimePtr(params.NextPollAt),
+		CompletedAt:        cloneTimePtr(params.CompletedAt),
+		PollClaimedAt:      nil,
+		PollClaimedByRunID: nil,
+		RemoteResponse:     cloneJSONMap(params.RemoteResponse),
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil
@@ -511,6 +592,8 @@ func (r *memoryRepository) UpdateTask(_ context.Context, params UpdateParams) (R
 	record.CurrentState = deriveCurrentState(params.RemoteStatus, params.TerminalState)
 	record.NextPollAt = cloneTimePtr(params.NextPollAt)
 	record.CompletedAt = cloneTimePtr(params.CompletedAt)
+	record.PollClaimedAt = nil
+	record.PollClaimedByRunID = nil
 	record.RemoteResponse = cloneJSONMap(params.RemoteResponse)
 	record.UpdatedAt = time.Now().UTC()
 	r.items[params.ID] = record
@@ -582,6 +665,9 @@ func (r *memoryRepository) ListDueTasks(_ context.Context, now time.Time, limit 
 		if item.NextPollAt != nil && item.NextPollAt.After(now) {
 			continue
 		}
+		if item.PollClaimedAt != nil {
+			continue
+		}
 		items = append(items, cloneRecord(item))
 	}
 	slices.SortFunc(items, func(a, b Record) int {
@@ -601,6 +687,81 @@ func (r *memoryRepository) ListDueTasks(_ context.Context, now time.Time, limit 
 			return -1
 		}
 		return 1
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
+func (r *memoryRepository) ClaimNextDueTask(_ context.Context, now time.Time, claimTimeout time.Duration, workerRunID int64) (Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	staleBefore := now.UTC().Add(-claimTimeout)
+	var (
+		selected Record
+		found    bool
+	)
+	for _, item := range r.items {
+		if item.TerminalState != "" {
+			continue
+		}
+		if item.NextPollAt != nil && item.NextPollAt.After(now) {
+			continue
+		}
+		if item.PollClaimedAt != nil && item.PollClaimedAt.After(staleBefore) {
+			continue
+		}
+		if !found || compareTimePtr(item.NextPollAt, selected.NextPollAt) || (sameTimePtr(item.NextPollAt, selected.NextPollAt) && item.CreatedAt.Before(selected.CreatedAt)) {
+			selected = item
+			found = true
+		}
+	}
+	if !found {
+		return Record{}, ErrNoEligibleTask
+	}
+	claimedAt := now.UTC()
+	selected.PollClaimedAt = &claimedAt
+	if workerRunID > 0 {
+		selected.PollClaimedByRunID = &workerRunID
+	} else {
+		selected.PollClaimedByRunID = nil
+	}
+	if selected.RemoteStatus == "" {
+		selected.RemoteStatus = StatePolling
+		selected.CurrentState = StatePolling
+	}
+	selected.UpdatedAt = claimedAt
+	r.items[selected.ID] = selected
+	return cloneRecord(selected), nil
+}
+
+func (r *memoryRepository) ListTerminalTasksForRecovery(_ context.Context, limit int) ([]Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 25
+	}
+	items := make([]Record, 0, len(r.items))
+	for _, item := range r.items {
+		if item.TerminalState == "" || item.DeliveryAttemptID <= 0 {
+			continue
+		}
+		items = append(items, cloneRecord(item))
+	}
+	slices.SortFunc(items, func(a, b Record) int {
+		if a.CompletedAt == nil && b.CompletedAt == nil {
+			return compareTimes(a.UpdatedAt, b.UpdatedAt)
+		}
+		if compareTimePtr(a.CompletedAt, b.CompletedAt) {
+			return -1
+		}
+		if compareTimePtr(b.CompletedAt, a.CompletedAt) {
+			return 1
+		}
+		return compareTimes(a.UpdatedAt, b.UpdatedAt)
 	})
 	if len(items) > limit {
 		items = items[:limit]
@@ -661,6 +822,23 @@ func compareTimePtr(a *time.Time, b *time.Time) bool {
 	return a.Before(*b)
 }
 
+func sameTimePtr(a *time.Time, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
+}
+
+func compareTimes(a time.Time, b time.Time) int {
+	if a.Before(b) {
+		return -1
+	}
+	if a.After(b) {
+		return 1
+	}
+	return 0
+}
+
 func paginate(total int, page int, pageSize int) (int, int) {
 	start := (page - 1) * pageSize
 	if start > total {
@@ -676,6 +854,8 @@ func paginate(total int, page int, pageSize int) (int, int) {
 func cloneRecord(item Record) Record {
 	item.NextPollAt = cloneTimePtr(item.NextPollAt)
 	item.CompletedAt = cloneTimePtr(item.CompletedAt)
+	item.PollClaimedAt = cloneTimePtr(item.PollClaimedAt)
+	item.PollClaimedByRunID = cloneInt64Ptr(item.PollClaimedByRunID)
 	item.RemoteResponse = cloneJSONMap(item.RemoteResponse)
 	return item
 }
@@ -700,6 +880,14 @@ func cloneTimePtr(value *time.Time) *time.Time {
 }
 
 func cloneIntPtr(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneInt64Ptr(value *int64) *int64 {
 	if value == nil {
 		return nil
 	}

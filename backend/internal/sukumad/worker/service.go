@@ -225,6 +225,34 @@ func (m *Manager) runWorker(ctx context.Context, def Definition) error {
 	if err != nil {
 		return err
 	}
+	metaState := cloneJSONMap(record.Meta)
+	ensureCounts := func() map[string]any {
+		counts, _ := metaState["counts"].(map[string]any)
+		if counts == nil {
+			counts = map[string]any{}
+			metaState["counts"] = counts
+		}
+		return counts
+	}
+	exec := Execution{
+		RunID: record.ID,
+		AddCount: func(name string, delta int) {
+			if name == "" || delta == 0 {
+				return
+			}
+			counts := ensureCounts()
+			current, _ := counts[name].(int)
+			counts[name] = current + delta
+			metaState["last_activity_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+		},
+		SetMeta: func(key string, value any) {
+			if key == "" {
+				return
+			}
+			metaState[key] = value
+			metaState["last_activity_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+		},
+	}
 
 	heartbeatTicker := time.NewTicker(def.HeartbeatInterval)
 	defer heartbeatTicker.Stop()
@@ -235,19 +263,21 @@ func (m *Manager) runWorker(ctx context.Context, def Definition) error {
 		select {
 		case <-ctx.Done():
 			now := time.Now().UTC()
-			_, stopErr := m.service.UpdateStatus(context.Background(), record.ID, StatusStopped, &now, map[string]any{"shutdown": "context cancelled"})
+			stopMeta := mergeMeta(metaState, map[string]any{"shutdown": "context cancelled"})
+			_, stopErr := m.service.UpdateStatus(context.Background(), record.ID, StatusStopped, &now, stopMeta)
 			if stopErr != nil {
 				return stopErr
 			}
 			return ctx.Err()
 		case <-heartbeatTicker.C:
-			if _, err := m.service.Heartbeat(ctx, record.ID, nil); err != nil {
+			if _, err := m.service.Heartbeat(ctx, record.ID, cloneJSONMap(metaState)); err != nil {
 				return err
 			}
 		case <-workTicker.C:
-			if err := def.Run(ctx, Execution{RunID: record.ID}); err != nil {
+			if err := def.Run(ctx, exec); err != nil {
 				now := time.Now().UTC()
-				_, updateErr := m.service.UpdateStatus(context.Background(), record.ID, StatusFailed, &now, map[string]any{"lastError": err.Error()})
+				failMeta := mergeMeta(metaState, map[string]any{"lastError": err.Error()})
+				_, updateErr := m.service.UpdateStatus(context.Background(), record.ID, StatusFailed, &now, failMeta)
 				if updateErr != nil {
 					return updateErr
 				}

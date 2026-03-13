@@ -160,4 +160,5 @@ type Repository interface {
 	UpdateDelivery(ctx context.Context, params UpdateParams) (Record, error)
 	ClaimNextPendingDelivery(ctx context.Context, now time.Time) (Record, error)
 	ClaimNextRetryDelivery(ctx context.Context, now time.Time) (Record, error)
+	RequeueStaleRunningDeliveries(ctx context.Context, cutoff time.Time, retryAt time.Time) ([]Record, error)
 }

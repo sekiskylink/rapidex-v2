@@ -779,6 +779,35 @@ func (s *Service) CompleteFromAsyncFailure(ctx context.Context, deliveryID int64
 	return err
 }
 
+func (s *Service) RecoverStaleRunningDeliveries(ctx context.Context, cutoff time.Time) ([]Record, error) {
+	recovered, err := s.repo.RequeueStaleRunningDeliveries(ctx, cutoff, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range recovered {
+		if s.targetUpdater != nil {
+			_ = s.targetUpdater.SetTargetPending(ctx, record.RequestID, record.ServerID)
+		}
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &record.RequestID,
+			DeliveryAttemptID: &record.ID,
+			EventType:         "delivery.recovered.stale_running",
+			EventLevel:        "warning",
+			Message:           traceevent.Message("Recovered stale running delivery", "Recovered stale running delivery %s", record.UID),
+			SourceComponent:   "delivery.service",
+			CorrelationID:     record.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+			EventData: map[string]any{
+				"deliveryUid": record.UID,
+				"recoverTo":   record.Status,
+				"serverCode":  record.ServerCode,
+				"recovery":    true,
+			},
+		})
+	}
+	return recovered, nil
+}
+
 func (s *Service) appendEvent(ctx context.Context, input traceevent.WriteInput) {
 	if s.eventWriter == nil {
 		return

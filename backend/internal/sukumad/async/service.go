@@ -246,22 +246,34 @@ func (s *Service) RecordPoll(ctx context.Context, input RecordPollInput) (PollRe
 	return record, nil
 }
 
-func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoller) error {
+func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit int, poller RemotePoller) error {
 	if poller == nil {
 		return nil
 	}
-	due, err := s.repo.ListDueTasks(ctx, time.Now().UTC(), limit)
-	if err != nil {
-		return err
+	if limit <= 0 {
+		limit = 10
 	}
-	for _, task := range due {
+	claimTimeout := exec.ClaimTimeout
+	if claimTimeout <= 0 {
+		claimTimeout = time.Minute
+	}
+	for i := 0; i < limit; i++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		task, err := s.repo.ClaimNextDueTask(ctx, time.Now().UTC(), claimTimeout, exec.WorkerRunID)
+		if err != nil {
+			if errors.Is(err, ErrNoEligibleTask) {
+				return nil
+			}
+			return err
+		}
+		exec.Increment("polls_picked")
 		s.appendEvent(ctx, traceevent.WriteInput{
 			RequestID:         &task.RequestID,
 			DeliveryAttemptID: &task.DeliveryAttemptID,
 			AsyncTaskID:       &task.ID,
+			WorkerRunID:       workerRunIDPtr(exec.WorkerRunID),
 			EventType:         traceevent.EventAsyncPollStarted,
 			EventLevel:        "info",
 			Message:           traceevent.Message("Async poll started", "Polling async task %s", task.UID),
@@ -289,6 +301,7 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				RequestID:         &task.RequestID,
 				DeliveryAttemptID: &task.DeliveryAttemptID,
 				AsyncTaskID:       &task.ID,
+				WorkerRunID:       workerRunIDPtr(exec.WorkerRunID),
 				EventType:         traceevent.EventAsyncPollFailed,
 				EventLevel:        "warning",
 				Message:           traceevent.Message("Async poll failed", "Polling async task %s failed", task.UID),
@@ -297,17 +310,18 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				SourceComponent:   "async.poller",
 				EventData:         map[string]any{"asyncTaskUid": task.UID, "error": message},
 			})
+			exec.Increment("polls_failed")
 			continue
 		}
 		if _, err := s.RecordPoll(ctx, RecordPollInput{
-			AsyncTaskID:           task.ID,
-			StatusCode:            result.StatusCode,
-			RemoteStatus:          result.RemoteStatus,
-			ResponseBody:          result.ResponseBody,
-			ResponseContentType:   result.ResponseContentType,
-			ResponseBodyFiltered:  result.ResponseBodyFiltered,
-			ErrorMessage:          result.ErrorMessage,
-			DurationMS:            result.DurationMS,
+			AsyncTaskID:          task.ID,
+			StatusCode:           result.StatusCode,
+			RemoteStatus:         result.RemoteStatus,
+			ResponseBody:         result.ResponseBody,
+			ResponseContentType:  result.ResponseContentType,
+			ResponseBodyFiltered: result.ResponseBodyFiltered,
+			ErrorMessage:         result.ErrorMessage,
+			DurationMS:           result.DurationMS,
 		}); err != nil {
 			return err
 		}
@@ -316,6 +330,7 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				RequestID:         &task.RequestID,
 				DeliveryAttemptID: &task.DeliveryAttemptID,
 				AsyncTaskID:       &task.ID,
+				WorkerRunID:       workerRunIDPtr(exec.WorkerRunID),
 				EventType:         "async.poll.filtered_content_type",
 				EventLevel:        "warning",
 				Message:           traceevent.Message("Async poll content filtered", "Async task %s poll response content was filtered", task.UID),
@@ -323,9 +338,9 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
 				SourceComponent:   "async.poller",
 				EventData: map[string]any{
-					"asyncTaskUid":         task.UID,
-					"responseContentType":  result.ResponseContentType,
-					"filtered":             true,
+					"asyncTaskUid":        task.UID,
+					"responseContentType": result.ResponseContentType,
+					"filtered":            true,
 				},
 			})
 		}
@@ -342,6 +357,7 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 			RequestID:         &task.RequestID,
 			DeliveryAttemptID: &task.DeliveryAttemptID,
 			AsyncTaskID:       &task.ID,
+			WorkerRunID:       workerRunIDPtr(exec.WorkerRunID),
 			EventType:         traceevent.EventAsyncPollSucceeded,
 			EventLevel:        "info",
 			Message:           traceevent.Message("Async poll succeeded", "Polling async task %s succeeded", task.UID),
@@ -352,6 +368,37 @@ func (s *Service) PollDueTasks(ctx context.Context, limit int, poller RemotePoll
 				"asyncTaskUid": task.UID,
 				"remoteStatus": result.RemoteStatus,
 				"statusCode":   result.StatusCode,
+			},
+		})
+		exec.Increment("polls_completed")
+	}
+	return nil
+}
+
+func (s *Service) ReconcileTerminalTasks(ctx context.Context, limit int) error {
+	tasks, err := s.repo.ListTerminalTasksForRecovery(ctx, limit)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		s.reconcileTerminalState(ctx, task)
+		s.appendEvent(ctx, traceevent.WriteInput{
+			RequestID:         &task.RequestID,
+			DeliveryAttemptID: &task.DeliveryAttemptID,
+			AsyncTaskID:       &task.ID,
+			EventType:         "async.recovery.reconciled",
+			EventLevel:        "warning",
+			Message:           traceevent.Message("Recovered async reconciliation", "Recovered async task %s reconciliation", task.UID),
+			CorrelationID:     task.CorrelationID,
+			Actor:             traceevent.Actor{Type: traceevent.ActorSystem},
+			SourceComponent:   "async.service",
+			EventData: map[string]any{
+				"asyncTaskUid":  task.UID,
+				"terminalState": task.TerminalState,
+				"recovery":      true,
 			},
 		})
 	}
@@ -452,4 +499,11 @@ func (s *Service) appendEvent(ctx context.Context, input traceevent.WriteInput) 
 		return
 	}
 	_ = s.eventWriter.AppendEvent(ctx, input)
+}
+
+func workerRunIDPtr(runID int64) *int64 {
+	if runID <= 0 {
+		return nil
+	}
+	return &runID
 }

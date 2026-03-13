@@ -62,6 +62,7 @@ func (f *fakeServerService) GetServer(_ context.Context, id int64) (server.Recor
 type fakeSubmitter struct {
 	inputs  []delivery.DispatchInput
 	results []delivery.Record
+	stale   []delivery.Record
 }
 
 func (f *fakeSubmitter) SubmitDHIS2Delivery(_ context.Context, input delivery.DispatchInput) (delivery.Record, error) {
@@ -72,6 +73,10 @@ func (f *fakeSubmitter) SubmitDHIS2Delivery(_ context.Context, input delivery.Di
 	result := f.results[0]
 	f.results = f.results[1:]
 	return result, nil
+}
+
+func (f *fakeSubmitter) RecoverStaleRunningDeliveries(_ context.Context, _ time.Time) ([]delivery.Record, error) {
+	return append([]delivery.Record(nil), f.stale...), nil
 }
 
 type fakeEventWriter struct {

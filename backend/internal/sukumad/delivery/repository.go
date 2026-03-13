@@ -386,6 +386,53 @@ func (r *SQLRepository) UpdateDelivery(ctx context.Context, params UpdateParams)
 	return r.GetDeliveryByID(ctx, id)
 }
 
+func (r *SQLRepository) RequeueStaleRunningDeliveries(ctx context.Context, cutoff time.Time, retryAt time.Time) ([]Record, error) {
+	rows := []recordRow{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		WITH stale AS (
+			SELECT d.id
+			FROM delivery_attempts d
+			WHERE d.status = 'running'
+			  AND d.started_at IS NOT NULL
+			  AND d.started_at <= $1
+			  AND NOT EXISTS (
+				  SELECT 1
+				  FROM async_tasks a
+				  WHERE a.delivery_attempt_id = d.id
+			  )
+			FOR UPDATE SKIP LOCKED
+		), requeued AS (
+			UPDATE delivery_attempts d
+			SET status = CASE WHEN d.attempt_number > 1 THEN 'retrying' ELSE 'pending' END,
+			    http_status = NULL,
+			    response_body = '',
+			    response_content_type = '',
+			    response_body_filtered = FALSE,
+			    response_summary = '{}'::jsonb,
+			    error_message = '',
+			    submission_hold_reason = '',
+			    next_eligible_at = NULL,
+			    hold_policy_source = '',
+			    terminal_reason = '',
+			    started_at = NULL,
+			    finished_at = NULL,
+			    retry_at = CASE WHEN d.attempt_number > 1 THEN $2 ELSE NULL END,
+			    updated_at = NOW()
+			FROM stale
+			WHERE d.id = stale.id
+			RETURNING d.id
+		)
+	`+deliverySelectColumns+` JOIN requeued ON requeued.id = d.id
+	`, cutoff.UTC(), retryAt.UTC()); err != nil {
+		return nil, fmt.Errorf("requeue stale running deliveries: %w", err)
+	}
+	records := make([]Record, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, decodeRow(row))
+	}
+	return records, nil
+}
+
 func resolveSortColumn(sortField string) string {
 	switch sortField {
 	case "uid":
@@ -646,6 +693,45 @@ func (r *memoryRepository) ClaimNextRetryDelivery(_ context.Context, now time.Ti
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.claimLocked(now.UTC(), true)
+}
+
+func (r *memoryRepository) RequeueStaleRunningDeliveries(_ context.Context, cutoff time.Time, retryAt time.Time) ([]Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	recovered := make([]Record, 0)
+	for id, item := range r.items {
+		if item.Status != StatusRunning || item.StartedAt == nil || item.StartedAt.After(cutoff.UTC()) || item.AsyncTaskID != nil {
+			continue
+		}
+		if item.AttemptNumber > 1 {
+			item.Status = StatusRetrying
+			retryAtCopy := retryAt.UTC()
+			item.RetryAt = &retryAtCopy
+		} else {
+			item.Status = StatusPending
+			item.RetryAt = nil
+		}
+		item.HTTPStatus = nil
+		item.ResponseBody = ""
+		item.ResponseContentType = ""
+		item.ResponseBodyFiltered = false
+		item.ResponseSummary = map[string]any{}
+		item.ErrorMessage = ""
+		item.SubmissionHoldReason = ""
+		item.NextEligibleAt = nil
+		item.HoldPolicySource = ""
+		item.TerminalReason = ""
+		item.StartedAt = nil
+		item.FinishedAt = nil
+		item.UpdatedAt = time.Now().UTC()
+		r.items[id] = item
+		recovered = append(recovered, cloneRecord(item))
+	}
+	slices.SortFunc(recovered, func(a, b Record) int {
+		return compareTimes(a.CreatedAt, b.CreatedAt)
+	})
+	return recovered, nil
 }
 
 func (r *memoryRepository) claimLocked(now time.Time, retry bool) (Record, error) {
