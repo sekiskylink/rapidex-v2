@@ -145,13 +145,11 @@ That creates a `delivery_attempts` row with:
 
 The delivery row exists before the destination system is contacted. That gives the system a durable attempt history and something to reconcile later if the request becomes async.
 
-## 6. Immediate submission is attempted when the target is not blocked
+## 6. The first delivery remains pending for later execution
 
-If the target is not dependency-blocked, the request service loads the destination server snapshot and immediately calls:
+If the target is not dependency-blocked, the request service stops after creating the initial `pending` delivery attempt.
 
-- `delivery.Service.SubmitDHIS2Delivery(...)`
-
-This means initial request intake and first submission are currently coupled. The first send is not delegated to the send worker.
+This means initial request intake is now accept-and-persist only. The first send is no longer attempted inline from the API path and is reserved for the worker-owned execution path.
 
 ## What `SubmitDHIS2Delivery(...)` does
 
@@ -332,9 +330,9 @@ Blocked targets with reason `dependency_blocked` are released:
 
 - target status is moved back to `pending`
 - `last_released_at` is set
-- the service immediately calls `SubmitDHIS2Delivery(...)` for the released target
+- the request roll-up returns to `pending`
 
-So dependency release currently resumes work inline from the request service, not via the send worker.
+So dependency release no longer resumes work inline from the request service. It returns the request to worker-eligible durable state instead.
 
 ## Retry behavior
 

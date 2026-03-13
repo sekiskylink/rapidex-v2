@@ -13,7 +13,6 @@ import (
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/delivery"
-	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/traceevent"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -23,10 +22,6 @@ type Service struct {
 	auditService *audit.Service
 	deliverySvc  interface {
 		CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
-		SubmitDHIS2Delivery(context.Context, delivery.DispatchInput) (delivery.Record, error)
-	}
-	serverSvc interface {
-		GetServer(context.Context, int64) (server.Record, error)
 	}
 	eventWriter traceevent.Writer
 }
@@ -41,16 +36,8 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 
 func (s *Service) WithDeliveryService(deliverySvc interface {
 	CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
-	SubmitDHIS2Delivery(context.Context, delivery.DispatchInput) (delivery.Record, error)
 }) *Service {
 	s.deliverySvc = deliverySvc
-	return s
-}
-
-func (s *Service) WithServerService(serverSvc interface {
-	GetServer(context.Context, int64) (server.Record, error)
-}) *Service {
-	s.serverSvc = serverSvc
 	return s
 }
 
@@ -233,10 +220,12 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 			})
 
 			if blockedByDependency {
-				if err := s.SetBlocked(ctx, created.ID, "dependency_blocked", nil); err != nil {
-					return Record{}, err
-				}
-				if _, err := s.repo.UpdateTarget(ctx, UpdateTargetParams{RequestID: created.ID, ServerID: targetID, Status: TargetStatusBlocked, BlockedReason: "dependency_blocked"}); err != nil {
+				if _, err := s.updateTargetAndRollup(ctx, UpdateTargetParams{
+					RequestID:     created.ID,
+					ServerID:      targetID,
+					Status:        TargetStatusBlocked,
+					BlockedReason: "dependency_blocked",
+				}); err != nil {
 					return Record{}, err
 				}
 				s.appendEvent(ctx, traceevent.WriteInput{
@@ -251,36 +240,6 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 					EventData:         map[string]any{"requestUid": created.UID},
 				})
 				continue
-			}
-
-			if s.serverSvc != nil {
-				serverRecord, err := s.serverSvc.GetServer(ctx, targetID)
-				if err != nil {
-					return Record{}, err
-				}
-				if _, err := s.deliverySvc.SubmitDHIS2Delivery(ctx, delivery.DispatchInput{
-					DeliveryID:    deliveryRecord.ID,
-					RequestID:     created.ID,
-					RequestUID:    created.UID,
-					CorrelationID: created.CorrelationID,
-					PayloadBody:   created.PayloadBody,
-					URLSuffix:     created.URLSuffix,
-					Server: delivery.ServerSnapshot{
-						ID:           serverRecord.ID,
-						Code:         serverRecord.Code,
-						Name:         serverRecord.Name,
-						SystemType:   serverRecord.SystemType,
-						BaseURL:      serverRecord.BaseURL,
-						EndpointType: serverRecord.EndpointType,
-						HTTPMethod:   serverRecord.HTTPMethod,
-						UseAsync:     serverRecord.UseAsync,
-						Headers:      serverRecord.Headers,
-						URLParams:    serverRecord.URLParams,
-					},
-					ActorID: input.ActorID,
-				}); err != nil {
-					return Record{}, err
-				}
 			}
 		}
 		return s.GetRequest(ctx, created.ID)
@@ -653,7 +612,129 @@ func (s *Service) reconcileTargetRollup(ctx context.Context, requestID int64) (R
 			"deferredUntil": updated.DeferredUntil,
 		},
 	})
+	if updated.Status == StatusCompleted || updated.Status == StatusFailed {
+		if err := s.reconcileDependents(ctx, updated); err != nil {
+			return Record{}, err
+		}
+	}
 	return updated, nil
+}
+
+func (s *Service) reconcileDependents(ctx context.Context, dependency Record) error {
+	dependents, err := s.repo.ListDependents(ctx, dependency.ID)
+	if err != nil {
+		return err
+	}
+	seen := make(map[int64]struct{}, len(dependents))
+	for _, dependent := range dependents {
+		if dependent.RequestID <= 0 {
+			continue
+		}
+		if _, ok := seen[dependent.RequestID]; ok {
+			continue
+		}
+		seen[dependent.RequestID] = struct{}{}
+		if err := s.reevaluateDependencyState(ctx, dependency, dependent.RequestID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) reevaluateDependencyState(ctx context.Context, dependency Record, requestID int64) error {
+	record, err := s.GetRequest(ctx, requestID)
+	if err != nil {
+		return err
+	}
+	if record.Status == StatusCompleted || record.Status == StatusFailed {
+		return nil
+	}
+
+	dependencyStatuses, err := s.repo.GetDependencyStatuses(ctx, requestID)
+	if err != nil {
+		return err
+	}
+	for _, status := range dependencyStatuses {
+		if status.Status == StatusFailed {
+			return s.failBlockedRequestByDependency(ctx, record, status.RequestUID)
+		}
+		if status.Status != StatusCompleted {
+			return nil
+		}
+	}
+
+	return s.releaseDependencyBlockedRequest(ctx, record, dependency.UID)
+}
+
+func (s *Service) failBlockedRequestByDependency(ctx context.Context, record Record, failedDependencyUID string) error {
+	for _, target := range record.Targets {
+		if target.Status == TargetStatusSucceeded || target.Status == TargetStatusFailed {
+			continue
+		}
+		if _, err := s.updateTargetAndRollup(ctx, UpdateTargetParams{
+			RequestID:     record.ID,
+			ServerID:      target.ServerID,
+			Status:        TargetStatusFailed,
+			BlockedReason: "dependency_failed",
+		}); err != nil {
+			return err
+		}
+	}
+
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:       &record.ID,
+		EventType:       "request.failed.dependency",
+		EventLevel:      "warning",
+		Message:         traceevent.Message("Request failed by dependency", "Request %s failed because dependency %s failed", record.UID, failedDependencyUID),
+		CorrelationID:   record.CorrelationID,
+		Actor:           traceevent.Actor{Type: traceevent.ActorSystem},
+		SourceComponent: "request.service",
+		EventData: map[string]any{
+			"requestUid":        record.UID,
+			"dependencyRequest": failedDependencyUID,
+		},
+	})
+	return nil
+}
+
+func (s *Service) releaseDependencyBlockedRequest(ctx context.Context, record Record, dependencyUID string) error {
+	releasedAt := time.Now().UTC()
+	releasedTargets := 0
+	for _, target := range record.Targets {
+		if target.Status != TargetStatusBlocked || target.BlockedReason != "dependency_blocked" {
+			continue
+		}
+		releasedTargets++
+		if _, err := s.updateTargetAndRollup(ctx, UpdateTargetParams{
+			RequestID:      record.ID,
+			ServerID:       target.ServerID,
+			Status:         TargetStatusPending,
+			BlockedReason:  "",
+			DeferredUntil:  nil,
+			LastReleasedAt: &releasedAt,
+		}); err != nil {
+			return err
+		}
+	}
+	if releasedTargets == 0 {
+		return nil
+	}
+
+	s.appendEvent(ctx, traceevent.WriteInput{
+		RequestID:       &record.ID,
+		EventType:       "request.unblocked.dependency",
+		EventLevel:      "info",
+		Message:         traceevent.Message("Request unblocked by dependency", "Request %s was released after dependencies completed", record.UID),
+		CorrelationID:   record.CorrelationID,
+		Actor:           traceevent.Actor{Type: traceevent.ActorSystem},
+		SourceComponent: "request.service",
+		EventData: map[string]any{
+			"requestUid":        record.UID,
+			"releasedTargets":   releasedTargets,
+			"dependencyRequest": dependencyUID,
+		},
+	})
+	return nil
 }
 
 func deriveRollup(targets []TargetRecord) (string, string, *time.Time) {

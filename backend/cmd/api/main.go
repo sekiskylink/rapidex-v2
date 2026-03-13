@@ -28,9 +28,9 @@ import (
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/observability"
-	"basepro/backend/internal/sukumad/retention"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
+	"basepro/backend/internal/sukumad/retention"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
 	"basepro/backend/internal/users"
@@ -144,7 +144,7 @@ func run() error {
 		return policy
 	})
 	sukumadDHIS2Service := dhis2.NewService(nil, outboundLimiter)
-	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService).WithServerService(sukumadServerService)
+	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
 		WithRequestStatusUpdater(sukumadRequestService)

@@ -2,23 +2,23 @@
 
 ## 1. Context
 
-Current Sukumad request processing is not queue-first.
+Current Sukumad request processing is durable-first but not yet worker-executed end to end.
 
 Today the request path:
 
 1. persists the `exchange_requests` row
 2. creates the first `delivery_attempts` row immediately
-3. calls `delivery.Service.SubmitDHIS2Delivery(...)` inline from `request.Service.CreateRequest(...)`
+3. leaves initial attempts in durable `pending` for later worker pickup
 4. creates durable `async_tasks` state when the downstream system accepts async work
 5. models retries as new `delivery_attempts` rows
 6. includes worker definitions for send, poll, and retry, but only the poll path is materially wired today
 
 That matters for addon design because any new gate must work in two execution modes:
 
-- current mode: request intake and first submission happen in the same API flow
+- current mode: request intake is accept-and-persist, while execution still belongs to the shared delivery submission path
 - future mode: workers become the primary execution boundary for initial send, retry send, and deferred replay
 
-The design below keeps one rule for both modes: request and delivery state remain durable first, and eligibility to submit is evaluated immediately before outbound dispatch. The inline flow and future workers must call the same eligibility checks instead of implementing separate logic.
+The design below keeps one rule for both modes: request and delivery state remain durable first, and eligibility to submit is evaluated immediately before outbound dispatch. Worker execution paths should call the same eligibility checks instead of implementing separate logic.
 
 ## 2. Refined Requirements
 
@@ -26,7 +26,7 @@ The design below keeps one rule for both modes: request and delivery state remai
 
 #### Problem statement
 
-Some downstream systems should only receive traffic during defined hours. The current inline request path would otherwise submit immediately after request creation, even when the destination should be closed.
+Some downstream systems should only receive traffic during defined hours. Worker or manual execution paths must not submit when the destination should be closed.
 
 #### Requirement
 
@@ -91,7 +91,7 @@ Recommended event data:
 
 #### Compatibility considerations
 
-- Current inline flow: place the gate after the initial delivery row is created and before `SubmitDHIS2Delivery(...)` performs any outbound call.
+- Current accept-and-persist flow: the API should only create the initial delivery row; worker and manual execution paths enforce the gate immediately before `SubmitDHIS2Delivery(...)` performs any outbound call.
 - Future workers: the send worker and retry worker must call the same eligibility service before transitioning a delivery to `running`.
 - Async poll traffic should normally ignore submission windows unless a later policy explicitly says poll traffic must also be windowed; initial scope should apply to outbound submissions, retries, replays, and manual resubmissions.
 

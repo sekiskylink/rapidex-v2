@@ -50,6 +50,47 @@ func TestHandlerGetRejectsInvalidID(t *testing.T) {
 	}
 }
 
+func TestHandlerCreateReturnsAcceptAndPersistRequestState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := NewRepository()
+	deliverySvc := &fakeRequestDeliveryService{repo: repo.(*memoryRepository)}
+	handler := NewHandler(NewService(repo).WithDeliveryService(deliverySvc))
+	router := gin.New()
+	router.POST("/requests", func(c *gin.Context) {
+		c.Set(auth.PrincipalContextKey, auth.Principal{Type: "user", UserID: 1})
+		handler.Create(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/requests", bytes.NewReader([]byte(`{
+		"destinationServerId": 3,
+		"payload": {"trackedEntity":"123"}
+	}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var created Record
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if created.Status != StatusPending {
+		t.Fatalf("expected pending request for worker pickup, got %+v", created)
+	}
+	if len(created.Targets) != 1 || created.Targets[0].Status != TargetStatusPending {
+		t.Fatalf("expected pending target, got %+v", created.Targets)
+	}
+	if created.Targets[0].LatestDeliveryID == nil || created.Targets[0].LatestDeliveryStatus != "pending" {
+		t.Fatalf("expected pending delivery metadata, got %+v", created.Targets[0])
+	}
+	if len(deliverySvc.created) != 1 {
+		t.Fatalf("expected a single durable pending delivery, got %d", len(deliverySvc.created))
+	}
+}
+
 func TestHandlerListReturnsPaginatedPayload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := newTestHandler()

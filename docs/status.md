@@ -1,5 +1,127 @@
 # Status
 
+## Milestone — Sukumad Request Creation Accept-and-Persist (Complete)
+
+### What changed
+- Refactored Sukumad request creation so `POST /api/v1/requests` is now accept-and-persist only:
+  - request creation still validates, persists the request row, target rows, dependency links, and initial delivery attempts
+  - initial delivery attempts remain durable in `pending`
+  - the request service no longer calls `delivery.Service.SubmitDHIS2Delivery(...)` inline
+  - files:
+    - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+    - [backend/cmd/api/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/main.go)
+- Dependency release behavior now matches the worker-oriented contract:
+  - when dependencies complete, blocked targets are released back to `pending`
+  - the request roll-up returns to `pending` for later worker pickup instead of dispatching inline
+  - dependency-failed cases still roll up to terminal `failed`
+- Updated backend tests to prove:
+  - request creation persists request, targets, dependencies, and pending deliveries durably
+  - unblocked request creation no longer performs outbound submission inline
+  - dependency-blocked requests remain blocked durably until release
+  - dependency release returns work to pending rather than submitting inline
+  - the handler response still returns the persisted request state immediately
+  - files:
+    - [backend/internal/sukumad/request/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service_test.go)
+    - [backend/internal/sukumad/request/handler_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/handler_test.go)
+- Updated architecture and lifecycle notes to document the new accept-and-persist API path:
+  - [docs/notes/sukumad-workers.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers.md)
+  - [docs/notes/sukumad-how-requests-are-processed.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-how-requests-are-processed.md)
+  - [docs/notes/sukumad-addons.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-addons.md)
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-request-creation-accept-and-persist.md` (gitignored; not for commit)
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/request` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Wire an actual send worker runtime so durable pending deliveries created by the API can be claimed and dispatched automatically.
+- Frontend test logs still include the existing non-blocking MUI `anchorEl` warnings and desktop `useRouter` warnings in jsdom-based tests.
+- Frontend build logs still include the existing third-party `'use client'` and chunk-size warnings.
+
+## Milestone — Sukumad Worker Architecture Recommendation (Documentation)
+
+### What changed
+- Added [docs/notes/sukumad-workers.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-workers.md) to document:
+  - the current inline-first Sukumad request-processing model as implemented today
+  - the recommended production worker model with separate send, poll, and retry worker roles
+  - recommended request and delivery status semantics for worker-driven execution
+  - a staged migration path from inline submission to accept-and-persist API behavior
+  - operational and testing expectations for production workers
+- The note reflects current backend reality:
+  - request, target, and delivery records are persisted before outbound dispatch
+  - initial delivery submission still happens inline from `request.Service.CreateRequest(...)`
+  - async polling is implemented through `async.Service.PollDueTasks(...)`
+  - send and retry worker definitions exist but are not wired with execution logic or started as active worker processes
+
+### Tests and verification
+- Documentation-only change.
+- No code, build, or test commands were run in this step.
+
+### Remaining follow-ups
+- Implement durable pickup and claim logic for pending deliveries and due retries.
+- Introduce a real worker runtime/process and remove inline first submission from the API path.
+
+## Milestone — Sukumad Addons Gap Closure (Complete)
+
+### What changed
+- Closed the remaining implementation gaps from [docs/notes/sukumad-addons.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-addons.md).
+- Backend dependency handling now reevaluates dependent requests when a prerequisite request completes or fails:
+  - completed dependencies release blocked targets back into the normal submission path
+  - failed dependencies convert dependent blocked/pending targets into terminal `dependency_failed` state
+  - release/failure flows emit dependency-specific observability events and reuse the existing delivery submission path so submission windows still apply
+  - files:
+    - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+- Backend async response filtering now sanitizes filtered remote payloads before persistence:
+  - unexpected content types still record a safe bounded summary
+  - async task `remote_response` no longer retains raw filtered HTML/body content
+  - files:
+    - [backend/internal/sukumad/dhis2/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2/service.go)
+- Web and desktop request creation now expose the missing addon inputs:
+  - additional destination server IDs for fan-out
+  - dependency request IDs
+  - both clients submit the backend-supported `destinationServerIds` and `dependencyRequestIds` fields without introducing a parallel route or shell
+  - files:
+    - [web/src/pages/RequestForm.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestForm.tsx)
+    - [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx)
+    - [desktop/frontend/src/pages/RequestForm.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestForm.tsx)
+    - [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx)
+- Saved prompt traceability copy:
+  - `docs/prompts/2026-03-13-sukumad-addons-gap-closure.md` (gitignored; not for commit)
+
+### Added or updated tests
+- Backend:
+  - updated [backend/internal/sukumad/request/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service_test.go) for dependency release/failure reevaluation
+  - updated [backend/internal/sukumad/dhis2/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dhis2/service_test.go) for sanitized filtered async remote responses
+- Web:
+  - updated [web/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/requests-page.test.tsx) for addon request-create payload submission
+- Desktop:
+  - updated [desktop/frontend/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/requests-page.test.tsx) for the matching addon request-create payload submission
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/request ./internal/sukumad/dhis2 ./internal/sukumad/async ./internal/sukumad/delivery ./internal/sukumad/retention ./internal/sukumad/worker` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- Frontend test logs still include the existing non-blocking MUI `anchorEl` warnings in jsdom-based menu/select tests.
+- Frontend build logs still include the existing third-party `'use client'` and chunk-size warnings.
+
 ## Milestone — Sukumad Addons Implementation (Complete)
 
 ### What changed

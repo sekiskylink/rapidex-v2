@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/traceevent"
 )
 
@@ -76,6 +77,12 @@ type fakeEventWriter struct {
 	events []traceevent.WriteInput
 }
 
+type fakeRequestDeliveryService struct {
+	repo    *memoryRepository
+	nextID  int64
+	created []delivery.Record
+}
+
 func (f *fakeEventWriter) AppendEvent(_ context.Context, input traceevent.WriteInput) error {
 	f.events = append(f.events, input)
 	return nil
@@ -88,6 +95,35 @@ func (f *fakeAuditRepo) Insert(_ context.Context, event audit.Event) error {
 
 func (f *fakeAuditRepo) List(_ context.Context, _ audit.ListFilter) (audit.ListResult, error) {
 	return audit.ListResult{}, nil
+}
+
+func (f *fakeRequestDeliveryService) CreatePendingDelivery(_ context.Context, input delivery.CreateInput) (delivery.Record, error) {
+	f.nextID++
+	record := delivery.Record{
+		ID:        f.nextID,
+		UID:       "del-test",
+		RequestID: input.RequestID,
+		ServerID:  input.ServerID,
+		Status:    delivery.StatusPending,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	f.created = append(f.created, record)
+
+	f.repo.mu.Lock()
+	defer f.repo.mu.Unlock()
+	item := f.repo.items[input.RequestID]
+	for index := range item.Targets {
+		if item.Targets[index].ServerID != input.ServerID {
+			continue
+		}
+		item.Targets[index].LatestDeliveryID = &record.ID
+		item.Targets[index].LatestDeliveryUID = record.UID
+		item.Targets[index].LatestDeliveryStatus = record.Status
+		break
+	}
+	f.repo.items[input.RequestID] = item
+	return record, nil
 }
 
 func TestServiceCreateRequestValidatesInput(t *testing.T) {
@@ -158,5 +194,186 @@ func TestServiceGetRequestNotFound(t *testing.T) {
 
 	if _, err := service.GetRequest(context.Background(), 99); err == nil {
 		t.Fatal("expected not found error")
+	}
+}
+
+func TestServiceReleasesDependentRequestsWhenDependencyCompletes(t *testing.T) {
+	repo := NewRepository().(*memoryRepository)
+	eventWriter := &fakeEventWriter{}
+	deliverySvc := &fakeRequestDeliveryService{repo: repo}
+	service := NewService(repo, audit.NewService(&fakeAuditRepo{})).
+		WithEventWriter(eventWriter).
+		WithDeliveryService(deliverySvc)
+
+	dependency, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		Payload:             []byte(`{"trackedEntity":"dep"}`),
+	})
+	if err != nil {
+		t.Fatalf("create dependency request: %v", err)
+	}
+	dependent, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID:  3,
+		DependencyRequestIDs: []int64{dependency.ID},
+		Payload:              []byte(`{"trackedEntity":"child"}`),
+	})
+	if err != nil {
+		t.Fatalf("create dependent request: %v", err)
+	}
+	if dependent.Status != StatusBlocked {
+		t.Fatalf("expected dependent request to be blocked, got %s", dependent.Status)
+	}
+
+	if err := service.SetTargetSucceeded(context.Background(), dependency.ID, 3); err != nil {
+		t.Fatalf("complete dependency target: %v", err)
+	}
+
+	reloaded, err := service.GetRequest(context.Background(), dependent.ID)
+	if err != nil {
+		t.Fatalf("reload dependent request: %v", err)
+	}
+	if reloaded.Status == StatusBlocked {
+		t.Fatalf("expected dependent request to be released, got blocked with reason %q", reloaded.StatusReason)
+	}
+	if len(reloaded.Targets) != 1 || reloaded.Targets[0].Status != TargetStatusPending {
+		t.Fatalf("expected released target to return to pending, got %+v", reloaded.Targets)
+	}
+	if reloaded.Targets[0].LastReleasedAt == nil {
+		t.Fatalf("expected release timestamp to be recorded, got %+v", reloaded.Targets[0])
+	}
+	if len(deliverySvc.created) != 2 {
+		t.Fatalf("expected only the initial durable deliveries, got %d", len(deliverySvc.created))
+	}
+	if reloaded.Status != StatusPending {
+		t.Fatalf("expected dependent request to return to pending for worker pickup, got %s", reloaded.Status)
+	}
+
+	found := false
+	for _, event := range eventWriter.events {
+		if event.EventType == "request.unblocked.dependency" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected request.unblocked.dependency event, got %+v", eventWriter.events)
+	}
+}
+
+func TestServiceCreateRequestPersistsDurableStateWithoutInlineSubmission(t *testing.T) {
+	repo := NewRepository().(*memoryRepository)
+	deliverySvc := &fakeRequestDeliveryService{repo: repo}
+	service := NewService(repo, audit.NewService(&fakeAuditRepo{})).WithDeliveryService(deliverySvc)
+
+	created, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID:  3,
+		DestinationServerIDs: []int64{4},
+		DependencyRequestIDs: []int64{9},
+		Payload:              []byte(`{"trackedEntity":"child"}`),
+	})
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+
+	if created.Status != StatusBlocked {
+		t.Fatalf("expected blocked request while dependency is incomplete, got %s", created.Status)
+	}
+	if len(created.Targets) != 2 {
+		t.Fatalf("expected 2 targets, got %+v", created.Targets)
+	}
+	for _, target := range created.Targets {
+		if target.Status != TargetStatusBlocked {
+			t.Fatalf("expected target to remain blocked durably, got %+v", target)
+		}
+		if target.LatestDeliveryID == nil || target.LatestDeliveryStatus != delivery.StatusPending {
+			t.Fatalf("expected pending durable delivery on target, got %+v", target)
+		}
+	}
+	if len(created.Dependencies) != 1 || created.Dependencies[0].DependsOnRequestID != 9 {
+		t.Fatalf("expected dependency link to persist, got %+v", created.Dependencies)
+	}
+	if len(deliverySvc.created) != 2 {
+		t.Fatalf("expected one pending delivery per target, got %d", len(deliverySvc.created))
+	}
+}
+
+func TestServiceCreateRequestLeavesUnblockedRequestPendingForWorkerPickup(t *testing.T) {
+	repo := NewRepository().(*memoryRepository)
+	deliverySvc := &fakeRequestDeliveryService{repo: repo}
+	service := NewService(repo, audit.NewService(&fakeAuditRepo{})).WithDeliveryService(deliverySvc)
+
+	created, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		Payload:             []byte(`{"trackedEntity":"child"}`),
+	})
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+
+	if created.Status != StatusPending {
+		t.Fatalf("expected request to remain pending for worker pickup, got %s", created.Status)
+	}
+	if len(created.Targets) != 1 {
+		t.Fatalf("expected one target, got %+v", created.Targets)
+	}
+	target := created.Targets[0]
+	if target.Status != TargetStatusPending {
+		t.Fatalf("expected pending target, got %+v", target)
+	}
+	if target.LatestDeliveryID == nil || target.LatestDeliveryStatus != delivery.StatusPending {
+		t.Fatalf("expected pending delivery metadata on target, got %+v", target)
+	}
+	if len(deliverySvc.created) != 1 {
+		t.Fatalf("expected one durable pending delivery, got %d", len(deliverySvc.created))
+	}
+}
+
+func TestServiceFailsDependentsWhenDependencyFails(t *testing.T) {
+	repo := NewRepository().(*memoryRepository)
+	eventWriter := &fakeEventWriter{}
+	deliverySvc := &fakeRequestDeliveryService{repo: repo}
+	service := NewService(repo, audit.NewService(&fakeAuditRepo{})).
+		WithEventWriter(eventWriter).
+		WithDeliveryService(deliverySvc)
+
+	dependency, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		Payload:             []byte(`{"trackedEntity":"dep"}`),
+	})
+	if err != nil {
+		t.Fatalf("create dependency request: %v", err)
+	}
+	dependent, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID:  3,
+		DependencyRequestIDs: []int64{dependency.ID},
+		Payload:              []byte(`{"trackedEntity":"child"}`),
+	})
+	if err != nil {
+		t.Fatalf("create dependent request: %v", err)
+	}
+	if err := service.SetTargetFailed(context.Background(), dependency.ID, 3, "upstream failed"); err != nil {
+		t.Fatalf("fail dependency target: %v", err)
+	}
+
+	reloaded, err := service.GetRequest(context.Background(), dependent.ID)
+	if err != nil {
+		t.Fatalf("reload dependent request: %v", err)
+	}
+	if reloaded.Status != StatusFailed || reloaded.StatusReason != "dependency_failed" {
+		t.Fatalf("expected dependent request failure from dependency, got status=%s reason=%s", reloaded.Status, reloaded.StatusReason)
+	}
+	if len(reloaded.Targets) != 1 || reloaded.Targets[0].Status != TargetStatusFailed || reloaded.Targets[0].BlockedReason != "dependency_failed" {
+		t.Fatalf("expected dependent target failure, got %+v", reloaded.Targets)
+	}
+
+	found := false
+	for _, event := range eventWriter.events {
+		if event.EventType == "request.failed.dependency" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected request.failed.dependency event, got %+v", eventWriter.events)
 	}
 }
