@@ -51,6 +51,26 @@ import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
 const drawerWidth = 260
 const miniDrawerWidth = 80
 
+function navItemStyles(selected: boolean) {
+  return {
+    position: 'relative',
+    minHeight: 46,
+    mb: 0.5,
+    borderRadius: 1.5,
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      left: 6,
+      top: 8,
+      bottom: 8,
+      width: 4,
+      borderRadius: '0 999px 999px 0',
+      backgroundColor: selected ? 'primary.main' : 'transparent',
+      transition: 'background-color 120ms ease',
+    },
+  } as const
+}
+
 export function AppShell() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
@@ -114,7 +134,11 @@ export function AppShell() {
     }
   }, [pathname])
 
-  const navigation = buildNavigation(user)
+  const navigation = buildNavigation(user, {
+    labels: prefs.navLabels,
+    showAdministration: prefs.showAdministrationMenu,
+    showSukumad: prefs.showSukumadMenu,
+  })
   const canAccessSettings = canAccessRoute('/settings', user)
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || appName
   const navIcons = {
@@ -188,10 +212,9 @@ export function AppShell() {
               onClick={() => handleNavItemClick(item.path)}
               aria-label={item.label}
               sx={{
-                minHeight: 46,
-                mb: 0.5,
+                ...navItemStyles(selected),
                 justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
-                borderRadius: 1.5,
+                pl: collapsed && !isMobile ? 1.5 : 2.25,
               }}
             >
               <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
@@ -230,17 +253,16 @@ export function AppShell() {
               aria-expanded={sukumadExpanded}
               onClick={() => setSukumadExpanded((current) => !current)}
               sx={{
-                minHeight: 46,
-                mb: 0.5,
+                ...navItemStyles(false),
                 justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
-                borderRadius: 1.5,
+                pl: collapsed && !isMobile ? 1.5 : 2.25,
               }}
             >
               <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
                 {navIcons.sukumad}
               </ListItemIcon>
               <ListItemText
-                primary="Sukumad"
+                primary={navigation.sukumad.label}
                 primaryTypographyProps={{
                   noWrap: true,
                   fontWeight: 600,
@@ -265,10 +287,8 @@ export function AppShell() {
                           onClick={() => handleNavItemClick(item.path)}
                           aria-label={item.label}
                           sx={{
-                            minHeight: 46,
-                            mb: 0.5,
+                            ...navItemStyles(selected),
                             justifyContent: 'center',
-                            borderRadius: 1.5,
                             pl: 1.5,
                           }}
                         >
@@ -289,11 +309,9 @@ export function AppShell() {
                       onClick={() => handleNavItemClick(item.path)}
                       aria-label={item.label}
                       sx={{
-                        minHeight: 46,
-                        mb: 0.5,
+                        ...navItemStyles(selected),
                         justifyContent: 'flex-start',
-                        borderRadius: 1.5,
-                        pl: 2.5,
+                        pl: 3.25,
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
@@ -318,17 +336,16 @@ export function AppShell() {
               aria-expanded={adminExpanded}
               onClick={() => setAdminExpanded((current) => !current)}
               sx={{
-                minHeight: 46,
-                mb: 0.5,
+                ...navItemStyles(false),
                 justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
-                borderRadius: 1.5,
+                pl: collapsed && !isMobile ? 1.5 : 2.25,
               }}
             >
               <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>
                 <AdminPanelSettingsRoundedIcon fontSize="small" />
               </ListItemIcon>
               <ListItemText
-                primary="Administration"
+                primary={navigation.administration.label}
                 primaryTypographyProps={{
                   noWrap: true,
                   fontWeight: 600,
@@ -353,10 +370,8 @@ export function AppShell() {
                           onClick={() => handleNavItemClick(item.path)}
                           aria-label={item.label}
                           sx={{
-                            minHeight: 46,
-                            mb: 0.5,
+                            ...navItemStyles(selected),
                             justifyContent: 'center',
-                            borderRadius: 1.5,
                             pl: 1.5,
                           }}
                         >
@@ -377,11 +392,9 @@ export function AppShell() {
                       onClick={() => handleNavItemClick(item.path)}
                       aria-label={item.label}
                       sx={{
-                        minHeight: 46,
-                        mb: 0.5,
+                        ...navItemStyles(selected),
                         justifyContent: 'flex-start',
-                        borderRadius: 1.5,
-                        pl: 2.5,
+                        pl: 3.25,
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>

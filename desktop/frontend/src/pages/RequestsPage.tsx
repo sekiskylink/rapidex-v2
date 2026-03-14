@@ -12,6 +12,7 @@ import { notify } from '../notifications/facade'
 import { RequestDetailPage, type RequestDetailRecord } from './RequestDetailPage'
 import { RequestForm, type RequestFormErrors, type RequestFormState, type RequestServerOption } from './RequestForm'
 import type { EventRecord } from './traceability'
+import { JsonMetadataDialog } from '../components/admin/JsonMetadataDialog'
 
 interface RequestRow extends RequestDetailRecord {}
 
@@ -167,6 +168,11 @@ export function RequestsPage() {
   const [detailRequest, setDetailRequest] = React.useState<RequestDetailRecord | null>(null)
   const [detailEvents, setDetailEvents] = React.useState<EventRecord[]>([])
   const [detailError, setDetailError] = React.useState('')
+  const [bodyDialog, setBodyDialog] = React.useState<{ open: boolean; title: string; body: unknown }>({
+    open: false,
+    title: 'Request Body',
+    body: null,
+  })
 
   const refreshGrid = () => setReloadToken((value) => value + 1)
 
@@ -317,6 +323,18 @@ export function RequestsPage() {
                   void openDetailDialog(params.row)
                 },
               },
+              {
+                id: 'view-body',
+                label: 'View Body',
+                icon: 'view',
+                onClick: () => {
+                  setBodyDialog({
+                    open: true,
+                    title: `Request Body: ${params.row.uid}`,
+                    body: params.row.payload ?? params.row.payloadBody,
+                  })
+                },
+              },
             ]}
           />
         ),
@@ -389,6 +407,16 @@ export function RequestsPage() {
           setDetailRequest(null)
           setDetailEvents([])
         }}
+      />
+
+      <JsonMetadataDialog
+        open={bodyDialog.open}
+        title={bodyDialog.title}
+        metadata={bodyDialog.body}
+        emptyMessage="No request body is available."
+        invalidMessage="The stored request body is not valid JSON. Showing the raw body."
+        onClose={() => setBodyDialog({ open: false, title: 'Request Body', body: null })}
+        onCopied={() => notify.success('Request body copied.')}
       />
     </Stack>
   )

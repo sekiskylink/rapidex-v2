@@ -58,8 +58,11 @@ export namespace main {
 	    themeMode: string;
 	    palettePreset: string;
 	    navCollapsed: boolean;
+	    showSukumadMenu: boolean;
+	    showAdministrationMenu: boolean;
 	    pinActionsColumnRight: boolean;
 	    dataGridBorderRadius: number;
+	    navLabels: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIPrefs(source);
@@ -70,8 +73,11 @@ export namespace main {
 	        this.themeMode = source["themeMode"];
 	        this.palettePreset = source["palettePreset"];
 	        this.navCollapsed = source["navCollapsed"];
+	        this.showSukumadMenu = source["showSukumadMenu"];
+	        this.showAdministrationMenu = source["showAdministrationMenu"];
 	        this.pinActionsColumnRight = source["pinActionsColumnRight"];
 	        this.dataGridBorderRadius = source["dataGridBorderRadius"];
+	        this.navLabels = source["navLabels"];
 	    }
 	}
 	export class Settings {
@@ -120,8 +126,11 @@ export namespace main {
 	    themeMode?: string;
 	    palettePreset?: string;
 	    navCollapsed?: boolean;
+	    showSukumadMenu?: boolean;
+	    showAdministrationMenu?: boolean;
 	    pinActionsColumnRight?: boolean;
 	    dataGridBorderRadius?: number;
+	    navLabels?: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIPrefsPatch(source);
@@ -132,8 +141,11 @@ export namespace main {
 	        this.themeMode = source["themeMode"];
 	        this.palettePreset = source["palettePreset"];
 	        this.navCollapsed = source["navCollapsed"];
+	        this.showSukumadMenu = source["showSukumadMenu"];
+	        this.showAdministrationMenu = source["showAdministrationMenu"];
 	        this.pinActionsColumnRight = source["pinActionsColumnRight"];
 	        this.dataGridBorderRadius = source["dataGridBorderRadius"];
+	        this.navLabels = source["navLabels"];
 	    }
 	}
 	export class SettingsPatch {
@@ -183,4 +195,3 @@ export namespace main {
 	
 
 }
-

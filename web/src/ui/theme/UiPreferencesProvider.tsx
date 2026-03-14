@@ -7,8 +7,11 @@ import {
   setPreset as persistPreset,
   setCollapseNavByDefault as persistCollapseNavByDefault,
   setShowFooter as persistShowFooter,
+  setShowSukumadMenu as persistShowSukumadMenu,
+  setShowAdministrationMenu as persistShowAdministrationMenu,
   setPinActionsColumnRight as persistPinActionsColumnRight,
   setDataGridBorderRadius as persistDataGridBorderRadius,
+  setNavLabel as persistNavLabel,
   type UiPreferences,
   type UiThemeMode,
 } from '../preferences'
@@ -21,8 +24,11 @@ interface UiPreferencesContextValue {
   setPreset: (preset: string) => void
   setCollapseNavByDefault: (collapseNavByDefault: boolean) => void
   setShowFooter: (showFooter: boolean) => void
+  setShowSukumadMenu: (showSukumadMenu: boolean) => void
+  setShowAdministrationMenu: (showAdministrationMenu: boolean) => void
   setPinActionsColumnRight: (pinActionsColumnRight: boolean) => void
   setDataGridBorderRadius: (dataGridBorderRadius: number) => void
+  setNavLabel: (id: string, label: string) => void
 }
 
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | undefined>(undefined)
@@ -39,8 +45,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(loaded.preset),
       collapseNavByDefault: loaded.collapseNavByDefault,
       showFooter: loaded.showFooter,
+      showSukumadMenu: loaded.showSukumadMenu,
+      showAdministrationMenu: loaded.showAdministrationMenu,
       pinActionsColumnRight: loaded.pinActionsColumnRight,
       dataGridBorderRadius: loaded.dataGridBorderRadius,
+      navLabels: loaded.navLabels,
     }
   })
 
@@ -55,8 +64,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
       pinActionsColumnRight: next.pinActionsColumnRight,
       dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
     })
   }, [])
 
@@ -67,8 +79,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
       pinActionsColumnRight: next.pinActionsColumnRight,
       dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
     })
   }, [])
 
@@ -79,8 +94,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
       pinActionsColumnRight: next.pinActionsColumnRight,
       dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
     })
   }, [])
 
@@ -91,8 +109,41 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
       pinActionsColumnRight: next.pinActionsColumnRight,
       dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
+    })
+  }, [])
+
+  const setShowSukumadMenu = React.useCallback((showSukumadMenu: boolean) => {
+    const next = persistShowSukumadMenu(showSukumadMenu)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
+      showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
+    })
+  }, [])
+
+  const setShowAdministrationMenu = React.useCallback((showAdministrationMenu: boolean) => {
+    const next = persistShowAdministrationMenu(showAdministrationMenu)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
+      showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
     })
   }, [])
 
@@ -103,8 +154,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
       pinActionsColumnRight: next.pinActionsColumnRight,
       dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
     })
   }, [])
 
@@ -115,8 +169,26 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       preset: sanitizePreset(next.preset),
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
       pinActionsColumnRight: next.pinActionsColumnRight,
       dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
+    })
+  }, [])
+
+  const setNavLabel = React.useCallback((id: string, label: string) => {
+    const next = persistNavLabel(id, label)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      collapseNavByDefault: next.collapseNavByDefault,
+      showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
     })
   }, [])
 
@@ -132,8 +204,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       setPreset,
       setCollapseNavByDefault,
       setShowFooter,
+      setShowSukumadMenu,
+      setShowAdministrationMenu,
       setPinActionsColumnRight,
       setDataGridBorderRadius,
+      setNavLabel,
     }),
     [
       prefs,
@@ -142,8 +217,11 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       setPreset,
       setCollapseNavByDefault,
       setShowFooter,
+      setShowSukumadMenu,
+      setShowAdministrationMenu,
       setPinActionsColumnRight,
       setDataGridBorderRadius,
+      setNavLabel,
     ],
   )
 

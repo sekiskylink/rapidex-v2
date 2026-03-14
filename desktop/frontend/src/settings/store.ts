@@ -101,6 +101,22 @@ function normalizeColumnVisibility(input: unknown): Record<string, boolean> {
   return result
 }
 
+function normalizeNavLabels(input: unknown): Record<string, string> {
+  if (!isObjectRecord(input)) {
+    return {}
+  }
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(input)) {
+    const nextKey = key.trim()
+    const nextValue = readString(value).trim()
+    if (!nextKey || !nextValue) {
+      continue
+    }
+    result[nextKey] = nextValue
+  }
+  return result
+}
+
 function normalizeTablePref(input: unknown): TablePrefsV1 {
   const record = isObjectRecord(input) ? input : {}
   const density =
@@ -147,6 +163,8 @@ function normalizeUiPrefs(input: unknown): UiPrefs {
     themeMode,
     palettePreset: palettePreset || defaultUiPrefs.palettePreset,
     navCollapsed: readBoolean(record.navCollapsed, defaultUiPrefs.navCollapsed),
+    showSukumadMenu: readBoolean(record.showSukumadMenu, defaultUiPrefs.showSukumadMenu),
+    showAdministrationMenu: readBoolean(record.showAdministrationMenu, defaultUiPrefs.showAdministrationMenu),
     pinActionsColumnRight: readBoolean(record.pinActionsColumnRight, defaultUiPrefs.pinActionsColumnRight),
     dataGridBorderRadius: readBoundedInteger(
       record.dataGridBorderRadius,
@@ -154,6 +172,7 @@ function normalizeUiPrefs(input: unknown): UiPrefs {
       4,
       32,
     ),
+    navLabels: normalizeNavLabels(record.navLabels),
   }
 }
 

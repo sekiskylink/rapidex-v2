@@ -34,6 +34,22 @@ interface HealthResponse {
   version?: string
 }
 
+const navigationLabelFields = [
+  { id: 'dashboard', label: 'Dashboard link' },
+  { id: 'settings', label: 'Settings link' },
+  { id: 'administration', label: 'Administration menu' },
+  { id: 'users', label: 'Users link' },
+  { id: 'roles', label: 'Roles link' },
+  { id: 'permissions', label: 'Permissions link' },
+  { id: 'audit', label: 'Audit link' },
+  { id: 'sukumad', label: 'Sukumad menu' },
+  { id: 'servers', label: 'Servers link' },
+  { id: 'requests', label: 'Requests link' },
+  { id: 'deliveries', label: 'Deliveries link' },
+  { id: 'jobs', label: 'Jobs link' },
+  { id: 'observability', label: 'Observability link' },
+] as const
+
 export function SettingsPage() {
   const auth = useAuth()
   const notify = useAppNotify()
@@ -44,8 +60,11 @@ export function SettingsPage() {
     setPreset,
     setCollapseNavByDefault,
     setShowFooter,
+    setShowSukumadMenu,
+    setShowAdministrationMenu,
     setPinActionsColumnRight,
     setDataGridBorderRadius,
+    setNavLabel,
   } = useUiPreferences()
   const [apiBaseUrlOverride, setApiBaseUrlOverrideValue] = React.useState(() => getApiBaseUrlOverride())
   const [testingConnection, setTestingConnection] = React.useState(false)
@@ -483,6 +502,37 @@ export function SettingsPage() {
             control={<Switch checked={prefs.showFooter} onChange={(event) => setShowFooter(event.target.checked)} />}
             label="Show footer on authenticated pages"
           />
+          <FormControlLabel
+            control={<Switch checked={prefs.showSukumadMenu} onChange={(event) => setShowSukumadMenu(event.target.checked)} />}
+            label="Show Sukumad menu group"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={prefs.showAdministrationMenu}
+                onChange={(event) => setShowAdministrationMenu(event.target.checked)}
+              />
+            }
+            label="Show Administration menu group"
+          />
+          <Divider />
+          <Typography variant="subtitle2">Navigation labels</Typography>
+          <Typography color="text.secondary">
+            Rename drawer links for this browser profile. Leaving a field blank restores the default label.
+          </Typography>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
+            {navigationLabelFields.map((field) => (
+              <TextField
+                key={field.id}
+                label={field.label}
+                value={prefs.navLabels[field.id] ?? ''}
+                onChange={(event) => setNavLabel(field.id, event.target.value)}
+                placeholder="Use default label"
+                size="small"
+                sx={{ minWidth: { xs: '100%', md: 240 } }}
+              />
+            ))}
+          </Stack>
         </Stack>
       </Paper>
 

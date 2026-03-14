@@ -213,6 +213,37 @@ describe('web auth routes', () => {
     expect(await screen.findByRole('heading', { name: 'BasePro Web', level: 1 })).toBeInTheDocument()
   })
 
+  it('applies local navigation visibility and label preferences', async () => {
+    window.localStorage.setItem(
+      UI_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        showSukumadMenu: false,
+        showAdministrationMenu: false,
+        navLabels: {
+          dashboard: 'Home',
+        },
+      }),
+    )
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 1,
+        username: 'admin',
+        roles: ['Admin'],
+        permissions: ['users.read', 'settings.write', 'requests.read'],
+      },
+    })
+
+    renderWithRouter('/dashboard')
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Toggle Sukumad menu' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Toggle Administration menu' })).not.toBeInTheDocument()
+  })
+
   it('renders Sukumad servers route and navigation when permission is granted', async () => {
     setAuthSnapshot({
       isAuthenticated: true,

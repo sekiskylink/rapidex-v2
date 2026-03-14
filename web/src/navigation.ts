@@ -1,7 +1,21 @@
 import { getAuthSnapshot, type AuthUser } from './auth/state'
 import { authenticatedNavigationRegistry, canAccessNavigationPath } from './registry/navigation'
 
-export function buildNavigation(user: AuthUser | null | undefined = getAuthSnapshot().user) {
+interface NavigationOptions {
+  labels?: Record<string, string>
+  showAdministration?: boolean
+  showSukumad?: boolean
+}
+
+function resolveLabel(id: string, fallback: string, labels?: Record<string, string>) {
+  const next = labels?.[id]?.trim()
+  return next || fallback
+}
+
+export function buildNavigation(
+  user: AuthUser | null | undefined = getAuthSnapshot().user,
+  options: NavigationOptions = {},
+) {
   const topLevel: Array<{ key: string; label: string; path: string; visible: boolean }> = []
   const administrationChildren: Array<{ key: string; label: string; path: string; visible: boolean }> = []
   const sukumadChildren: Array<{ key: string; label: string; path: string; visible: boolean }> = []
@@ -18,7 +32,7 @@ export function buildNavigation(user: AuthUser | null | undefined = getAuthSnaps
         }
         administrationChildren.push({
           key: child.id,
-          label: child.label,
+          label: resolveLabel(child.id, child.label, options.labels),
           path: child.path,
           visible: true,
         })
@@ -36,7 +50,7 @@ export function buildNavigation(user: AuthUser | null | undefined = getAuthSnaps
         }
         sukumadChildren.push({
           key: child.id,
-          label: child.label,
+          label: resolveLabel(child.id, child.label, options.labels),
           path: child.path,
           visible: true,
         })
@@ -52,7 +66,7 @@ export function buildNavigation(user: AuthUser | null | undefined = getAuthSnaps
     }
     topLevel.push({
       key: item.id,
-      label: item.label,
+      label: resolveLabel(item.id, item.label, options.labels),
       path: item.path,
       visible: true,
     })
@@ -60,15 +74,15 @@ export function buildNavigation(user: AuthUser | null | undefined = getAuthSnaps
 
   const administration = {
     key: 'administration',
-    label: 'Administration',
+    label: resolveLabel('administration', 'Administration', options.labels),
     children: administrationChildren,
-    visible: administrationChildren.length > 0,
+    visible: administrationChildren.length > 0 && options.showAdministration !== false,
   }
   const sukumad = {
     key: 'sukumad',
-    label: 'Sukumad',
+    label: resolveLabel('sukumad', 'Sukumad', options.labels),
     children: sukumadChildren,
-    visible: sukumadChildren.length > 0,
+    visible: sukumadChildren.length > 0 && options.showSukumad !== false,
   }
 
   return {

@@ -35,19 +35,25 @@ type SettingsPatch struct {
 }
 
 type UIPrefs struct {
-	ThemeMode             string `json:"themeMode"`
-	PalettePreset         string `json:"palettePreset"`
-	NavCollapsed          bool   `json:"navCollapsed"`
-	PinActionsColumnRight bool   `json:"pinActionsColumnRight"`
-	DataGridBorderRadius  int    `json:"dataGridBorderRadius"`
+	ThemeMode              string            `json:"themeMode"`
+	PalettePreset          string            `json:"palettePreset"`
+	NavCollapsed           bool              `json:"navCollapsed"`
+	ShowSukumadMenu        bool              `json:"showSukumadMenu"`
+	ShowAdministrationMenu bool              `json:"showAdministrationMenu"`
+	PinActionsColumnRight  bool              `json:"pinActionsColumnRight"`
+	DataGridBorderRadius   int               `json:"dataGridBorderRadius"`
+	NavLabels              map[string]string `json:"navLabels"`
 }
 
 type UIPrefsPatch struct {
-	ThemeMode             *string `json:"themeMode,omitempty"`
-	PalettePreset         *string `json:"palettePreset,omitempty"`
-	NavCollapsed          *bool   `json:"navCollapsed,omitempty"`
-	PinActionsColumnRight *bool   `json:"pinActionsColumnRight,omitempty"`
-	DataGridBorderRadius  *int    `json:"dataGridBorderRadius,omitempty"`
+	ThemeMode              *string            `json:"themeMode,omitempty"`
+	PalettePreset          *string            `json:"palettePreset,omitempty"`
+	NavCollapsed           *bool              `json:"navCollapsed,omitempty"`
+	ShowSukumadMenu        *bool              `json:"showSukumadMenu,omitempty"`
+	ShowAdministrationMenu *bool              `json:"showAdministrationMenu,omitempty"`
+	PinActionsColumnRight  *bool              `json:"pinActionsColumnRight,omitempty"`
+	DataGridBorderRadius   *int               `json:"dataGridBorderRadius,omitempty"`
+	NavLabels              *map[string]string `json:"navLabels,omitempty"`
 }
 
 type TablePrefs struct {
@@ -121,11 +127,20 @@ func (a *App) SaveSettings(patch SettingsPatch) (Settings, error) {
 		if patch.UIPrefs.NavCollapsed != nil {
 			next.UIPrefs.NavCollapsed = *patch.UIPrefs.NavCollapsed
 		}
+		if patch.UIPrefs.ShowSukumadMenu != nil {
+			next.UIPrefs.ShowSukumadMenu = *patch.UIPrefs.ShowSukumadMenu
+		}
+		if patch.UIPrefs.ShowAdministrationMenu != nil {
+			next.UIPrefs.ShowAdministrationMenu = *patch.UIPrefs.ShowAdministrationMenu
+		}
 		if patch.UIPrefs.PinActionsColumnRight != nil {
 			next.UIPrefs.PinActionsColumnRight = *patch.UIPrefs.PinActionsColumnRight
 		}
 		if patch.UIPrefs.DataGridBorderRadius != nil {
 			next.UIPrefs.DataGridBorderRadius = *patch.UIPrefs.DataGridBorderRadius
+		}
+		if patch.UIPrefs.NavLabels != nil {
+			next.UIPrefs.NavLabels = *patch.UIPrefs.NavLabels
 		}
 	}
 	if patch.TablePrefs != nil {
@@ -156,11 +171,14 @@ func defaultSettings() Settings {
 		AuthMode:              "password",
 		RequestTimeoutSeconds: 15,
 		UIPrefs: UIPrefs{
-			ThemeMode:             "system",
-			PalettePreset:         "ocean",
-			NavCollapsed:          false,
-			PinActionsColumnRight: true,
-			DataGridBorderRadius:  12,
+			ThemeMode:              "system",
+			PalettePreset:          "ocean",
+			NavCollapsed:           false,
+			ShowSukumadMenu:        true,
+			ShowAdministrationMenu: true,
+			PinActionsColumnRight:  true,
+			DataGridBorderRadius:   12,
+			NavLabels:              map[string]string{},
 		},
 		TablePrefs: map[string]TablePrefs{},
 	}
@@ -182,12 +200,25 @@ func normalizeSettings(in Settings) Settings {
 	if out.UIPrefs.PalettePreset == "" {
 		out.UIPrefs.PalettePreset = "ocean"
 	}
+	if out.UIPrefs.NavLabels == nil {
+		out.UIPrefs.NavLabels = map[string]string{}
+	}
 	if out.UIPrefs.DataGridBorderRadius <= 0 {
 		out.UIPrefs.DataGridBorderRadius = 12
 		if !out.UIPrefs.PinActionsColumnRight {
 			out.UIPrefs.PinActionsColumnRight = true
 		}
 	}
+	normalizedLabels := make(map[string]string, len(out.UIPrefs.NavLabels))
+	for key, value := range out.UIPrefs.NavLabels {
+		nextKey := strings.TrimSpace(key)
+		nextValue := strings.TrimSpace(value)
+		if nextKey == "" || nextValue == "" {
+			continue
+		}
+		normalizedLabels[nextKey] = nextValue
+	}
+	out.UIPrefs.NavLabels = normalizedLabels
 	if out.AuthMode != "api_token" {
 		out.APIToken = nil
 	} else if out.APIToken != nil {

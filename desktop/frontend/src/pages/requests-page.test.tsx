@@ -389,4 +389,91 @@ describe('desktop requests page', () => {
     expect(await screen.findByRole('heading', { name: 'Requests', level: 1 })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create Request' })).not.toBeInTheDocument()
   })
+
+  it('opens request body in a formatted dialog from row actions', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Staff'],
+              permissions: ['requests.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/requests?')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 10,
+                  uid: 'req-10',
+                  sourceSystem: 'emr',
+                  destinationServerId: 3,
+                  destinationServerName: 'DHIS2 Uganda',
+                  batchId: 'batch-10',
+                  correlationId: 'corr-10',
+                  idempotencyKey: 'idem-10',
+                  payloadBody: '{"trackedEntity":"body-10","program":"beta"}',
+                  payloadFormat: 'json',
+                  payload: { trackedEntity: 'body-10', program: 'beta' },
+                  urlSuffix: '/api/data',
+                  status: 'pending',
+                  statusReason: '',
+                  deferredUntil: null,
+                  extras: {},
+                  createdAt: '2026-03-10T09:00:00Z',
+                  updatedAt: '2026-03-10T10:00:00Z',
+                  latestDeliveryUid: 'del-10',
+                  latestDeliveryStatus: 'pending',
+                  latestAsyncTaskUid: '',
+                  latestAsyncState: '',
+                  latestAsyncRemoteJobId: '',
+                  latestAsyncPollUrl: '',
+                  awaitingAsync: false,
+                  targets: [],
+                  dependencies: [],
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/requests', store)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for req-10' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View Body' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Request Body: req-10' })
+    expect(within(dialog).getByText('Formatted JSON')).toBeInTheDocument()
+    expect(within(dialog).getByText(/trackedEntity/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/program/)).toBeInTheDocument()
+  })
 })

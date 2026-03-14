@@ -29,6 +29,22 @@ import { THEME_MODES, type AppSettings, type ThemeMode } from '../settings/types
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
 
+const navigationLabelFields = [
+  { id: 'dashboard', label: 'Dashboard link' },
+  { id: 'settings', label: 'Settings link' },
+  { id: 'administration', label: 'Administration menu' },
+  { id: 'users', label: 'Users link' },
+  { id: 'roles', label: 'Roles link' },
+  { id: 'permissions', label: 'Permissions link' },
+  { id: 'audit', label: 'Audit link' },
+  { id: 'sukumad', label: 'Sukumad menu' },
+  { id: 'servers', label: 'Servers link' },
+  { id: 'requests', label: 'Requests link' },
+  { id: 'deliveries', label: 'Deliveries link' },
+  { id: 'jobs', label: 'Jobs link' },
+  { id: 'observability', label: 'Observability link' },
+] as const
+
 export function SettingsPage() {
   const router = useRouter()
   const navigate = useNavigate()
@@ -39,6 +55,9 @@ export function SettingsPage() {
     setPalettePreset,
     setPinActionsColumnRight,
     setDataGridBorderRadius,
+    setShowSukumadMenu,
+    setShowAdministrationMenu,
+    setNavLabel,
     presets,
   } = useThemePreferences()
   const principal = useSessionPrincipal()
@@ -420,6 +439,34 @@ export function SettingsPage() {
                 </Button>
               </Stack>
             </Box>
+            <Divider />
+            <Typography variant="subtitle2">Navigation</Typography>
+            <FormControlLabel
+              control={<Switch checked={prefs.showSukumadMenu} onChange={(event) => void setShowSukumadMenu(event.target.checked)} />}
+              label="Show Sukumad menu group"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={prefs.showAdministrationMenu}
+                  onChange={(event) => void setShowAdministrationMenu(event.target.checked)}
+                />
+              }
+              label="Show Administration menu group"
+            />
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
+              {navigationLabelFields.map((field) => (
+                <TextField
+                  key={field.id}
+                  label={field.label}
+                  value={prefs.navLabels[field.id] ?? ''}
+                  onChange={(event) => void setNavLabel(field.id, event.target.value)}
+                  placeholder="Use default label"
+                  size="small"
+                  sx={{ minWidth: { xs: '100%', md: 240 } }}
+                />
+              ))}
+            </Stack>
             <Divider />
             <Typography variant="subtitle2">Data Grid defaults</Typography>
             <FormControlLabel

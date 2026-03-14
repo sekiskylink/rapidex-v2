@@ -15,7 +15,18 @@ export interface NavigationGroup {
   visible: boolean
 }
 
-export function buildNavigation(principal: SessionPrincipal | null | undefined) {
+interface NavigationOptions {
+  labels?: Record<string, string>
+  showAdministration?: boolean
+  showSukumad?: boolean
+}
+
+function resolveLabel(id: string, fallback: string, labels?: Record<string, string>) {
+  const next = labels?.[id]?.trim()
+  return next || fallback
+}
+
+export function buildNavigation(principal: SessionPrincipal | null | undefined, options: NavigationOptions = {}) {
   const topLevel: NavigationLeaf[] = []
   const administrationChildren: NavigationLeaf[] = []
   const sukumadChildren: NavigationLeaf[] = []
@@ -32,7 +43,7 @@ export function buildNavigation(principal: SessionPrincipal | null | undefined) 
         }
         administrationChildren.push({
           key: child.id,
-          label: child.label,
+          label: resolveLabel(child.id, child.label, options.labels),
           path: child.path,
           visible: true,
         })
@@ -50,7 +61,7 @@ export function buildNavigation(principal: SessionPrincipal | null | undefined) 
         }
         sukumadChildren.push({
           key: child.id,
-          label: child.label,
+          label: resolveLabel(child.id, child.label, options.labels),
           path: child.path,
           visible: true,
         })
@@ -69,7 +80,7 @@ export function buildNavigation(principal: SessionPrincipal | null | undefined) 
 
     topLevel.push({
       key: item.id,
-      label: item.label,
+      label: resolveLabel(item.id, item.label, options.labels),
       path: item.path,
       visible: true,
     })
@@ -77,15 +88,15 @@ export function buildNavigation(principal: SessionPrincipal | null | undefined) 
 
   const administration: NavigationGroup = {
     key: 'administration',
-    label: 'Administration',
+    label: resolveLabel('administration', 'Administration', options.labels),
     children: administrationChildren,
-    visible: administrationChildren.length > 0,
+    visible: administrationChildren.length > 0 && options.showAdministration !== false,
   }
   const sukumad: NavigationGroup = {
     key: 'sukumad',
-    label: 'Sukumad',
+    label: resolveLabel('sukumad', 'Sukumad', options.labels),
     children: sukumadChildren,
-    visible: sukumadChildren.length > 0,
+    visible: sukumadChildren.length > 0 && options.showSukumad !== false,
   }
 
   return {

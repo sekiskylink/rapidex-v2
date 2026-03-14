@@ -289,6 +289,61 @@ describe('requests page', () => {
     expect(within(dialog).getByText(/priority/)).toBeInTheDocument()
   })
 
+  it('opens request body in a formatted dialog from row actions', async () => {
+    authenticate(['requests.read'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/requests?')) {
+        return {
+          items: [
+            {
+              id: 8,
+              uid: 'req-8',
+              sourceSystem: 'emr',
+              destinationServerId: 4,
+              destinationServerName: 'DHIS2 Uganda',
+              batchId: 'batch-8',
+              correlationId: 'corr-8',
+              idempotencyKey: 'idem-8',
+              payloadBody: '{"trackedEntity":"body-8","program":"alpha"}',
+              payloadFormat: 'json',
+              payload: { trackedEntity: 'body-8', program: 'alpha' },
+              urlSuffix: '/api/data',
+              status: 'pending',
+              statusReason: '',
+              deferredUntil: null,
+              extras: {},
+              createdAt: '2026-03-10T09:00:00Z',
+              updatedAt: '2026-03-10T10:00:00Z',
+              latestDeliveryUid: 'del-8',
+              latestDeliveryStatus: 'pending',
+              latestAsyncTaskUid: '',
+              latestAsyncState: '',
+              latestAsyncRemoteJobId: '',
+              latestAsyncPollUrl: '',
+              awaitingAsync: false,
+              targets: [],
+              dependencies: [],
+            },
+          ],
+          totalCount: 1,
+          page: 1,
+          pageSize: 25,
+        }
+      }
+      return {}
+    })
+
+    renderRoute('/requests')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for req-8' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View Body' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Request Body: req-8' })
+    expect(within(dialog).getByText('Formatted JSON')).toBeInTheDocument()
+    expect(within(dialog).getByText(/trackedEntity/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/program/)).toBeInTheDocument()
+  })
+
   it('hides create button without write permission', async () => {
     authenticate(['requests.read'])
     apiRequestSpy.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 })

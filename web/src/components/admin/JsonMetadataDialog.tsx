@@ -1,11 +1,13 @@
 import React from 'react'
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
+import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
 import { ContentCopyRoundedIcon } from '../../ui/icons'
 
 interface JsonMetadataDialogProps {
   open: boolean
   title?: string
   metadata: unknown
+  emptyMessage?: string
+  invalidMessage?: string
   onClose: () => void
   onCopied?: () => void
 }
@@ -35,6 +37,8 @@ export function JsonMetadataDialog({
   open,
   title = 'Audit Metadata',
   metadata,
+  emptyMessage = 'No metadata available.',
+  invalidMessage = 'Metadata is not valid JSON.',
   onClose,
   onCopied,
 }: JsonMetadataDialogProps) {
@@ -54,28 +58,57 @@ export function JsonMetadataDialog({
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5}>
-          {parsed.kind === 'empty' ? <Typography color="text.secondary">No metadata available.</Typography> : null}
-          {parsed.kind === 'invalid' ? <Typography color="warning.main">Metadata is not valid JSON.</Typography> : null}
+          {parsed.kind === 'empty' ? <Typography color="text.secondary">{emptyMessage}</Typography> : null}
+          {parsed.kind === 'invalid' ? <Typography color="warning.main">{invalidMessage}</Typography> : null}
           {parsed.kind !== 'empty' ? (
-            <Typography
-              component="pre"
+            <Box
               sx={{
-                m: 0,
+                position: 'relative',
                 maxHeight: 420,
                 overflow: 'auto',
-                p: 1.5,
-                borderRadius: 1,
+                p: 2,
+                borderRadius: 2,
                 border: '1px solid',
                 borderColor: 'divider',
                 bgcolor: 'background.default',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                fontSize: 13,
+                backgroundImage: (theme) =>
+                  `linear-gradient(180deg, ${theme.palette.action.hover} 0%, ${theme.palette.background.default} 100%)`,
+                boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.action.selected}`,
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  left: 0,
+                  top: 10,
+                  bottom: 10,
+                  width: 4,
+                  borderRadius: '0 999px 999px 0',
+                  bgcolor: 'primary.main',
+                },
               }}
             >
-              {parsed.value}
-            </Typography>
+              <Stack spacing={1}>
+                <Chip
+                  label={parsed.kind === 'invalid' ? 'Raw body' : 'Formatted JSON'}
+                  size="small"
+                  color={parsed.kind === 'invalid' ? 'warning' : 'primary'}
+                  sx={{ alignSelf: 'flex-start' }}
+                />
+                <Typography
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    pl: 1,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    fontSize: 13,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {parsed.value}
+                </Typography>
+              </Stack>
+            </Box>
           ) : null}
         </Stack>
       </DialogContent>

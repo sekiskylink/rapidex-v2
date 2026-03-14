@@ -5,8 +5,11 @@ export interface UiPreferences {
   preset: string
   collapseNavByDefault: boolean
   showFooter: boolean
+  showSukumadMenu: boolean
+  showAdministrationMenu: boolean
   pinActionsColumnRight: boolean
   dataGridBorderRadius: number
+  navLabels: Record<string, string>
 }
 
 export const UI_PREFERENCES_STORAGE_KEY = 'basepro.web.ui_preferences'
@@ -16,8 +19,11 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   preset: 'oceanic',
   collapseNavByDefault: false,
   showFooter: true,
+  showSukumadMenu: true,
+  showAdministrationMenu: true,
   pinActionsColumnRight: true,
   dataGridBorderRadius: 12,
+  navLabels: {},
 }
 
 function isValidMode(value: unknown): value is UiThemeMode {
@@ -33,6 +39,25 @@ function sanitizeBorderRadius(value: unknown) {
     return DEFAULT_PREFERENCES.dataGridBorderRadius
   }
   return rounded
+}
+
+function sanitizeNavLabels(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  const result: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== 'string') {
+      continue
+    }
+    const nextKey = key.trim()
+    const nextValue = raw.trim()
+    if (!nextKey || !nextValue) {
+      continue
+    }
+    result[nextKey] = nextValue
+  }
+  return result
 }
 
 export function getDefaultPreferences(): UiPreferences {
@@ -59,11 +84,18 @@ export function loadPrefs(): UiPreferences {
           ? parsed.collapseNavByDefault
           : DEFAULT_PREFERENCES.collapseNavByDefault,
       showFooter: typeof parsed.showFooter === 'boolean' ? parsed.showFooter : DEFAULT_PREFERENCES.showFooter,
+      showSukumadMenu:
+        typeof parsed.showSukumadMenu === 'boolean' ? parsed.showSukumadMenu : DEFAULT_PREFERENCES.showSukumadMenu,
+      showAdministrationMenu:
+        typeof parsed.showAdministrationMenu === 'boolean'
+          ? parsed.showAdministrationMenu
+          : DEFAULT_PREFERENCES.showAdministrationMenu,
       pinActionsColumnRight:
         typeof parsed.pinActionsColumnRight === 'boolean'
           ? parsed.pinActionsColumnRight
           : DEFAULT_PREFERENCES.pinActionsColumnRight,
       dataGridBorderRadius: sanitizeBorderRadius(parsed.dataGridBorderRadius),
+      navLabels: sanitizeNavLabels(parsed.navLabels),
     }
   } catch {
     return getDefaultPreferences()
@@ -115,6 +147,24 @@ export function setShowFooter(showFooter: boolean) {
   return next
 }
 
+export function setShowSukumadMenu(showSukumadMenu: boolean) {
+  const next = {
+    ...loadPrefs(),
+    showSukumadMenu,
+  }
+  savePrefs(next)
+  return next
+}
+
+export function setShowAdministrationMenu(showAdministrationMenu: boolean) {
+  const next = {
+    ...loadPrefs(),
+    showAdministrationMenu,
+  }
+  savePrefs(next)
+  return next
+}
+
 export function setPinActionsColumnRight(pinActionsColumnRight: boolean) {
   const next = {
     ...loadPrefs(),
@@ -128,6 +178,27 @@ export function setDataGridBorderRadius(dataGridBorderRadius: number) {
   const next = {
     ...loadPrefs(),
     dataGridBorderRadius: sanitizeBorderRadius(dataGridBorderRadius),
+  }
+  savePrefs(next)
+  return next
+}
+
+export function setNavLabel(id: string, label: string) {
+  const prefs = loadPrefs()
+  const key = id.trim()
+  if (!key) {
+    return prefs
+  }
+  const nextLabels = { ...prefs.navLabels }
+  const nextLabel = label.trim()
+  if (nextLabel) {
+    nextLabels[key] = nextLabel
+  } else {
+    delete nextLabels[key]
+  }
+  const next = {
+    ...prefs,
+    navLabels: nextLabels,
   }
   savePrefs(next)
   return next

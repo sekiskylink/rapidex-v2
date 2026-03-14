@@ -11,8 +11,11 @@ interface ThemePreferencesContextValue {
   setThemeMode: (mode: ThemeMode) => Promise<void>
   setPalettePreset: (preset: string) => Promise<void>
   setNavCollapsed: (collapsed: boolean) => Promise<void>
+  setShowSukumadMenu: (enabled: boolean) => Promise<void>
+  setShowAdministrationMenu: (enabled: boolean) => Promise<void>
   setPinActionsColumnRight: (enabled: boolean) => Promise<void>
   setDataGridBorderRadius: (radius: number) => Promise<void>
+  setNavLabel: (id: string, label: string) => Promise<void>
   presets: typeof palettePresets
 }
 
@@ -153,6 +156,20 @@ export function AppThemeProvider({
     [persistPrefs, prefs],
   )
 
+  const setShowSukumadMenu = React.useCallback(
+    async (enabled: boolean) => {
+      await persistPrefs({ ...prefs, showSukumadMenu: enabled })
+    },
+    [persistPrefs, prefs],
+  )
+
+  const setShowAdministrationMenu = React.useCallback(
+    async (enabled: boolean) => {
+      await persistPrefs({ ...prefs, showAdministrationMenu: enabled })
+    },
+    [persistPrefs, prefs],
+  )
+
   const setPinActionsColumnRight = React.useCallback(
     async (enabled: boolean) => {
       await persistPrefs({ ...prefs, pinActionsColumnRight: enabled })
@@ -163,6 +180,24 @@ export function AppThemeProvider({
   const setDataGridBorderRadius = React.useCallback(
     async (radius: number) => {
       await persistPrefs({ ...prefs, dataGridBorderRadius: radius })
+    },
+    [persistPrefs, prefs],
+  )
+
+  const setNavLabel = React.useCallback(
+    async (id: string, label: string) => {
+      const key = id.trim()
+      if (!key) {
+        return
+      }
+      const nextLabels = { ...prefs.navLabels }
+      const nextLabel = label.trim()
+      if (nextLabel) {
+        nextLabels[key] = nextLabel
+      } else {
+        delete nextLabels[key]
+      }
+      await persistPrefs({ ...prefs, navLabels: nextLabels })
     },
     [persistPrefs, prefs],
   )
@@ -184,8 +219,11 @@ export function AppThemeProvider({
       setThemeMode,
       setPalettePreset,
       setNavCollapsed,
+      setShowSukumadMenu,
+      setShowAdministrationMenu,
       setPinActionsColumnRight,
       setDataGridBorderRadius,
+      setNavLabel,
       presets: palettePresets,
     }),
     [
@@ -194,8 +232,11 @@ export function AppThemeProvider({
       setThemeMode,
       setPalettePreset,
       setNavCollapsed,
+      setShowSukumadMenu,
+      setShowAdministrationMenu,
       setPinActionsColumnRight,
       setDataGridBorderRadius,
+      setNavLabel,
     ],
   )
 

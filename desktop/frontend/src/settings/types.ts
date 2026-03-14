@@ -8,8 +8,11 @@ export interface UiPrefs {
   themeMode: ThemeMode
   palettePreset: string
   navCollapsed: boolean
+  showSukumadMenu: boolean
+  showAdministrationMenu: boolean
   pinActionsColumnRight: boolean
   dataGridBorderRadius: number
+  navLabels: Record<string, string>
 }
 
 export interface TablePinnedColumns {
@@ -58,8 +61,11 @@ export const defaultUiPrefs: UiPrefs = {
   themeMode: 'system',
   palettePreset: 'ocean',
   navCollapsed: false,
+  showSukumadMenu: true,
+  showAdministrationMenu: true,
   pinActionsColumnRight: true,
   dataGridBorderRadius: 12,
+  navLabels: {},
 }
 
 export const defaultSettings: AppSettings = {
