@@ -65,12 +65,13 @@ describe('web registries', () => {
       'roles',
       'permissions',
       'audit',
+      'settings',
     ])
   })
 
   it('defines grouped navigation with administration and Sukumad children', () => {
     const admin = authenticatedNavigationRegistry.find((item) => item.id === 'administration')
-    expect(admin?.children?.map((item) => item.id)).toEqual(['users', 'roles', 'permissions', 'audit'])
+    expect(admin?.children?.map((item) => item.id)).toEqual(['users', 'roles', 'permissions', 'audit', 'settings'])
     const sukumad = authenticatedNavigationRegistry.find((item) => item.id === 'sukumad')
     expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'observability'])
   })

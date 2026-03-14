@@ -3232,6 +3232,39 @@ Verification for this update:
 ### Known follow-ups
 - Existing non-blocking warnings remain in build output from third-party bundles (`'use client'` directives and chunk-size warning).
 
+## Milestone — Administration Settings Navigation + Sukumad Demo Seed Complete
+
+### What changed
+- Moved `Settings` under the existing `Administration` navigation group in both desktop and web while preserving permission-based visibility.
+- Updated both app shells so the `Administration` group auto-expands when the current route is `/settings`.
+- Aligned navigation registry metadata and route tests in desktop and web so grouped administration items render consistently.
+- Added repeatable Sukumad demo seed command at `backend/cmd/seed-sukumad-demo` to create sample integration servers and requests for UI review.
+- Added backend demo seed service under `backend/internal/sukumad/devseed` that recreates a clean demo dataset targeting `https://play.im.dhis2.org/dev`.
+- Demo seed currently creates 3 integration servers and 5 requests covering completed, pending, blocked, failed, and async-processing display states.
+- Corrected Sukumad request SQL persistence so `status_reason` honors the current non-null schema and dependency status scans map correctly in Postgres-backed flows.
+- Wired the demo seed command so seeded requests create durable delivery attempts before status transitions are applied.
+- Saved prompt traceability copy in `docs/prompts/2026-03-14-admin-settings-nav-and-demo-seed.md` (gitignored).
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`
+- `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`
+- `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`
+- `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`
+- `cd backend && GOCACHE=/tmp/go-build go run ./cmd/seed-sukumad-demo`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Web build: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`)
+- Desktop tests: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Desktop build: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`)
+- Demo seed command: PASS (`cd backend && GOCACHE=/tmp/go-build go run ./cmd/seed-sukumad-demo`)
+
+### Known follow-ups
+- Frontend verification still emits existing non-blocking warnings from MUI/jsdom anchor handling and upstream Vite bundle warnings; behavior remains unchanged.
+- Demo seed uses fixed sample payloads against the DHIS2 play instance for display/testing purposes and should not be used as production fixture data.
+
 ## Planned Milestone — Shared Administration UX + Parity (Upcoming)
 
 ### Planned scope

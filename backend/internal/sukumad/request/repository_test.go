@@ -201,7 +201,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 			"json",
 			"/api/data",
 			"pending",
-			nil,
+			"",
 			nil,
 			`{"priority":"high"}`,
 			int64(9),

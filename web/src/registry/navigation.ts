@@ -80,15 +80,15 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
         group: 'administration',
         requiredPermissions: ['audit.read'],
       },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: 'settings',
+        path: '/settings',
+        group: 'administration',
+        visibleWhen: ({ user }) => hasAdminRoleForUser(user) || hasPermissionForUser(user, 'settings.write'),
+      },
     ],
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: 'settings',
-    path: '/settings',
-    group: 'settings',
-    visibleWhen: ({ user }) => hasAdminRoleForUser(user) || hasPermissionForUser(user, 'settings.write'),
   },
   {
     id: 'sukumad',

@@ -259,7 +259,7 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 		params.PayloadFormat,
 		nullIfEmpty(params.URLSuffix),
 		params.Status,
-		nullIfEmpty(params.StatusReason),
+		params.StatusReason,
 		params.DeferredUntil,
 		string(extras),
 		params.CreatedBy,
@@ -275,7 +275,7 @@ func (r *SQLRepository) UpdateRequestStatus(ctx context.Context, id int64, statu
 	if err := r.db.GetContext(ctx, &updatedID, `
 		UPDATE exchange_requests
 		SET status = $2,
-		    status_reason = NULLIF($3, ''),
+		    status_reason = $3,
 		    deferred_until = $4,
 		    updated_at = NOW()
 		WHERE id = $1

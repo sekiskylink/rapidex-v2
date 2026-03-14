@@ -1,4 +1,5 @@
 import { getAuthSnapshot, type AuthUser } from './auth/state'
+import { isNavigationItemEnabled } from './registry/moduleEnablement'
 import { authenticatedNavigationRegistry, canAccessNavigationPath } from './registry/navigation'
 
 interface NavigationOptions {
@@ -76,7 +77,10 @@ export function buildNavigation(
     key: 'administration',
     label: resolveLabel('administration', 'Administration', options.labels),
     children: administrationChildren,
-    visible: administrationChildren.length > 0 && options.showAdministration !== false,
+    visible:
+      administrationChildren.length > 0 &&
+      options.showAdministration !== false &&
+      isNavigationItemEnabled('administration'),
   }
   const sukumad = {
     key: 'sukumad',

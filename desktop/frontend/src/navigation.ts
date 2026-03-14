@@ -1,4 +1,5 @@
 import type { SessionPrincipal } from './auth/session'
+import { isNavigationItemEnabled } from './registry/moduleEnablement'
 import { authenticatedNavigationRegistry, canAccessNavigationPath } from './registry/navigation'
 
 export interface NavigationLeaf {
@@ -90,7 +91,10 @@ export function buildNavigation(principal: SessionPrincipal | null | undefined, 
     key: 'administration',
     label: resolveLabel('administration', 'Administration', options.labels),
     children: administrationChildren,
-    visible: administrationChildren.length > 0 && options.showAdministration !== false,
+    visible:
+      administrationChildren.length > 0 &&
+      options.showAdministration !== false &&
+      isNavigationItemEnabled('administration'),
   }
   const sukumad: NavigationGroup = {
     key: 'sukumad',

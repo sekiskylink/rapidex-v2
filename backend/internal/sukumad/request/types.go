@@ -155,10 +155,10 @@ type DependencyRef struct {
 }
 
 type DependencyStatus struct {
-	RequestID   int64
-	RequestUID  string
-	Status      string
-	StatusReason string
+	RequestID    int64  `db:"request_id"`
+	RequestUID   string `db:"request_uid"`
+	Status       string `db:"status"`
+	StatusReason string `db:"status_reason"`
 }
 
 type CreateTargetParams struct {

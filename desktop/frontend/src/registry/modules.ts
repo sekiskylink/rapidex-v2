@@ -34,7 +34,7 @@ export const moduleRegistry = [
     navGroup: 'administration',
     basePath: '/users',
     permissions: ['users.read', 'users.write', 'audit.read'],
-    navItems: ['users', 'roles', 'permissions', 'audit'],
+    navItems: ['users', 'roles', 'permissions', 'audit', 'settings'],
     metadata: {
       description: 'Core RBAC and audit administration pages.',
     },
@@ -42,7 +42,7 @@ export const moduleRegistry = [
   {
     id: 'settings',
     label: 'Settings',
-    navGroup: 'settings',
+    navGroup: 'administration',
     basePath: '/settings',
     permissions: ['settings.read', 'settings.write'],
     navItems: ['settings'],

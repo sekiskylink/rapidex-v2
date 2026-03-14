@@ -130,6 +130,7 @@ describe('app shell routes', () => {
     expect(screen.getByRole('button', { name: 'Roles' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Permissions' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
     await waitFor(() => {
@@ -559,6 +560,47 @@ describe('app shell routes', () => {
     expect(screen.queryByRole('button', { name: 'Roles' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Permissions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Audit Log' })).not.toBeInTheDocument()
+  })
+
+  it('shows Settings inside Administration when settings.write is granted', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 11,
+              username: 'settings-writer',
+              roles: ['Staff'],
+              permissions: ['settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings', store)
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
   })
 
   it('hides administration navigation and shows module-disabled state when administration module is disabled', async () => {

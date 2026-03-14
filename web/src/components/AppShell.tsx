@@ -85,7 +85,8 @@ export function AppShell() {
     pathname.startsWith('/users') ||
       pathname.startsWith('/roles') ||
       pathname.startsWith('/permissions') ||
-      pathname.startsWith('/audit'),
+      pathname.startsWith('/audit') ||
+      pathname.startsWith('/settings'),
   )
   const [sukumadExpanded, setSukumadExpanded] = React.useState(
     pathname.startsWith('/servers') ||
@@ -119,7 +120,8 @@ export function AppShell() {
       pathname.startsWith('/users') ||
       pathname.startsWith('/roles') ||
       pathname.startsWith('/permissions') ||
-      pathname.startsWith('/audit')
+      pathname.startsWith('/audit') ||
+      pathname.startsWith('/settings')
     ) {
       setAdminExpanded(true)
     }

@@ -566,12 +566,11 @@ describe('web RBAC navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Administration')).toBeInTheDocument()
-    expect(screen.queryByText('Users')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
     expect(screen.getByText('Users')).toBeInTheDocument()
     expect(screen.getByText('Roles')).toBeInTheDocument()
     expect(screen.getByText('Permissions')).toBeInTheDocument()
     expect(screen.queryByText('Audit Log')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
     await waitFor(() => {
@@ -585,7 +584,7 @@ describe('web RBAC navigation', () => {
     })
   })
 
-  it('hides Administration group when no admin route is allowed', async () => {
+  it('shows Administration group with Settings when only settings.write is allowed', async () => {
     setAuthSnapshot({
       isAuthenticated: true,
       accessToken: 'access-token',
@@ -601,10 +600,11 @@ describe('web RBAC navigation', () => {
     renderWithRouter('/settings')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
-    expect(screen.queryByText('Administration')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
     expect(screen.queryByText('Users')).not.toBeInTheDocument()
     expect(screen.queryByText('Roles')).not.toBeInTheDocument()
     expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 
   it('denies /settings for non-admin users without settings.write', async () => {
@@ -969,7 +969,8 @@ describe('web AppShell layout behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
 
     expect(await screen.findByRole('button', { name: 'Close navigation menu' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     await waitFor(() => {
