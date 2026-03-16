@@ -143,14 +143,16 @@ type ServerSnapshot struct {
 }
 
 type DispatchInput struct {
-	DeliveryID    int64
-	RequestID     int64
-	RequestUID    string
-	CorrelationID string
-	PayloadBody   string
-	URLSuffix     string
-	Server        ServerSnapshot
-	ActorID       *int64
+	DeliveryID        int64
+	RequestID         int64
+	RequestUID        string
+	CorrelationID     string
+	PayloadBody       string
+	PayloadFormat     string
+	SubmissionBinding string
+	URLSuffix         string
+	Server            ServerSnapshot
+	ActorID           *int64
 }
 
 type Repository interface {

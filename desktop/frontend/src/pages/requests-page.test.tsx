@@ -139,6 +139,7 @@ describe('desktop requests page', () => {
                   idempotencyKey: 'idem-1',
                   payloadBody: '{"trackedEntity":"123"}',
                   payloadFormat: 'json',
+                  submissionBinding: 'body',
                   payload: { trackedEntity: '123' },
                   urlSuffix: '/api/data',
                   status: 'pending',
@@ -222,6 +223,7 @@ describe('desktop requests page', () => {
                 idempotencyKey: 'idem-4',
                 payloadBody: '{"trackedEntity":"123"}',
                 payloadFormat: 'json',
+                submissionBinding: 'body',
                 payload: { trackedEntity: '123' },
                 urlSuffix: '/api/data',
                 status: 'pending',
@@ -275,6 +277,7 @@ describe('desktop requests page', () => {
             idempotencyKey: 'idem-4',
             payloadBody: '{"trackedEntity":"123"}',
             payloadFormat: 'json',
+            submissionBinding: 'body',
             payload: { trackedEntity: '123' },
             urlSuffix: '/api/data',
             status: 'pending',
@@ -319,8 +322,12 @@ describe('desktop requests page', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Uganda (dhis2-ug)' }))
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Additional Destination Server IDs' }), { target: { value: '9, 12' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Dependency Request IDs' }), { target: { value: '7, 8' } })
-    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Payload JSON' }), {
-      target: { value: '{"trackedEntity":"xyz"}' },
+    fireEvent.mouseDown(within(dialog).getByLabelText('Payload Format'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Text' }))
+    fireEvent.mouseDown(within(dialog).getByLabelText('Send As'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Query Params' }))
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Payload Text' }), {
+      target: { value: 'trackedEntity=xyz&orgUnit=ou-7' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
 
@@ -329,7 +336,9 @@ describe('desktop requests page', () => {
       destinationServerId: 3,
       destinationServerIds: [9, 12],
       dependencyRequestIds: [7, 8],
-      payload: { trackedEntity: 'xyz' },
+      payloadFormat: 'text',
+      submissionBinding: 'query',
+      payload: 'trackedEntity=xyz&orgUnit=ou-7',
     })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Actions for req-4' }))
@@ -433,6 +442,7 @@ describe('desktop requests page', () => {
                   idempotencyKey: 'idem-10',
                   payloadBody: '{"trackedEntity":"body-10","program":"beta"}',
                   payloadFormat: 'json',
+                  submissionBinding: 'body',
                   payload: { trackedEntity: 'body-10', program: 'beta' },
                   urlSuffix: '/api/data',
                   status: 'pending',

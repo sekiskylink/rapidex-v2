@@ -116,12 +116,14 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 			"workerType":  workerType(retry),
 		})
 		submitted, err := e.deliveryService.SubmitDHIS2Delivery(ctx, delivery.DispatchInput{
-			DeliveryID:    record.ID,
-			RequestID:     requestRecord.ID,
-			RequestUID:    requestRecord.UID,
-			CorrelationID: requestRecord.CorrelationID,
-			PayloadBody:   requestRecord.PayloadBody,
-			URLSuffix:     requestRecord.URLSuffix,
+			DeliveryID:        record.ID,
+			RequestID:         requestRecord.ID,
+			RequestUID:        requestRecord.UID,
+			CorrelationID:     requestRecord.CorrelationID,
+			PayloadBody:       requestRecord.PayloadBody,
+			PayloadFormat:     requestRecord.PayloadFormat,
+			SubmissionBinding: requestRecord.SubmissionBinding,
+			URLSuffix:         requestRecord.URLSuffix,
 			Server: delivery.ServerSnapshot{
 				ID:         serverRecord.ID,
 				Code:       serverRecord.Code,

@@ -110,6 +110,7 @@ describe('requests page', () => {
               idempotencyKey: 'idem-1',
               payloadBody: '{"trackedEntity":"123"}',
               payloadFormat: 'json',
+              submissionBinding: 'body',
               payload: { trackedEntity: '123' },
               urlSuffix: '/api/data',
               status: 'pending',
@@ -178,8 +179,10 @@ describe('requests page', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Dependency Request IDs' }), { target: { value: '7, 8' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Source System' }), { target: { value: 'emr' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Correlation ID' }), { target: { value: 'corr-22' } })
+    fireEvent.mouseDown(within(dialog).getByLabelText('Send As'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Query Params' }))
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Payload JSON' }), {
-      target: { value: '{"trackedEntity":"abc"}' },
+      target: { value: '{"trackedEntity":"abc","orgUnit":"ou-1"}' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
 
@@ -190,7 +193,9 @@ describe('requests page', () => {
       dependencyRequestIds: [7, 8],
       sourceSystem: 'emr',
       correlationId: 'corr-22',
-      payload: { trackedEntity: 'abc' },
+      payloadFormat: 'json',
+      submissionBinding: 'query',
+      payload: { trackedEntity: 'abc', orgUnit: 'ou-1' },
     })
   })
 
@@ -211,6 +216,7 @@ describe('requests page', () => {
               idempotencyKey: 'idem-5',
               payloadBody: '{"trackedEntity":"abc"}',
               payloadFormat: 'json',
+              submissionBinding: 'body',
               payload: { trackedEntity: 'abc' },
               urlSuffix: '/api/data',
               status: 'completed',
@@ -250,6 +256,7 @@ describe('requests page', () => {
           idempotencyKey: 'idem-5',
           payloadBody: '{"trackedEntity":"abc"}',
           payloadFormat: 'json',
+          submissionBinding: 'body',
           payload: { trackedEntity: 'abc' },
           urlSuffix: '/api/data',
           status: 'completed',
@@ -306,6 +313,7 @@ describe('requests page', () => {
               idempotencyKey: 'idem-8',
               payloadBody: '{"trackedEntity":"body-8","program":"alpha"}',
               payloadFormat: 'json',
+              submissionBinding: 'body',
               payload: { trackedEntity: 'body-8', program: 'alpha' },
               urlSuffix: '/api/data',
               status: 'pending',

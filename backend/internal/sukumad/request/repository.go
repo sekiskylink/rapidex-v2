@@ -42,6 +42,7 @@ type recordRow struct {
 	IdempotencyKey         string          `db:"idempotency_key"`
 	PayloadBody            string          `db:"payload_body"`
 	PayloadFormat          string          `db:"payload_format"`
+	SubmissionBinding      string          `db:"submission_binding"`
 	URLSuffix              string          `db:"url_suffix"`
 	Status                 string          `db:"status"`
 	StatusReason           string          `db:"status_reason"`
@@ -149,7 +150,7 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -194,7 +195,7 @@ func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, e
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -244,9 +245,9 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 	if err := r.db.GetContext(ctx, &id, `
 		INSERT INTO exchange_requests (
 			uid, source_system, destination_server_id, batch_id, correlation_id, idempotency_key,
-			payload_body, payload_format, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
+			payload_body, payload_format, submission_binding, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW(), $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW(), $15)
 		RETURNING id
 	`,
 		params.UID,
@@ -257,6 +258,7 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 		nullIfEmpty(params.IdempotencyKey),
 		params.PayloadBody,
 		params.PayloadFormat,
+		params.SubmissionBinding,
 		nullIfEmpty(params.URLSuffix),
 		params.Status,
 		params.StatusReason,
@@ -336,6 +338,7 @@ func decodeRow(row recordRow) (Record, error) {
 		IdempotencyKey:         row.IdempotencyKey,
 		PayloadBody:            row.PayloadBody,
 		PayloadFormat:          row.PayloadFormat,
+		SubmissionBinding:      row.SubmissionBinding,
 		URLSuffix:              row.URLSuffix,
 		Status:                 row.Status,
 		StatusReason:           row.StatusReason,
@@ -344,7 +347,7 @@ func decodeRow(row recordRow) (Record, error) {
 		CreatedAt:              row.CreatedAt,
 		UpdatedAt:              row.UpdatedAt,
 		CreatedBy:              row.CreatedBy,
-		Payload:                json.RawMessage(row.PayloadBody),
+		Payload:                decodePayload(row.PayloadBody, row.PayloadFormat),
 		LatestDeliveryID:       cloneInt64Ptr(row.LatestDeliveryID),
 		LatestDeliveryUID:      row.LatestDeliveryUID,
 		LatestDeliveryStatus:   row.LatestDeliveryStatus,
@@ -422,28 +425,28 @@ func (r *SQLRepository) listTargetsByRequestIDs(ctx context.Context, requestIDs 
 	query = r.db.Rebind(query)
 
 	type targetRow struct {
-		ID                    int64      `db:"id"`
-		UID                   string     `db:"uid"`
-		RequestID             int64      `db:"request_id"`
-		ServerID              int64      `db:"server_id"`
-		ServerName            string     `db:"server_name"`
-		ServerCode            string     `db:"server_code"`
-		TargetKind            string     `db:"target_kind"`
-		Priority              int        `db:"priority"`
-		Status                string     `db:"status"`
-		BlockedReason         string     `db:"blocked_reason"`
-		DeferredUntil         *time.Time `db:"deferred_until"`
-		LastReleasedAt        *time.Time `db:"last_released_at"`
-		LatestDeliveryID      *int64     `db:"latest_delivery_id"`
-		LatestDeliveryUID     string     `db:"latest_delivery_uid"`
-		LatestDeliveryStatus  string     `db:"latest_delivery_status"`
-		LatestAsyncTaskID     *int64     `db:"latest_async_task_id"`
-		LatestAsyncTaskUID    string     `db:"latest_async_task_uid"`
-		LatestAsyncState      string     `db:"latest_async_state"`
-		LatestAsyncRemoteJobID string    `db:"latest_async_remote_job_id"`
-		LatestAsyncPollURL    string     `db:"latest_async_poll_url"`
-		CreatedAt             time.Time  `db:"created_at"`
-		UpdatedAt             time.Time  `db:"updated_at"`
+		ID                     int64      `db:"id"`
+		UID                    string     `db:"uid"`
+		RequestID              int64      `db:"request_id"`
+		ServerID               int64      `db:"server_id"`
+		ServerName             string     `db:"server_name"`
+		ServerCode             string     `db:"server_code"`
+		TargetKind             string     `db:"target_kind"`
+		Priority               int        `db:"priority"`
+		Status                 string     `db:"status"`
+		BlockedReason          string     `db:"blocked_reason"`
+		DeferredUntil          *time.Time `db:"deferred_until"`
+		LastReleasedAt         *time.Time `db:"last_released_at"`
+		LatestDeliveryID       *int64     `db:"latest_delivery_id"`
+		LatestDeliveryUID      string     `db:"latest_delivery_uid"`
+		LatestDeliveryStatus   string     `db:"latest_delivery_status"`
+		LatestAsyncTaskID      *int64     `db:"latest_async_task_id"`
+		LatestAsyncTaskUID     string     `db:"latest_async_task_uid"`
+		LatestAsyncState       string     `db:"latest_async_state"`
+		LatestAsyncRemoteJobID string     `db:"latest_async_remote_job_id"`
+		LatestAsyncPollURL     string     `db:"latest_async_poll_url"`
+		CreatedAt              time.Time  `db:"created_at"`
+		UpdatedAt              time.Time  `db:"updated_at"`
 	}
 
 	rows := []targetRow{}
@@ -454,29 +457,29 @@ func (r *SQLRepository) listTargetsByRequestIDs(ctx context.Context, requestIDs 
 	result := make(map[int64][]TargetRecord, len(requestIDs))
 	for _, row := range rows {
 		target := TargetRecord{
-			ID:                    row.ID,
-			UID:                   row.UID,
-			RequestID:             row.RequestID,
-			ServerID:              row.ServerID,
-			ServerName:            row.ServerName,
-			ServerCode:            row.ServerCode,
-			TargetKind:            row.TargetKind,
-			Priority:              row.Priority,
-			Status:                row.Status,
-			BlockedReason:         row.BlockedReason,
-			DeferredUntil:         cloneTimePtr(row.DeferredUntil),
-			LastReleasedAt:        cloneTimePtr(row.LastReleasedAt),
-			LatestDeliveryID:      cloneInt64Ptr(row.LatestDeliveryID),
-			LatestDeliveryUID:     row.LatestDeliveryUID,
-			LatestDeliveryStatus:  row.LatestDeliveryStatus,
-			LatestAsyncTaskID:     cloneInt64Ptr(row.LatestAsyncTaskID),
-			LatestAsyncTaskUID:    row.LatestAsyncTaskUID,
-			LatestAsyncState:      row.LatestAsyncState,
+			ID:                     row.ID,
+			UID:                    row.UID,
+			RequestID:              row.RequestID,
+			ServerID:               row.ServerID,
+			ServerName:             row.ServerName,
+			ServerCode:             row.ServerCode,
+			TargetKind:             row.TargetKind,
+			Priority:               row.Priority,
+			Status:                 row.Status,
+			BlockedReason:          row.BlockedReason,
+			DeferredUntil:          cloneTimePtr(row.DeferredUntil),
+			LastReleasedAt:         cloneTimePtr(row.LastReleasedAt),
+			LatestDeliveryID:       cloneInt64Ptr(row.LatestDeliveryID),
+			LatestDeliveryUID:      row.LatestDeliveryUID,
+			LatestDeliveryStatus:   row.LatestDeliveryStatus,
+			LatestAsyncTaskID:      cloneInt64Ptr(row.LatestAsyncTaskID),
+			LatestAsyncTaskUID:     row.LatestAsyncTaskUID,
+			LatestAsyncState:       row.LatestAsyncState,
 			LatestAsyncRemoteJobID: row.LatestAsyncRemoteJobID,
-			LatestAsyncPollURL:    row.LatestAsyncPollURL,
-			AwaitingAsync:         row.LatestAsyncTaskID != nil && row.LatestAsyncState != "" && row.LatestAsyncState != StatusCompleted && row.LatestAsyncState != StatusFailed,
-			CreatedAt:             row.CreatedAt,
-			UpdatedAt:             row.UpdatedAt,
+			LatestAsyncPollURL:     row.LatestAsyncPollURL,
+			AwaitingAsync:          row.LatestAsyncTaskID != nil && row.LatestAsyncState != "" && row.LatestAsyncState != StatusCompleted && row.LatestAsyncState != StatusFailed,
+			CreatedAt:              row.CreatedAt,
+			UpdatedAt:              row.UpdatedAt,
 		}
 		result[row.RequestID] = append(result[row.RequestID], target)
 	}
@@ -527,6 +530,17 @@ func decodeExtras(raw json.RawMessage) (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	return cloneExtras(parsed), nil
+}
+
+func decodePayload(body string, payloadFormat string) any {
+	if payloadFormat == PayloadFormatText {
+		return body
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+		return body
+	}
+	return parsed
 }
 
 type memoryRepository struct {
@@ -642,15 +656,16 @@ func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams)
 		IdempotencyKey:        params.IdempotencyKey,
 		PayloadBody:           params.PayloadBody,
 		PayloadFormat:         params.PayloadFormat,
-			URLSuffix:             params.URLSuffix,
-			Status:                params.Status,
-			StatusReason:          params.StatusReason,
-			DeferredUntil:         cloneTimePtr(params.DeferredUntil),
-			Extras:                cloneExtras(params.Extras),
+		SubmissionBinding:     params.SubmissionBinding,
+		URLSuffix:             params.URLSuffix,
+		Status:                params.Status,
+		StatusReason:          params.StatusReason,
+		DeferredUntil:         cloneTimePtr(params.DeferredUntil),
+		Extras:                cloneExtras(params.Extras),
 		CreatedAt:             now,
 		UpdatedAt:             now,
 		CreatedBy:             params.CreatedBy,
-		Payload:               json.RawMessage(params.PayloadBody),
+		Payload:               decodePayload(params.PayloadBody, params.PayloadFormat),
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil
@@ -865,13 +880,13 @@ func (r *memoryRepository) CreateDependencies(_ context.Context, requestID int64
 	for _, dependencyID := range dependencyIDs {
 		dependency := r.items[dependencyID]
 		item.Dependencies = append(item.Dependencies, DependencyRef{
-			RequestID:                  requestID,
-			DependsOnRequestID:         dependencyID,
-			RequestUID:                 item.UID,
-			DependsOnUID:               dependency.UID,
-			Status:                     dependency.Status,
-			StatusReason:               dependency.StatusReason,
-			DeferredUntil:              cloneTimePtr(dependency.DeferredUntil),
+			RequestID:                      requestID,
+			DependsOnRequestID:             dependencyID,
+			RequestUID:                     item.UID,
+			DependsOnUID:                   dependency.UID,
+			Status:                         dependency.Status,
+			StatusReason:                   dependency.StatusReason,
+			DeferredUntil:                  cloneTimePtr(dependency.DeferredUntil),
 			DependsOnDestinationServerName: dependency.DestinationServerName,
 		})
 	}
@@ -926,7 +941,7 @@ func compareTimes(a time.Time, b time.Time) int {
 
 func cloneRecord(input Record) Record {
 	input.Extras = cloneExtras(input.Extras)
-	input.Payload = append(json.RawMessage(nil), input.Payload...)
+	input.Payload = clonePayloadValue(input.Payload)
 	input.LatestDeliveryID = cloneInt64Ptr(input.LatestDeliveryID)
 	input.LatestAsyncTaskID = cloneInt64Ptr(input.LatestAsyncTaskID)
 	input.DeferredUntil = cloneTimePtr(input.DeferredUntil)
@@ -981,6 +996,25 @@ func cloneExtras(input map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func clonePayloadValue(input any) any {
+	switch value := input.(type) {
+	case nil:
+		return nil
+	case string:
+		return value
+	default:
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return value
+		}
+		var cloned any
+		if err := json.Unmarshal(raw, &cloned); err != nil {
+			return value
+		}
+		return cloned
+	}
 }
 
 func nullIfEmpty(value string) any {

@@ -13,6 +13,7 @@ export interface RequestDetailRecord {
   idempotencyKey: string
   payloadBody: string
   payloadFormat: string
+  submissionBinding: string
   payload: unknown
   urlSuffix: string
   status: string
@@ -139,6 +140,7 @@ export function RequestDetailPage({ open, request, events, onClose }: RequestDet
               {renderMetadata('Created', formatDate(request.createdAt))}
               {renderMetadata('Updated', formatDate(request.updatedAt))}
               {renderMetadata('Payload Format', request.payloadFormat)}
+              {renderMetadata('Send As', request.submissionBinding)}
             </Stack>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               {renderMetadata('Latest Delivery', request.latestDeliveryUid)}

@@ -24,6 +24,8 @@ const defaultForm: RequestFormState = {
   correlationId: '',
   batchId: '',
   idempotencyKey: '',
+  payloadFormat: 'json',
+  submissionBinding: 'body',
   urlSuffix: '',
   payloadText: '{\n  \n}',
   metadataText: '{}',
@@ -62,6 +64,14 @@ function parseJSONValue(value: string): { parsed?: unknown; error?: string } {
   }
 }
 
+function parseTextValue(value: string): { parsed?: string; error?: string } {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return { error: 'Payload is required.' }
+  }
+  return { parsed: trimmed }
+}
+
 function parseJSONObject(value: string): { parsed?: Record<string, unknown>; error?: string } {
   try {
     const parsed = JSON.parse(value || '{}') as Record<string, unknown>
@@ -84,6 +94,8 @@ function mapValidationFieldErrors(details?: Record<string, string[]>): RequestFo
     correlationId: first('correlationId'),
     batchId: first('batchId'),
     idempotencyKey: first('idempotencyKey'),
+    payloadFormat: first('payloadFormat'),
+    submissionBinding: first('submissionBinding'),
     urlSuffix: first('urlSuffix'),
     payload: first('payload'),
     metadata: first('metadata'),
@@ -124,9 +136,20 @@ function validateForm(form: RequestFormState): RequestFormErrors {
   if (dependencyIDs.error) {
     errors.dependencyRequestIdsText = dependencyIDs.error
   }
-  const payload = parseJSONValue(form.payloadText)
+  if (!['json', 'text'].includes(form.payloadFormat)) {
+    errors.payloadFormat = 'Payload format is required.'
+  }
+  if (!['body', 'query'].includes(form.submissionBinding)) {
+    errors.submissionBinding = 'Send As is required.'
+  }
+  const payload = form.payloadFormat === 'text' ? parseTextValue(form.payloadText) : parseJSONValue(form.payloadText)
   if (payload.error) {
     errors.payload = payload.error
+  }
+  if (form.payloadFormat === 'json' && form.submissionBinding === 'query' && payload.parsed) {
+    if (!payload.parsed || Array.isArray(payload.parsed) || typeof payload.parsed !== 'object') {
+      errors.payload = 'Query param JSON payload must be an object.'
+    }
   }
   const metadata = parseJSONObject(form.metadataText)
   if (metadata.error) {
@@ -136,6 +159,7 @@ function validateForm(form: RequestFormState): RequestFormErrors {
 }
 
 function toRequestPayload(form: RequestFormState) {
+  const payload = form.payloadFormat === 'text' ? parseTextValue(form.payloadText).parsed : parseJSONValue(form.payloadText).parsed
   return {
     destinationServerId: Number(form.destinationServerId),
     destinationServerIds: parseIDList(form.destinationServerIdsText).parsed ?? [],
@@ -144,8 +168,10 @@ function toRequestPayload(form: RequestFormState) {
     correlationId: form.correlationId.trim(),
     batchId: form.batchId.trim(),
     idempotencyKey: form.idempotencyKey.trim(),
+    payloadFormat: form.payloadFormat,
+    submissionBinding: form.submissionBinding,
     urlSuffix: form.urlSuffix.trim(),
-    payload: parseJSONValue(form.payloadText).parsed,
+    payload,
     metadata: parseJSONObject(form.metadataText).parsed ?? {},
   }
 }

@@ -138,6 +138,54 @@ func TestServiceCreateRequestValidatesInput(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRequestAcceptsTextQueryPayload(t *testing.T) {
+	service := NewService(&fakeRepo{
+		createFn: func(_ context.Context, params CreateParams) (Record, error) {
+			return Record{
+				ID:                12,
+				UID:               params.UID,
+				Status:            params.Status,
+				PayloadBody:       params.PayloadBody,
+				PayloadFormat:     params.PayloadFormat,
+				SubmissionBinding: params.SubmissionBinding,
+				Payload:           params.PayloadBody,
+				CreatedAt:         time.Now().UTC(),
+				UpdatedAt:         time.Now().UTC(),
+			}, nil
+		},
+	}, audit.NewService(&fakeAuditRepo{}))
+
+	record, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		Payload:             "trackedEntity=abc&orgUnit=ou-1",
+		PayloadFormat:       PayloadFormatText,
+		SubmissionBinding:   SubmissionBindingQuery,
+	})
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	if record.PayloadFormat != PayloadFormatText || record.SubmissionBinding != SubmissionBindingQuery {
+		t.Fatalf("expected text/query request contract, got %+v", record)
+	}
+	if record.PayloadBody != "trackedEntity=abc&orgUnit=ou-1" {
+		t.Fatalf("unexpected payload body: %q", record.PayloadBody)
+	}
+}
+
+func TestServiceCreateRequestRejectsJSONQueryArrayPayload(t *testing.T) {
+	service := NewService(&fakeRepo{}, audit.NewService(&fakeAuditRepo{}))
+
+	_, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		Payload:             []byte(`[1,2,3]`),
+		PayloadFormat:       PayloadFormatJSON,
+		SubmissionBinding:   SubmissionBindingQuery,
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
 func TestServiceCreateRequestWritesAuditEvent(t *testing.T) {
 	auditRepo := &fakeAuditRepo{}
 	eventWriter := &fakeEventWriter{}

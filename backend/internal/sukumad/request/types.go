@@ -2,7 +2,6 @@ package request
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 )
 
@@ -22,6 +21,16 @@ const (
 	TargetStatusFailed     = "failed"
 )
 
+const (
+	PayloadFormatJSON = "json"
+	PayloadFormatText = "text"
+)
+
+const (
+	SubmissionBindingBody  = "body"
+	SubmissionBindingQuery = "query"
+)
+
 type Record struct {
 	ID                     int64           `db:"id" json:"id"`
 	UID                    string          `db:"uid" json:"uid"`
@@ -33,6 +42,7 @@ type Record struct {
 	IdempotencyKey         string          `db:"idempotency_key" json:"idempotencyKey"`
 	PayloadBody            string          `db:"payload_body" json:"payloadBody"`
 	PayloadFormat          string          `db:"payload_format" json:"payloadFormat"`
+	SubmissionBinding      string          `db:"submission_binding" json:"submissionBinding"`
 	URLSuffix              string          `db:"url_suffix" json:"urlSuffix"`
 	Status                 string          `db:"status" json:"status"`
 	StatusReason           string          `db:"status_reason" json:"statusReason"`
@@ -41,7 +51,7 @@ type Record struct {
 	CreatedAt              time.Time       `db:"created_at" json:"createdAt"`
 	UpdatedAt              time.Time       `db:"updated_at" json:"updatedAt"`
 	CreatedBy              *int64          `db:"created_by" json:"createdBy,omitempty"`
-	Payload                json.RawMessage `json:"payload"`
+	Payload                any             `json:"payload"`
 	LatestDeliveryID       *int64          `json:"latestDeliveryId,omitempty"`
 	LatestDeliveryUID      string          `json:"latestDeliveryUid"`
 	LatestDeliveryStatus   string          `json:"latestDeliveryStatus"`
@@ -80,6 +90,7 @@ type CreateParams struct {
 	IdempotencyKey      string
 	PayloadBody         string
 	PayloadFormat       string
+	SubmissionBinding   string
 	URLSuffix           string
 	Status              string
 	StatusReason        string
@@ -96,7 +107,9 @@ type CreateInput struct {
 	BatchID              string
 	CorrelationID        string
 	IdempotencyKey       string
-	Payload              json.RawMessage
+	Payload              any
+	PayloadFormat        string
+	SubmissionBinding    string
 	URLSuffix            string
 	Extras               map[string]any
 	ActorID              *int64
@@ -118,40 +131,40 @@ type Repository interface {
 }
 
 type TargetRecord struct {
-	ID                    int64      `db:"id" json:"id"`
-	UID                   string     `db:"uid" json:"uid"`
-	RequestID             int64      `db:"request_id" json:"requestId"`
-	ServerID              int64      `db:"server_id" json:"serverId"`
-	ServerName            string     `json:"serverName"`
-	ServerCode            string     `json:"serverCode"`
-	TargetKind            string     `db:"target_kind" json:"targetKind"`
-	Priority              int        `db:"priority" json:"priority"`
-	Status                string     `db:"status" json:"status"`
-	BlockedReason         string     `db:"blocked_reason" json:"blockedReason"`
-	DeferredUntil         *time.Time `db:"deferred_until" json:"deferredUntil,omitempty"`
-	LastReleasedAt        *time.Time `db:"last_released_at" json:"lastReleasedAt,omitempty"`
-	LatestDeliveryID      *int64     `json:"latestDeliveryId,omitempty"`
-	LatestDeliveryUID     string     `json:"latestDeliveryUid"`
-	LatestDeliveryStatus  string     `json:"latestDeliveryStatus"`
-	LatestAsyncTaskID     *int64     `json:"latestAsyncTaskId,omitempty"`
-	LatestAsyncTaskUID    string     `json:"latestAsyncTaskUid"`
-	LatestAsyncState      string     `json:"latestAsyncState"`
-	LatestAsyncRemoteJobID string    `json:"latestAsyncRemoteJobId"`
-	LatestAsyncPollURL    string     `json:"latestAsyncPollUrl"`
-	AwaitingAsync         bool       `json:"awaitingAsync"`
-	CreatedAt             time.Time  `db:"created_at" json:"createdAt"`
-	UpdatedAt             time.Time  `db:"updated_at" json:"updatedAt"`
+	ID                     int64      `db:"id" json:"id"`
+	UID                    string     `db:"uid" json:"uid"`
+	RequestID              int64      `db:"request_id" json:"requestId"`
+	ServerID               int64      `db:"server_id" json:"serverId"`
+	ServerName             string     `json:"serverName"`
+	ServerCode             string     `json:"serverCode"`
+	TargetKind             string     `db:"target_kind" json:"targetKind"`
+	Priority               int        `db:"priority" json:"priority"`
+	Status                 string     `db:"status" json:"status"`
+	BlockedReason          string     `db:"blocked_reason" json:"blockedReason"`
+	DeferredUntil          *time.Time `db:"deferred_until" json:"deferredUntil,omitempty"`
+	LastReleasedAt         *time.Time `db:"last_released_at" json:"lastReleasedAt,omitempty"`
+	LatestDeliveryID       *int64     `json:"latestDeliveryId,omitempty"`
+	LatestDeliveryUID      string     `json:"latestDeliveryUid"`
+	LatestDeliveryStatus   string     `json:"latestDeliveryStatus"`
+	LatestAsyncTaskID      *int64     `json:"latestAsyncTaskId,omitempty"`
+	LatestAsyncTaskUID     string     `json:"latestAsyncTaskUid"`
+	LatestAsyncState       string     `json:"latestAsyncState"`
+	LatestAsyncRemoteJobID string     `json:"latestAsyncRemoteJobId"`
+	LatestAsyncPollURL     string     `json:"latestAsyncPollUrl"`
+	AwaitingAsync          bool       `json:"awaitingAsync"`
+	CreatedAt              time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt              time.Time  `db:"updated_at" json:"updatedAt"`
 }
 
 type DependencyRef struct {
-	RequestID                    int64      `db:"request_id" json:"requestId"`
-	DependsOnRequestID           int64      `db:"depends_on_request_id" json:"dependsOnRequestId"`
-	RequestUID                   string     `db:"request_uid" json:"requestUid"`
-	DependsOnUID                 string     `db:"depends_on_uid" json:"dependsOnUid"`
-	Status                       string     `db:"status" json:"status"`
-	StatusReason                 string     `db:"status_reason" json:"statusReason"`
-	DeferredUntil                *time.Time `db:"deferred_until" json:"deferredUntil,omitempty"`
-	DependsOnDestinationServerName string   `db:"depends_on_destination_server_name" json:"dependsOnDestinationServerName"`
+	RequestID                      int64      `db:"request_id" json:"requestId"`
+	DependsOnRequestID             int64      `db:"depends_on_request_id" json:"dependsOnRequestId"`
+	RequestUID                     string     `db:"request_uid" json:"requestUid"`
+	DependsOnUID                   string     `db:"depends_on_uid" json:"dependsOnUid"`
+	Status                         string     `db:"status" json:"status"`
+	StatusReason                   string     `db:"status_reason" json:"statusReason"`
+	DeferredUntil                  *time.Time `db:"deferred_until" json:"deferredUntil,omitempty"`
+	DependsOnDestinationServerName string     `db:"depends_on_destination_server_name" json:"dependsOnDestinationServerName"`
 }
 
 type DependencyStatus struct {

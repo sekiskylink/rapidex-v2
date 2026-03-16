@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -74,8 +75,9 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 		BatchID:             normalized.BatchID,
 		CorrelationID:       normalized.CorrelationID,
 		IdempotencyKey:      normalized.IdempotencyKey,
-		PayloadBody:         string(normalized.Payload),
-		PayloadFormat:       "json",
+		PayloadBody:         string(normalized.Payload.([]byte)),
+		PayloadFormat:       normalized.PayloadFormat,
+		SubmissionBinding:   normalized.SubmissionBinding,
 		URLSuffix:           normalized.URLSuffix,
 		Status:              StatusPending,
 		Extras:              normalized.Extras,
@@ -293,6 +295,8 @@ func normalizeCreateInput(input CreateInput) (CreateInput, map[string]any) {
 		BatchID:              strings.TrimSpace(input.BatchID),
 		CorrelationID:        strings.TrimSpace(input.CorrelationID),
 		IdempotencyKey:       strings.TrimSpace(input.IdempotencyKey),
+		PayloadFormat:        normalizePayloadFormat(input.PayloadFormat),
+		SubmissionBinding:    normalizeSubmissionBinding(input.SubmissionBinding),
 		URLSuffix:            strings.TrimSpace(input.URLSuffix),
 		Extras:               cloneExtras(input.Extras),
 		ActorID:              input.ActorID,
@@ -315,7 +319,7 @@ func normalizeCreateInput(input CreateInput) (CreateInput, map[string]any) {
 		}
 	}
 
-	payload, err := normalizePayload(input.Payload)
+	payload, err := normalizePayload(input.Payload, normalized.PayloadFormat, normalized.SubmissionBinding)
 	if err != nil {
 		details["payload"] = []string{err.Error()}
 	} else {
@@ -329,19 +333,135 @@ func normalizeCreateInput(input CreateInput) (CreateInput, map[string]any) {
 	return normalized, details
 }
 
-func normalizePayload(input json.RawMessage) (json.RawMessage, error) {
-	trimmed := bytes.TrimSpace(input)
+func normalizePayloadFormat(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", PayloadFormatJSON:
+		return PayloadFormatJSON
+	case PayloadFormatText:
+		return PayloadFormatText
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+}
+
+func normalizeSubmissionBinding(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", SubmissionBindingBody:
+		return SubmissionBindingBody
+	case SubmissionBindingQuery:
+		return SubmissionBindingQuery
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+}
+
+func normalizePayload(input any, payloadFormat string, submissionBinding string) ([]byte, error) {
+	if payloadFormat != PayloadFormatJSON && payloadFormat != PayloadFormatText {
+		return nil, errors.New("payloadFormat must be one of json or text")
+	}
+	if submissionBinding != SubmissionBindingBody && submissionBinding != SubmissionBindingQuery {
+		return nil, errors.New("submissionBinding must be one of body or query")
+	}
+	if payloadFormat == PayloadFormatJSON {
+		return normalizeJSONPayload(input, submissionBinding)
+	}
+	return normalizeTextPayload(input, submissionBinding)
+}
+
+func normalizeJSONPayload(input any, submissionBinding string) ([]byte, error) {
+	encoded, err := marshalPayloadInput(input)
+	if err != nil {
+		return nil, errors.New("must be valid JSON")
+	}
+	trimmed := bytes.TrimSpace(encoded)
 	if len(trimmed) == 0 {
 		return nil, errors.New("is required")
 	}
 	if !json.Valid(trimmed) {
 		return nil, errors.New("must be valid JSON")
 	}
+	if submissionBinding == SubmissionBindingQuery {
+		if err := validateJSONQueryPayload(trimmed); err != nil {
+			return nil, err
+		}
+	}
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, trimmed); err != nil {
 		return nil, errors.New("must be valid JSON")
 	}
-	return json.RawMessage(compact.Bytes()), nil
+	return compact.Bytes(), nil
+}
+
+func normalizeTextPayload(input any, submissionBinding string) ([]byte, error) {
+	value, ok := input.(string)
+	if !ok {
+		return nil, errors.New("must be a text value")
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, errors.New("is required")
+	}
+	if submissionBinding == SubmissionBindingQuery {
+		if _, err := url.ParseQuery(trimmed); err != nil {
+			return nil, errors.New("must be a valid query string")
+		}
+	}
+	return []byte(trimmed), nil
+}
+
+func marshalPayloadInput(input any) ([]byte, error) {
+	switch value := input.(type) {
+	case nil:
+		return nil, nil
+	case []byte:
+		return value, nil
+	default:
+		return json.Marshal(value)
+	}
+}
+
+func validateJSONQueryPayload(payload []byte) error {
+	var parsed map[string]any
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		return errors.New("must be a JSON object when sent as query params")
+	}
+	if len(parsed) == 0 {
+		return errors.New("must include at least one query param")
+	}
+	for key, value := range parsed {
+		if strings.TrimSpace(key) == "" {
+			return errors.New("query param names must be non-empty")
+		}
+		if !isQueryParamValue(value) {
+			return errors.New("query param values must be strings, numbers, booleans, null, or arrays of those values")
+		}
+	}
+	return nil
+}
+
+func isQueryParamValue(value any) bool {
+	switch typed := value.(type) {
+	case nil, string, bool, float64:
+		return true
+	case []any:
+		for _, item := range typed {
+			if !isQueryParamScalar(item) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func isQueryParamScalar(value any) bool {
+	switch value.(type) {
+	case nil, string, bool, float64:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateExtras(extras map[string]any) error {
@@ -595,7 +715,7 @@ func (s *Service) reconcileTargetRollup(ctx context.Context, requestID int64) (R
 	}
 	updated.Targets = cloneTargets(requestRecord.Targets)
 	updated.Dependencies = cloneDependencies(requestRecord.Dependencies)
-	updated.Payload = append(json.RawMessage(nil), updated.Payload...)
+	updated.Payload = clonePayloadValue(updated.Payload)
 	updated.Extras = cloneExtras(updated.Extras)
 	s.appendEvent(ctx, traceevent.WriteInput{
 		RequestID:       &updated.ID,

@@ -25,6 +25,8 @@ export interface RequestFormState {
   correlationId: string
   batchId: string
   idempotencyKey: string
+  payloadFormat: string
+  submissionBinding: string
   urlSuffix: string
   payloadText: string
   metadataText: string
@@ -63,6 +65,17 @@ export function RequestForm({
   onSubmit,
   onChange,
 }: RequestFormProps) {
+  const payloadLabel = form.payloadFormat === 'text' ? 'Payload Text' : 'Payload JSON'
+  const payloadHelper =
+    errors.payload ||
+    (form.payloadFormat === 'text'
+      ? form.submissionBinding === 'query'
+        ? 'Text payload interpreted as a query string, for example key=value&flag=true.'
+        : 'Plain text request body.'
+      : form.submissionBinding === 'query'
+        ? 'JSON object payload converted into query params during delivery.'
+        : 'JSON payload submitted into the request lifecycle.')
+
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="md" fullWidth>
       <DialogTitle>{title}</DialogTitle>
@@ -141,6 +154,32 @@ export function RequestForm({
               fullWidth
             />
             <TextField
+              select
+              label="Payload Format"
+              value={form.payloadFormat}
+              onChange={(event) => onChange({ payloadFormat: event.target.value })}
+              error={Boolean(errors.payloadFormat)}
+              helperText={errors.payloadFormat || 'How the payload is stored and interpreted.'}
+              fullWidth
+            >
+              <MenuItem value="json">JSON</MenuItem>
+              <MenuItem value="text">Text</MenuItem>
+            </TextField>
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              select
+              label="Send As"
+              value={form.submissionBinding}
+              onChange={(event) => onChange({ submissionBinding: event.target.value })}
+              error={Boolean(errors.submissionBinding)}
+              helperText={errors.submissionBinding || 'Choose whether the payload becomes the request body or query params.'}
+              fullWidth
+            >
+              <MenuItem value="body">Request Body</MenuItem>
+              <MenuItem value="query">Query Params</MenuItem>
+            </TextField>
+            <TextField
               label="URL Suffix"
               value={form.urlSuffix}
               onChange={(event) => onChange({ urlSuffix: event.target.value })}
@@ -150,11 +189,11 @@ export function RequestForm({
             />
           </Stack>
           <TextField
-            label="Payload JSON"
+            label={payloadLabel}
             value={form.payloadText}
             onChange={(event) => onChange({ payloadText: event.target.value })}
             error={Boolean(errors.payload)}
-            helperText={errors.payload || 'JSON payload submitted into the request lifecycle.'}
+            helperText={payloadHelper}
             fullWidth
             minRows={10}
             multiline

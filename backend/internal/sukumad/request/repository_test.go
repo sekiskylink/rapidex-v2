@@ -23,11 +23,11 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
 		"id", "uid", "source_system", "destination_server_id", "destination_server_name", "batch_id", "correlation_id",
-		"idempotency_key", "payload_body", "payload_format", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
+		"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 		"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 	}).AddRow(
 		8, "11111111-1111-1111-1111-111111111111", "emr", 3, "DHIS2 Uganda", "batch-1", "corr-1",
-		"idem-1", `{"trackedEntity":"123"}`, "json", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(7),
+		"idem-1", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(7),
 		nil, "", "", nil, "", "", "", "",
 	)
 
@@ -60,7 +60,7 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -123,8 +123,12 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 	if result.Items[0].DestinationServerName != "DHIS2 Uganda" {
 		t.Fatalf("expected destination server name, got %+v", result.Items[0])
 	}
-	if string(result.Items[0].Payload) != `{"trackedEntity":"123"}` {
-		t.Fatalf("expected payload raw json, got %s", string(result.Items[0].Payload))
+	payload, ok := result.Items[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("expected decoded json payload, got %#v", result.Items[0].Payload)
+	}
+	if payload["trackedEntity"] != "123" {
+		t.Fatalf("expected decoded trackedEntity payload, got %+v", payload)
 	}
 }
 
@@ -140,7 +144,7 @@ func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -185,9 +189,9 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		INSERT INTO exchange_requests (
 			uid, source_system, destination_server_id, batch_id, correlation_id, idempotency_key,
-			payload_body, payload_format, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
+			payload_body, payload_format, submission_binding, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW(), $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW(), $15)
 		RETURNING id
 	`)).
 		WithArgs(
@@ -199,6 +203,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 			"idem-1",
 			`{"trackedEntity":"123"}`,
 			"json",
+			"body",
 			"/api/data",
 			"pending",
 			"",
@@ -212,7 +217,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -239,11 +244,11 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		WithArgs(int64(15)).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "uid", "source_system", "destination_server_id", "destination_server_name", "batch_id", "correlation_id",
-			"idempotency_key", "payload_body", "payload_format", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
+			"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 		}).AddRow(
 			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "DHIS2 Uganda", "batch-1", "corr-1",
-			"idem-1", `{"trackedEntity":"123"}`, "json", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
+			"idem-1", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
 			nil, "", "", nil, "", "", "", "",
 		))
 	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").
@@ -267,6 +272,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		IdempotencyKey:      "idem-1",
 		PayloadBody:         `{"trackedEntity":"123"}`,
 		PayloadFormat:       "json",
+		SubmissionBinding:   "body",
 		URLSuffix:           "/api/data",
 		Status:              "pending",
 		Extras:              map[string]any{"priority": "high"},

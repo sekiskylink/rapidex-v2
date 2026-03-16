@@ -22,13 +22,15 @@ func NewService(httpClient *http.Client, limiter interface {
 
 func (s *Service) Submit(ctx context.Context, input delivery.DispatchInput) (delivery.DispatchResult, error) {
 	response, body, err := s.client.Submit(ctx, destinationKeyFromServer(input.Server), SubmissionInput{
-		BaseURL:     input.Server.BaseURL,
-		Method:      input.Server.HTTPMethod,
-		URLSuffix:   input.URLSuffix,
-		Headers:     cloneMap(input.Server.Headers),
-		URLParams:   cloneMap(input.Server.URLParams),
-		PayloadBody: input.PayloadBody,
-		UseAsync:    input.Server.UseAsync,
+		BaseURL:           input.Server.BaseURL,
+		Method:            input.Server.HTTPMethod,
+		URLSuffix:         input.URLSuffix,
+		Headers:           cloneMap(input.Server.Headers),
+		URLParams:         cloneMap(input.Server.URLParams),
+		PayloadBody:       input.PayloadBody,
+		PayloadFormat:     input.PayloadFormat,
+		SubmissionBinding: input.SubmissionBinding,
+		UseAsync:          input.Server.UseAsync,
 	})
 	if err != nil {
 		return delivery.DispatchResult{}, err

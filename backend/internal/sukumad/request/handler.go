@@ -1,7 +1,6 @@
 package request
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,16 +20,18 @@ func NewHandler(service *Service) *Handler {
 }
 
 type createRequestRequest struct {
-	SourceSystem         string          `json:"sourceSystem"`
-	DestinationServerID  int64           `json:"destinationServerId"`
-	DestinationServerIDs []int64         `json:"destinationServerIds"`
-	DependencyRequestIDs []int64         `json:"dependencyRequestIds"`
-	BatchID              string          `json:"batchId"`
-	CorrelationID        string          `json:"correlationId"`
-	IdempotencyKey       string          `json:"idempotencyKey"`
-	Payload              json.RawMessage `json:"payload"`
-	URLSuffix            string          `json:"urlSuffix"`
-	Metadata             map[string]any  `json:"metadata"`
+	SourceSystem         string         `json:"sourceSystem"`
+	DestinationServerID  int64          `json:"destinationServerId"`
+	DestinationServerIDs []int64        `json:"destinationServerIds"`
+	DependencyRequestIDs []int64        `json:"dependencyRequestIds"`
+	BatchID              string         `json:"batchId"`
+	CorrelationID        string         `json:"correlationId"`
+	IdempotencyKey       string         `json:"idempotencyKey"`
+	Payload              any            `json:"payload"`
+	PayloadFormat        string         `json:"payloadFormat"`
+	SubmissionBinding    string         `json:"submissionBinding"`
+	URLSuffix            string         `json:"urlSuffix"`
+	Metadata             map[string]any `json:"metadata"`
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -131,6 +132,8 @@ func (h *Handler) Create(c *gin.Context) {
 		CorrelationID:        req.CorrelationID,
 		IdempotencyKey:       req.IdempotencyKey,
 		Payload:              req.Payload,
+		PayloadFormat:        req.PayloadFormat,
+		SubmissionBinding:    req.SubmissionBinding,
 		URLSuffix:            req.URLSuffix,
 		Extras:               req.Metadata,
 		ActorID:              actorUserID(principal),
