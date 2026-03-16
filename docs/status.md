@@ -1,5 +1,87 @@
 # Status
 
+## Milestone — Sukumad Directory Ingestion Worker (Complete)
+
+### What changed
+- Added a production directory-ingestion design note at [docs/notes/sukumad-directory-ingestion.md](/Users/sam/projects/go/sukumadpro/docs/notes/sukumad-directory-ingestion.md).
+- Added prompt traceability copy:
+  - `docs/prompts/2026-03-16-directory-ingestion.md` (gitignored; not for commit)
+- Introduced a durable ingestion ledger through:
+  - [backend/migrations/000021_create_ingest_files.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000021_create_ingest_files.up.sql)
+  - [backend/migrations/000021_create_ingest_files.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000021_create_ingest_files.down.sql)
+  - new `ingest_files` records now track:
+    - discovered / retry / processing / processed / failed state
+    - current path, archived path, claim ownership, retry timing, checksum, request linkage, and error metadata
+- Added a new Sukumad ingestion module under [backend/internal/sukumad/ingest](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/ingest):
+  - repository layer for SQL + in-memory testing
+  - service layer for:
+    - inbox discovery
+    - debounce-aware claim/processing
+    - envelope validation
+    - `request.Service.CreateRequest(...)` reuse
+    - success/archive to `processed`
+    - terminal failure archive to `failed`
+    - transient retry scheduling
+  - runtime layer that combines:
+    - `fsnotify` low-latency detection
+    - periodic inbox reconciliation
+    - stale-claim requeue
+- Extended backend configuration in:
+  - [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go)
+  - [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml)
+  - added:
+    - `sukumad.ingest.directory.enabled`
+    - `sukumad.ingest.directory.inbox_path`
+    - `sukumad.ingest.directory.processing_path`
+    - `sukumad.ingest.directory.processed_path`
+    - `sukumad.ingest.directory.failed_path`
+    - `sukumad.ingest.directory.allowed_extensions`
+    - `sukumad.ingest.directory.default_source_system`
+    - `sukumad.ingest.directory.require_idempotency_key`
+    - `sukumad.ingest.directory.debounce_milliseconds`
+    - `sukumad.ingest.directory.retry_delay_seconds`
+    - `sukumad.ingest.directory.claim_timeout_seconds`
+    - `sukumad.ingest.directory.scan_interval_seconds`
+    - `sukumad.ingest.directory.batch_size`
+- Wired a dedicated worker role into [backend/cmd/worker/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/worker/main.go):
+  - new worker type `ingest`
+  - new definition helper in [backend/internal/sukumad/worker/ingest.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/ingest.go)
+  - worker process now starts the directory-ingest loop alongside send/retry/poll/retention
+- No new web or desktop feature pages were required; the existing app shells and observability surfaces remain the operator-facing UI.
+- Adjusted one desktop route test timeout in [desktop/frontend/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/requests-page.test.tsx) so the existing request-flow test remains stable when the whole desktop suite runs under load.
+
+### Added or updated tests
+- Backend:
+  - added [backend/internal/sukumad/ingest/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/ingest/service_test.go) for:
+    - successful ingest to processed archive + request creation
+    - terminal invalid-envelope failure to failed archive
+    - transient request-creation failure retry scheduling
+    - validation-error terminal handling
+  - added [backend/internal/sukumad/ingest/runtime_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/ingest/runtime_test.go) for:
+    - watcher drain + reconciliation-driven processing
+- Web:
+  - no code changes required; full existing test/build verification rerun
+- Desktop:
+  - no feature code changes required; full existing test/build verification rerun
+  - updated the existing request-page test timeout to remove full-suite flakiness
+
+### Tests and verification
+- Backend:
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/ingest ./cmd/worker ./internal/config` -> PASS
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...` -> PASS
+- Web:
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+- Desktop frontend:
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run` -> PASS
+  - `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build` -> PASS
+
+### Remaining follow-ups
+- The ingestion path currently assumes producers publish files into the inbox using atomic rename semantics; if upstream systems cannot do that, the debounce/stability contract may need stronger writer-side coordination.
+- Operator-facing detail for individual `ingest_files` rows is currently in the backend ledger and logs; if users need direct UI visibility into per-file ingest history, that should be added as a dedicated backend/API/web/desktop milestone rather than ad hoc.
+- Web and desktop verification still emit the existing non-blocking MUI `anchorEl`, desktop `useRouter`, third-party `'use client'`, and chunk-size warnings.
+
 ## Milestone — Sukumad Durable Poll Worker And Recovery Model (Complete)
 
 ### What changed

@@ -20,6 +20,7 @@ import (
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/dhis2"
+	"basepro/backend/internal/sukumad/ingest"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
@@ -99,6 +100,7 @@ func run() error {
 	sukumadDHIS2Service := dhis2.NewService(nil, outboundLimiter)
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
+	sukumadIngestService := ingest.NewService(ingest.NewRepository(database), sukumadRequestService, auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
 		WithRequestStatusUpdater(sukumadRequestService)
@@ -108,6 +110,7 @@ func run() error {
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, nil))
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithEventWriter(sukumadObservabilityService)
+	sukumadIngestService.WithEventWriter(sukumadObservabilityService)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
@@ -162,7 +165,29 @@ func run() error {
 	retentionDef.Interval = time.Duration(workerCfg.Retention.IntervalSeconds) * time.Second
 	retentionDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 
-	manager := worker.NewManager(sukumadWorkerService, sendDef, retryDef, pollDef, retentionDef)
+	ingestRuntime := ingest.NewRuntime(sukumadIngestService, func() ingest.RuntimeConfig {
+		nextCfg := config.Get().Sukumad.Ingest.Directory
+		return ingest.RuntimeConfig{
+			Enabled:               nextCfg.Enabled,
+			InboxPath:             nextCfg.InboxPath,
+			ProcessingPath:        nextCfg.ProcessingPath,
+			ProcessedPath:         nextCfg.ProcessedPath,
+			FailedPath:            nextCfg.FailedPath,
+			AllowedExtensions:     append([]string{}, nextCfg.AllowedExtensions...),
+			DefaultSourceSystem:   nextCfg.DefaultSourceSystem,
+			RequireIdempotencyKey: nextCfg.RequireIdempotencyKey,
+			Debounce:              time.Duration(nextCfg.DebounceMilliseconds) * time.Millisecond,
+			RetryDelay:            time.Duration(nextCfg.RetryDelaySeconds) * time.Second,
+			ClaimTimeout:          time.Duration(nextCfg.ClaimTimeoutSeconds) * time.Second,
+			ScanInterval:          time.Duration(nextCfg.ScanIntervalSeconds) * time.Second,
+			BatchSize:             nextCfg.BatchSize,
+		}
+	})
+	ingestDef := worker.NewIngestDefinition(ingestRuntime.Run, config.Get().Sukumad.Ingest.Directory.BatchSize)
+	ingestDef.Interval = time.Second
+	ingestDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
+
+	manager := worker.NewManager(sukumadWorkerService, ingestDef, sendDef, retryDef, pollDef, retentionDef)
 	errCh := manager.Start(ctx)
 
 	for {

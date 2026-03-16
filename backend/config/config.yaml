@@ -89,6 +89,22 @@ sukumad:
       requests_per_second: 2
       burst: 2
     destinations: {}
+  ingest:
+    directory:
+      enabled: false
+      inbox_path: ""
+      processing_path: ""
+      processed_path: ""
+      failed_path: ""
+      allowed_extensions:
+        - ".json"
+      default_source_system: "directory"
+      require_idempotency_key: true
+      debounce_milliseconds: 1000
+      retry_delay_seconds: 30
+      claim_timeout_seconds: 300
+      scan_interval_seconds: 30
+      batch_size: 10
   workers:
     heartbeat_seconds: 10
     recovery:

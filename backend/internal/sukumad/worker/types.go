@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	TypeIngest    = "ingest"
 	TypeSend      = "send"
 	TypePoll      = "poll"
 	TypeRetry     = "retry"

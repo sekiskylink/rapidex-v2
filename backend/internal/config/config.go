@@ -109,6 +109,23 @@ type Config struct {
 				Burst             int     `mapstructure:"burst"`
 			} `mapstructure:"destinations"`
 		} `mapstructure:"rate_limit"`
+		Ingest struct {
+			Directory struct {
+				Enabled               bool     `mapstructure:"enabled"`
+				InboxPath             string   `mapstructure:"inbox_path"`
+				ProcessingPath        string   `mapstructure:"processing_path"`
+				ProcessedPath         string   `mapstructure:"processed_path"`
+				FailedPath            string   `mapstructure:"failed_path"`
+				AllowedExtensions     []string `mapstructure:"allowed_extensions"`
+				DefaultSourceSystem   string   `mapstructure:"default_source_system"`
+				RequireIdempotencyKey bool     `mapstructure:"require_idempotency_key"`
+				DebounceMilliseconds  int      `mapstructure:"debounce_milliseconds"`
+				RetryDelaySeconds     int      `mapstructure:"retry_delay_seconds"`
+				ClaimTimeoutSeconds   int      `mapstructure:"claim_timeout_seconds"`
+				ScanIntervalSeconds   int      `mapstructure:"scan_interval_seconds"`
+				BatchSize             int      `mapstructure:"batch_size"`
+			} `mapstructure:"directory"`
+		} `mapstructure:"ingest"`
 		Workers struct {
 			HeartbeatSeconds int `mapstructure:"heartbeat_seconds"`
 			Recovery         struct {
@@ -257,6 +274,19 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("sukumad.rate_limit.default.requests_per_second", 2.0)
 	v.SetDefault("sukumad.rate_limit.default.burst", 2)
 	v.SetDefault("sukumad.rate_limit.destinations", map[string]any{})
+	v.SetDefault("sukumad.ingest.directory.enabled", false)
+	v.SetDefault("sukumad.ingest.directory.inbox_path", "")
+	v.SetDefault("sukumad.ingest.directory.processing_path", "")
+	v.SetDefault("sukumad.ingest.directory.processed_path", "")
+	v.SetDefault("sukumad.ingest.directory.failed_path", "")
+	v.SetDefault("sukumad.ingest.directory.allowed_extensions", []string{".json"})
+	v.SetDefault("sukumad.ingest.directory.default_source_system", "directory")
+	v.SetDefault("sukumad.ingest.directory.require_idempotency_key", true)
+	v.SetDefault("sukumad.ingest.directory.debounce_milliseconds", 1000)
+	v.SetDefault("sukumad.ingest.directory.retry_delay_seconds", 30)
+	v.SetDefault("sukumad.ingest.directory.claim_timeout_seconds", 300)
+	v.SetDefault("sukumad.ingest.directory.scan_interval_seconds", 30)
+	v.SetDefault("sukumad.ingest.directory.batch_size", 10)
 	v.SetDefault("sukumad.workers.heartbeat_seconds", 10)
 	v.SetDefault("sukumad.workers.recovery.stale_delivery_after_seconds", 300)
 	v.SetDefault("sukumad.workers.send.interval_seconds", 5)
@@ -328,6 +358,14 @@ func defaultConfig() Config {
 		RequestsPerSecond float64 `mapstructure:"requests_per_second"`
 		Burst             int     `mapstructure:"burst"`
 	}{}
+	cfg.Sukumad.Ingest.Directory.AllowedExtensions = []string{".json"}
+	cfg.Sukumad.Ingest.Directory.DefaultSourceSystem = "directory"
+	cfg.Sukumad.Ingest.Directory.RequireIdempotencyKey = true
+	cfg.Sukumad.Ingest.Directory.DebounceMilliseconds = 1000
+	cfg.Sukumad.Ingest.Directory.RetryDelaySeconds = 30
+	cfg.Sukumad.Ingest.Directory.ClaimTimeoutSeconds = 300
+	cfg.Sukumad.Ingest.Directory.ScanIntervalSeconds = 30
+	cfg.Sukumad.Ingest.Directory.BatchSize = 10
 	cfg.Sukumad.Workers.HeartbeatSeconds = 10
 	cfg.Sukumad.Workers.Recovery.StaleDeliveryAfterSeconds = 300
 	cfg.Sukumad.Workers.Send.IntervalSeconds = 5
@@ -499,6 +537,40 @@ func validate(cfg Config) error {
 		}
 		if destination.Burst <= 0 {
 			return fmt.Errorf("sukumad.rate_limit.destinations.%s.burst must be > 0", key)
+		}
+	}
+	if cfg.Sukumad.Ingest.Directory.DebounceMilliseconds <= 0 {
+		return errors.New("sukumad.ingest.directory.debounce_milliseconds must be > 0")
+	}
+	if cfg.Sukumad.Ingest.Directory.RetryDelaySeconds <= 0 {
+		return errors.New("sukumad.ingest.directory.retry_delay_seconds must be > 0")
+	}
+	if cfg.Sukumad.Ingest.Directory.ClaimTimeoutSeconds <= 0 {
+		return errors.New("sukumad.ingest.directory.claim_timeout_seconds must be > 0")
+	}
+	if cfg.Sukumad.Ingest.Directory.ScanIntervalSeconds <= 0 {
+		return errors.New("sukumad.ingest.directory.scan_interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Ingest.Directory.BatchSize <= 0 {
+		return errors.New("sukumad.ingest.directory.batch_size must be > 0")
+	}
+	if cfg.Sukumad.Ingest.Directory.Enabled {
+		if strings.TrimSpace(cfg.Sukumad.Ingest.Directory.InboxPath) == "" {
+			return errors.New("sukumad.ingest.directory.inbox_path must not be empty when enabled")
+		}
+		if strings.TrimSpace(cfg.Sukumad.Ingest.Directory.ProcessingPath) == "" {
+			return errors.New("sukumad.ingest.directory.processing_path must not be empty when enabled")
+		}
+		if strings.TrimSpace(cfg.Sukumad.Ingest.Directory.ProcessedPath) == "" {
+			return errors.New("sukumad.ingest.directory.processed_path must not be empty when enabled")
+		}
+		if strings.TrimSpace(cfg.Sukumad.Ingest.Directory.FailedPath) == "" {
+			return errors.New("sukumad.ingest.directory.failed_path must not be empty when enabled")
+		}
+	}
+	for _, extension := range cfg.Sukumad.Ingest.Directory.AllowedExtensions {
+		if strings.TrimSpace(extension) == "" {
+			return errors.New("sukumad.ingest.directory.allowed_extensions must not contain empty values")
 		}
 	}
 	if err := moduleenablement.ValidateOverrides(cfg.Modules.Flags); err != nil {
