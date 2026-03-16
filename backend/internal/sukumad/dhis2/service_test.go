@@ -170,6 +170,107 @@ func TestServiceSubmitAsyncResponseUsesRelativeNotifierEndpoint(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitJSONQueryPayloadBuildsURLWithoutBody(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		if got := req.URL.RawQuery; got != "existing=1&orgUnit=ou-1&trackedEntity=abc" && got != "existing=1&trackedEntity=abc&orgUnit=ou-1" {
+			t.Fatalf("unexpected query string: %s", got)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != "" {
+			t.Fatalf("expected empty body, got %q", string(body))
+		}
+		if contentType := req.Header.Get("Content-Type"); contentType != "" {
+			t.Fatalf("expected no default content type for query submission, got %q", contentType)
+		}
+		return jsonResponse(http.StatusOK, `{"status":"OK","response":{"status":"SUCCESS"}}`, nil), nil
+	}), nil)
+
+	_, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody:        `{"trackedEntity":"abc","orgUnit":"ou-1"}`,
+		PayloadFormat:      "json",
+		SubmissionBinding:  "query",
+		URLSuffix:          "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com?existing=1",
+			HTTPMethod: http.MethodPost,
+			URLParams:  map[string]string{"existing": "1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+}
+
+func TestServiceSubmitTextBodyDefaultsToTextPlain(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != "raw text payload" {
+			t.Fatalf("unexpected body: %q", string(body))
+		}
+		if contentType := req.Header.Get("Content-Type"); contentType != "text/plain" {
+			t.Fatalf("expected text/plain, got %q", contentType)
+		}
+		return jsonResponse(http.StatusOK, `{"status":"OK","response":{"status":"SUCCESS"}}`, nil), nil
+	}), nil)
+
+	_, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody:        `raw text payload`,
+		PayloadFormat:      "text",
+		SubmissionBinding:  "body",
+		URLSuffix:          "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: http.MethodPost,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+}
+
+func TestServiceSubmitTextQueryPayloadBuildsURLWithoutBody(t *testing.T) {
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		if got := req.URL.RawQuery; got != "existing=1&orgUnit=ou-1&trackedEntity=abc" && got != "existing=1&trackedEntity=abc&orgUnit=ou-1" {
+			t.Fatalf("unexpected query string: %s", got)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != "" {
+			t.Fatalf("expected empty body, got %q", string(body))
+		}
+		if contentType := req.Header.Get("Content-Type"); contentType != "" {
+			t.Fatalf("expected no default content type for query submission, got %q", contentType)
+		}
+		return jsonResponse(http.StatusOK, `{"status":"OK","response":{"status":"SUCCESS"}}`, nil), nil
+	}), nil)
+
+	_, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody:        `trackedEntity=abc&orgUnit=ou-1`,
+		PayloadFormat:      "text",
+		SubmissionBinding:  "query",
+		URLSuffix:          "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com?existing=1",
+			HTTPMethod: http.MethodPost,
+			URLParams:  map[string]string{"existing": "1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+}
+
 func TestServicePollTerminalFailure(t *testing.T) {
 	limiter := &spyLimiter{}
 	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {

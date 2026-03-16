@@ -106,6 +106,8 @@ func TestDeliveryExecutorRunSendBatchUsesSharedSubmissionPath(t *testing.T) {
 				UID:           "request-7",
 				CorrelationID: "corr-1",
 				PayloadBody:   `{"trackedEntity":"123"}`,
+				PayloadFormat: requests.PayloadFormatJSON,
+				SubmissionBinding: requests.SubmissionBindingQuery,
 				URLSuffix:     "/tracker",
 			},
 		},
@@ -143,6 +145,9 @@ func TestDeliveryExecutorRunSendBatchUsesSharedSubmissionPath(t *testing.T) {
 	if submitter.inputs[0].DeliveryID != 41 || submitter.inputs[0].RequestUID != "request-7" || submitter.inputs[0].Server.Code != "dhis2-ug" {
 		t.Fatalf("unexpected submit input: %+v", submitter.inputs[0])
 	}
+	if submitter.inputs[0].PayloadFormat != requests.PayloadFormatJSON || submitter.inputs[0].SubmissionBinding != requests.SubmissionBindingQuery {
+		t.Fatalf("expected transport fields to be forwarded, got %+v", submitter.inputs[0])
+	}
 	if len(eventWriter.events) < 4 {
 		t.Fatalf("expected worker events to be recorded, got %d", len(eventWriter.events))
 	}
@@ -165,10 +170,12 @@ func TestDeliveryExecutorRunRetryBatchUsesSameSubmissionPath(t *testing.T) {
 	requestService := &fakeRequestService{
 		items: map[int64]requests.Record{
 			8: {
-				ID:            8,
-				UID:           "request-8",
-				CorrelationID: "corr-2",
-				PayloadBody:   `{"dataValues":[]}`,
+				ID:                8,
+				UID:               "request-8",
+				CorrelationID:     "corr-2",
+				PayloadBody:       `trackedEntity=abc&orgUnit=ou-1`,
+				PayloadFormat:     requests.PayloadFormatText,
+				SubmissionBinding: requests.SubmissionBindingQuery,
 			},
 		},
 	}
@@ -202,5 +209,8 @@ func TestDeliveryExecutorRunRetryBatchUsesSameSubmissionPath(t *testing.T) {
 	}
 	if submitter.inputs[0].DeliveryID != 51 || submitter.inputs[0].Server.Code != "dhis2-ug" {
 		t.Fatalf("unexpected retry submit input: %+v", submitter.inputs[0])
+	}
+	if submitter.inputs[0].PayloadFormat != requests.PayloadFormatText || submitter.inputs[0].SubmissionBinding != requests.SubmissionBindingQuery {
+		t.Fatalf("expected retry transport fields to be forwarded, got %+v", submitter.inputs[0])
 	}
 }
