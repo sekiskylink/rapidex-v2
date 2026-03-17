@@ -6,7 +6,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BACKEND_LDFLAGS := -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildDate=$(BUILD_DATE)
 
-.PHONY: backend-build backend-test backend-run desktop-build desktop-dev desktop-test web-build web-dev web-test ci deps migrate-up migrate-down migrate-create seed-sukumad-demo
+.PHONY: backend-build backend-test backend-run backend-worker-run desktop-build desktop-dev desktop-test web-build web-dev web-test ci deps migrate-up migrate-down migrate-create seed-sukumad-demo
 
 backend-build:
 	cd backend && mkdir -p bin && GOCACHE=/tmp/go-build go build -ldflags "$(BACKEND_LDFLAGS)" -o bin/sukumad ./cmd/api
@@ -16,6 +16,9 @@ backend-test:
 
 backend-run:
 	cd backend && GOCACHE=/tmp/go-build go run ./cmd/api
+
+backend-worker-run:
+	cd backend && GOCACHE=/tmp/go-build go run ./cmd/worker
 
 desktop-build:
 	cd desktop/frontend && npm run build

@@ -279,7 +279,7 @@ func (r *SQLRepository) claimNextDelivery(ctx context.Context, now time.Time, re
 			LEFT JOIN request_targets rt ON rt.request_id = d.request_id AND rt.server_id = d.server_id
 			WHERE %s
 			ORDER BY %s
-			FOR UPDATE SKIP LOCKED
+			FOR UPDATE OF d SKIP LOCKED
 			LIMIT 1
 		), claimed AS (
 			UPDATE delivery_attempts d
@@ -416,7 +416,10 @@ func (r *SQLRepository) RequeueStaleRunningDeliveries(ctx context.Context, cutof
 			    terminal_reason = '',
 			    started_at = NULL,
 			    finished_at = NULL,
-			    retry_at = CASE WHEN d.attempt_number > 1 THEN $2 ELSE NULL END,
+			    retry_at = CASE
+			    	WHEN d.attempt_number > 1 THEN $2::timestamptz
+			    	ELSE NULL::timestamptz
+			    END,
 			    updated_at = NOW()
 			FROM stale
 			WHERE d.id = stale.id
