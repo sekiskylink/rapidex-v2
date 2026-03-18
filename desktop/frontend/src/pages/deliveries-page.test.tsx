@@ -283,7 +283,8 @@ describe('desktop deliveries page', () => {
 
     renderRoute('/deliveries', store)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for del-4' }))
+    expect(await screen.findByText('del-4', {}, { timeout: 5000 })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for del-4' }, { timeout: 5000 }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'View' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Delivery Detail' })
@@ -386,7 +387,8 @@ describe('desktop deliveries page', () => {
 
     renderRoute('/deliveries', store)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for del-8' }))
+    expect(await screen.findByText('del-8', {}, { timeout: 5000 })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for del-8' }, { timeout: 5000 }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'View' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Delivery Detail' })

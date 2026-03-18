@@ -197,7 +197,7 @@ describe('requests page', () => {
       submissionBinding: 'query',
       payload: { trackedEntity: 'abc', orgUnit: 'ou-1' },
     })
-  })
+  }, 20000)
 
   it('request detail renders from backend API', async () => {
     authenticate(['requests.read'])

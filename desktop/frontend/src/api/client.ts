@@ -21,6 +21,160 @@ interface VersionResponse {
   buildDate: string
 }
 
+export interface DashboardSnapshot {
+  generatedAt: string
+  health: DashboardHealth
+  kpis: DashboardKpis
+  trends: DashboardTrends
+  attention: DashboardAttention
+  workers: DashboardWorkersSummary
+  recentEvents: DashboardEventSummary[]
+}
+
+export interface DashboardHealth {
+  status: string
+  signals: string[]
+}
+
+export interface DashboardKpis {
+  requestsToday: number
+  pendingRequests: number
+  pendingDeliveries: number
+  runningDeliveries: number
+  failedDeliveriesLastHour: number
+  pollingJobs: number
+  ingestBacklog: number
+  healthyWorkers: number
+  unhealthyWorkers: number
+}
+
+export interface DashboardTrends {
+  requestsByHour: DashboardTimeCountPoint[]
+  deliveriesByStatus: DashboardStatusCountPoint[]
+  jobsByState: DashboardStatusCountPoint[]
+  failuresByServer: DashboardServerCountPoint[]
+}
+
+export interface DashboardTimeCountPoint {
+  bucketStart: string
+  count: number
+}
+
+export interface DashboardStatusCountPoint {
+  bucketStart: string
+  status: string
+  count: number
+}
+
+export interface DashboardServerCountPoint {
+  serverId: number
+  serverName: string
+  count: number
+}
+
+export interface DashboardAttention {
+  failedDeliveries: DashboardDeliveryAttentionList
+  staleRunningDeliveries: DashboardDeliveryAttentionList
+  stuckJobs: DashboardJobAttentionList
+  recentIngestFailures: DashboardIngestAttentionList
+  unhealthyWorkers: DashboardWorkerAttentionList
+}
+
+export interface DashboardDeliveryAttentionList {
+  total: number
+  items: DashboardDeliveryAttentionItem[]
+}
+
+export interface DashboardJobAttentionList {
+  total: number
+  items: DashboardJobAttentionItem[]
+}
+
+export interface DashboardIngestAttentionList {
+  total: number
+  items: DashboardIngestAttentionItem[]
+}
+
+export interface DashboardWorkerAttentionList {
+  total: number
+  items: DashboardWorkerAttentionItem[]
+}
+
+export interface DashboardDeliveryAttentionItem {
+  id: number
+  uid: string
+  requestId: number
+  requestUid: string
+  serverId: number
+  serverName: string
+  correlationId: string
+  status: string
+  errorMessage: string
+  startedAt?: string | null
+  finishedAt?: string | null
+  nextEligibleAt?: string | null
+  updatedAt: string
+}
+
+export interface DashboardJobAttentionItem {
+  id: number
+  uid: string
+  deliveryId: number
+  deliveryUid: string
+  requestId: number
+  requestUid: string
+  correlationId: string
+  remoteJobId: string
+  remoteStatus: string
+  currentState: string
+  nextPollAt?: string | null
+  updatedAt: string
+}
+
+export interface DashboardIngestAttentionItem {
+  id: number
+  uid: string
+  originalName: string
+  currentPath: string
+  status: string
+  lastErrorCode: string
+  lastErrorMessage: string
+  requestId?: number | null
+  failedAt?: string | null
+  updatedAt: string
+}
+
+export interface DashboardWorkerAttentionItem {
+  id: number
+  uid: string
+  workerType: string
+  workerName: string
+  status: string
+  lastHeartbeatAt?: string | null
+  startedAt: string
+  updatedAt: string
+}
+
+export interface DashboardWorkersSummary {
+  heartbeatFreshnessSeconds: number
+  items: DashboardWorkerAttentionItem[]
+}
+
+export interface DashboardEventSummary {
+  type: string
+  timestamp: string
+  severity: string
+  entityType: string
+  entityId?: number
+  entityUid?: string
+  summary: string
+  correlationId?: string
+  requestId?: number | null
+  deliveryId?: number | null
+  jobId?: number | null
+  workerId?: number | null
+}
+
 export interface LoginBrandingResponse {
   appDisplayName?: string
   applicationDisplayName?: string
@@ -318,6 +472,12 @@ export function createApiClient(deps: ApiClientDeps) {
 
     async getBootstrap() {
       return authorizedRequest<BootstrapPayload>('/api/v1/bootstrap', {
+        method: 'GET',
+      })
+    },
+
+    async getOperationsDashboard() {
+      return authorizedRequest<DashboardSnapshot>('/api/v1/dashboard/operations', {
         method: 'GET',
       })
     },

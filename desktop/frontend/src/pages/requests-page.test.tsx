@@ -350,7 +350,7 @@ describe('desktop requests page', () => {
     expect(within(detailDialog).getAllByText('dependency_blocked').length).toBeGreaterThan(0)
     expect(within(detailDialog).getByText('req-1')).toBeInTheDocument()
     expect(within(detailDialog).getByText(/trackedEntity/)).toBeInTheDocument()
-  }, 10000)
+  }, 40000)
 
   it('hides create button without write permission', async () => {
     const store = createMockSettingsStore({

@@ -25,6 +25,7 @@ import (
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
 	asyncjobs "basepro/backend/internal/sukumad/async"
+	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/observability"
@@ -153,6 +154,8 @@ func run() error {
 	sukumadRetentionService := retention.NewService(retention.NewRepository(database), auditService)
 	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
+	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
+	sukumadObservabilityService.WithDashboardPublisher(sukumadDashboardService)
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithEventWriter(sukumadObservabilityService)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
@@ -248,6 +251,7 @@ func run() error {
 			DeliveryHandler:      delivery.NewHandler(sukumadDeliveryService),
 			AsyncHandler:         asyncjobs.NewHandler(sukumadAsyncService),
 			ObservabilityHandler: observability.NewHandler(sukumadObservabilityService),
+			DashboardHandler:     dashboard.NewHandler(sukumadDashboardService),
 		}),
 	}
 

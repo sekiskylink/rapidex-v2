@@ -18,6 +18,12 @@ cp .env.example .env
 - `VITE_APP_NAME` (optional): App display name
 - `VITE_ENABLE_DEVTOOLS` (optional): Enables query devtools integration when implemented
 
+## Backend API Docs
+- Raw OpenAPI document: `http://127.0.0.1:8080/openapi.yaml`
+- Scalar UI: `http://127.0.0.1:8080/docs`
+- Spec source: `../api/openapi.yaml`
+- Regenerate backend OpenAPI artifacts from the repo root with `make generate-openapi`
+
 ## Scripts
 - Development server: `npm run dev`
 - Production build: `npm run build`

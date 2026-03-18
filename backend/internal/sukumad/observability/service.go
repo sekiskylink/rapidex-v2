@@ -6,16 +6,27 @@ import (
 	"errors"
 
 	"basepro/backend/internal/apperror"
+	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/ratelimit"
 	"basepro/backend/internal/sukumad/worker"
 )
 
 type Service struct {
-	repository *Repository
+	repository         *Repository
+	dashboardPublisher interface {
+		PublishSourceEvent(context.Context, dashboard.SourceEvent)
+	}
 }
 
 func NewService(repository *Repository) *Service {
 	return &Service{repository: repository}
+}
+
+func (s *Service) WithDashboardPublisher(publisher interface {
+	PublishSourceEvent(context.Context, dashboard.SourceEvent)
+}) *Service {
+	s.dashboardPublisher = publisher
+	return s
 }
 
 func (s *Service) ListWorkers(ctx context.Context, query worker.ListQuery) (worker.ListResult, error) {
@@ -40,7 +51,25 @@ func (s *Service) AppendEvent(ctx context.Context, input EventWriteInput) error 
 	input.EventLevel = normalizeLevel(input.EventLevel)
 	input.Actor.Type = normalizeActorType(input.Actor.Type)
 	input.EventData = sanitizeEventData(input.EventData)
-	_, err := s.repository.AppendEvent(ctx, input)
+	record, err := s.repository.AppendEvent(ctx, input)
+	if err == nil && s.dashboardPublisher != nil {
+		s.dashboardPublisher.PublishSourceEvent(ctx, dashboard.SourceEvent{
+			Type:          record.EventType,
+			Timestamp:     record.CreatedAt,
+			Severity:      record.EventLevel,
+			Message:       record.Message,
+			CorrelationID: record.CorrelationID,
+			RequestID:     record.RequestID,
+			RequestUID:    record.RequestUID,
+			DeliveryID:    record.DeliveryAttemptID,
+			DeliveryUID:   record.DeliveryUID,
+			JobID:         record.AsyncTaskID,
+			JobUID:        record.AsyncTaskUID,
+			WorkerID:      record.WorkerRunID,
+			WorkerUID:     record.WorkerRunUID,
+			Payload:       record.EventData,
+		})
+	}
 	return err
 }
 

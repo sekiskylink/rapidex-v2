@@ -126,3 +126,49 @@ func TestHealthEndpointDoesNotLeakSensitiveData(t *testing.T) {
 		t.Fatalf("unmet sqlmock expectations: %v", err)
 	}
 }
+
+func TestOpenAPISpecEndpointServesYAML(t *testing.T) {
+	r := newRouter(AppDeps{})
+
+	req := httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	if contentType := w.Header().Get("Content-Type"); !strings.Contains(contentType, "application/yaml") {
+		t.Fatalf("expected yaml content type, got %q", contentType)
+	}
+
+	body := w.Body.String()
+	for _, expected := range []string{"openapi: 3.0.3", "title: SukumadPro API", "/auth/login:", "/observability/trace:"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected response to contain %q", expected)
+		}
+	}
+}
+
+func TestDocsEndpointServesScalarUI(t *testing.T) {
+	r := newRouter(AppDeps{})
+
+	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	if contentType := w.Header().Get("Content-Type"); !strings.Contains(contentType, "text/html") {
+		t.Fatalf("expected html content type, got %q", contentType)
+	}
+
+	body := w.Body.String()
+	for _, expected := range []string{"@scalar/api-reference", `data-url="/openapi.yaml"`, "<title>SukumadPro API Docs</title>"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected response to contain %q", expected)
+		}
+	}
+}

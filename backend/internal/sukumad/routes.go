@@ -5,6 +5,7 @@ import (
 	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/rbac"
 	asyncjobs "basepro/backend/internal/sukumad/async"
+	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
@@ -21,6 +22,7 @@ type RouteDeps struct {
 	DeliveryHandler      *delivery.Handler
 	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
+	DashboardHandler     *dashboard.Handler
 }
 
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
@@ -29,6 +31,7 @@ func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerDeliveryRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DeliveryHandler, deps.ObservabilityHandler)
 	registerAsyncRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.AsyncHandler, deps.ObservabilityHandler)
 	registerObservabilityRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ObservabilityHandler)
+	registerDashboardRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DashboardHandler)
 }
 
 func registerServerRoutes(
@@ -161,4 +164,27 @@ func registerObservabilityRoutes(
 	group.GET("/events", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListEvents)
 	group.GET("/events/:id", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetEvent)
 	group.GET("/trace", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.Trace)
+}
+
+func registerDashboardRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *dashboard.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/dashboard")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "dashboard"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.ResolveJWTPrincipalFromQuery(jwtManager, "access_token"),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("/operations", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetOperations)
+	group.GET("/operations/events", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.StreamOperations)
 }

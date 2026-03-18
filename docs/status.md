@@ -1,5 +1,128 @@
 # Status
 
+## Milestone — Sukumad Operations Dashboard (Complete)
+
+### What changed
+- Added a new backend dashboard module under [backend/internal/sukumad/dashboard](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dashboard) with:
+  - snapshot aggregation for KPIs, trends, attention panels, worker summaries, and recent events
+  - `GET /api/v1/dashboard/operations`
+  - `GET /api/v1/dashboard/operations/events` websocket streaming
+  - sanitized stream event mapping for safe live payloads
+- Wired dashboard routes into the authenticated Sukumad router with `observability.read` permission enforcement in:
+  - [backend/internal/sukumad/routes.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/routes.go)
+  - [backend/internal/middleware/auth.go](/Users/sam/projects/go/sukumadpro/backend/internal/middleware/auth.go)
+  - browser and desktop websocket clients now authenticate through the existing JWT model using the `access_token` query parameter for websocket upgrade requests
+- Published live dashboard events from the persisted observability path in [backend/internal/sukumad/observability/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/observability/service.go), so dashboard live updates stay aligned with the existing event source of truth.
+- Replaced the placeholder web dashboard with a snapshot-driven operations view in [web/src/pages/DashboardPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DashboardPage.tsx):
+  - KPI cards
+  - attention panels
+  - worker health
+  - trends
+  - recent events
+  - live websocket connection state and incremental updates
+- Replaced the placeholder desktop dashboard with the matching snapshot-driven operations view in [desktop/frontend/src/pages/DashboardPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DashboardPage.tsx) and added typed dashboard API support in [desktop/frontend/src/api/client.ts](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/api/client.ts).
+- Added drill-down filter support for dashboard navigation across web and desktop through:
+  - [web/src/pages/listRouteSearch.ts](/Users/sam/projects/go/sukumadpro/web/src/pages/listRouteSearch.ts)
+  - [desktop/frontend/src/pages/listRouteSearch.ts](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/listRouteSearch.ts)
+  - [web/src/routes.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.tsx)
+  - [desktop/frontend/src/routes.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.tsx)
+  - dashboard actions now deep-link into filtered Deliveries, Jobs, and Observability pages instead of generic lists
+- Hardened snapshot/live-update verification support:
+  - fixed the web dashboard timer typing in [web/src/pages/DashboardPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DashboardPage.tsx)
+  - updated stale theme test fixtures in [web/src/ui/theme/theme.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/ui/theme/theme.test.tsx)
+  - raised Vitest suite/test time budgets where the full desktop/web matrix was timing out under load in:
+    - [web/vite.config.ts](/Users/sam/projects/go/sukumadpro/web/vite.config.ts)
+    - [desktop/frontend/vite.config.ts](/Users/sam/projects/go/sukumadpro/desktop/frontend/vite.config.ts)
+    - [web/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/requests-page.test.tsx)
+    - [desktop/frontend/src/pages/requests-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/requests-page.test.tsx)
+    - [desktop/frontend/src/pages/servers-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/servers-page.test.tsx)
+    - [desktop/frontend/src/pages/deliveries-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/deliveries-page.test.tsx)
+    - [desktop/frontend/src/pages/dashboard-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/dashboard-page.test.tsx)
+
+### Added or updated tests
+- Backend:
+  - added dashboard repository/service/handler coverage in:
+    - [backend/internal/sukumad/dashboard/repository_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dashboard/repository_test.go)
+    - [backend/internal/sukumad/dashboard/handler_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dashboard/handler_test.go)
+    - [backend/internal/sukumad/dashboard/stream_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dashboard/stream_test.go)
+  - extended route/auth/websocket coverage in [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go)
+- Web:
+  - added dashboard snapshot/live-update coverage in [web/src/pages/dashboard-page.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/dashboard-page.test.tsx)
+  - existing route coverage remains in [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx)
+- Desktop:
+  - added dashboard snapshot/live-update coverage in [desktop/frontend/src/pages/dashboard-page.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/dashboard-page.test.tsx)
+  - updated route coverage in [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx)
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`
+- `cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`
+- `cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`
+- `cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`)
+- Web build: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`)
+- Desktop tests: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`)
+- Desktop build: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`)
+
+### Known follow-ups
+- Backend full-suite verification requires permission to bind a local ephemeral test server port because the websocket route tests use `httptest.NewServer`.
+- Web and desktop verification still emit existing non-blocking MUI `anchorEl`, desktop `useRouter`, third-party `'use client'`, and bundle-size warnings.
+
+## Milestone — OpenAPI Documentation + Scalar UI (Complete)
+
+### What changed
+- Added the OpenAPI source spec at [openapi.yaml](/Users/sam/projects/go/sukumadpro/api/openapi.yaml).
+- Added `oapi-codegen` configuration at [oapi-codegen.yaml](/Users/sam/projects/go/sukumadpro/api/oapi-codegen.yaml).
+- Added committed generated Go output at [openapi.gen.go](/Users/sam/projects/go/sukumadpro/backend/internal/openapi/generated/openapi.gen.go).
+- Added OpenAPI/Scalar backend integration in:
+  - [handler.go](/Users/sam/projects/go/sukumadpro/backend/internal/openapi/handler.go)
+  - [router.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router.go)
+- The backend now serves:
+  - `/openapi.yaml` for the raw OpenAPI document
+  - `/docs` for the Scalar reference UI
+- Added explicit Make targets in [Makefile](/Users/sam/projects/go/sukumadpro/Makefile):
+  - `generate-openapi`
+  - `check-openapi`
+- Pinned the generator tool in [tools.go](/Users/sam/projects/go/sukumadpro/backend/tools.go) so regeneration is reproducible through the backend Go module.
+- Added and updated documentation in:
+  - [README.md](/Users/sam/projects/go/sukumadpro/README.md)
+  - [api-documentation.md](/Users/sam/projects/go/sukumadpro/docs/notes/api-documentation.md)
+  - [web/README.md](/Users/sam/projects/go/sukumadpro/web/README.md)
+- Saved prompt traceability copy in `docs/prompts/2026-03-17-openapi-scalar.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added `/openapi.yaml` route coverage in [router_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_test.go)
+  - added `/docs` route coverage in [router_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_test.go)
+- Web:
+  - no feature changes required; full suite rerun to confirm no regressions
+- Desktop:
+  - no feature changes required; full suite rerun to confirm no regressions
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `make check-openapi`
+- `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`
+- `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`
+- `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`
+- `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- OpenAPI generation drift check: PASS (`make check-openapi`)
+- Web tests: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Web build: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`)
+- Desktop tests: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Desktop build: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`)
+
+### Known follow-ups
+- The current OpenAPI document is router-aligned and intentionally keeps some evolving request/response envelopes generic.
+- The Scalar page is served from this app but loads its JS bundle from jsDelivr at runtime.
+- The default `node` binary in this environment is currently broken due to a missing ICU library, so verification used the explicit nvm-managed Node binary shown above.
+
 ## Milestone — Sukumad Directory Ingestion Worker (Complete)
 
 ### What changed

@@ -30,6 +30,11 @@ import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SetupPage } from './pages/SetupPage'
 import { UsersPage } from './pages/UsersPage'
+import {
+  normalizeDeliveriesRouteSearch,
+  normalizeJobsRouteSearch,
+  normalizeObservabilityRouteSearch,
+} from './pages/listRouteSearch'
 import { settingsStore } from './settings/store'
 import type { SettingsStore } from './settings/types'
 import { getModuleLabelForPath } from './registry/moduleEnablement'
@@ -488,18 +493,24 @@ const requestsRoute = createRoute({
 const deliveriesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/deliveries',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeDeliveriesRouteSearch(search),
   component: DeliveriesRoutePage,
 })
 
 const jobsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/jobs',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeJobsRouteSearch(search),
   component: JobsRoutePage,
 })
 
 const observabilityRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/observability',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeObservabilityRouteSearch(search),
   component: ObservabilityRoutePage,
 })
 

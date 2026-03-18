@@ -124,8 +124,11 @@ describe('theme system persistence', () => {
       preset: 'oceanic',
       collapseNavByDefault: false,
       showFooter: true,
+      showSukumadMenu: true,
+      showAdministrationMenu: true,
       pinActionsColumnRight: true,
       dataGridBorderRadius: 12,
+      navLabels: {},
     })
 
     mockMatchMedia(true)

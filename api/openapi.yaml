@@ -1,0 +1,1035 @@
+openapi: 3.0.3
+info:
+  title: SukumadPro API
+  version: 0.1.0
+  description: |
+    OpenAPI reference for the Gin HTTP API used by the web and desktop clients.
+
+    This specification is intentionally aligned to the current router structure.
+    Some response bodies are modeled generically where the implementation is still evolving.
+servers:
+  - url: /api/v1
+tags:
+  - name: System
+  - name: Bootstrap
+  - name: Auth
+  - name: API Tokens
+  - name: Users
+  - name: Audit
+  - name: Settings
+  - name: Module Enablement
+  - name: Servers
+  - name: Requests
+  - name: Deliveries
+  - name: Jobs
+  - name: Observability
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Get service health
+      responses:
+        '200':
+          description: Service and database are healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is reachable but one or more dependencies are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /version:
+    get:
+      tags: [System]
+      operationId: getVersion
+      summary: Get build metadata
+      responses:
+        '200':
+          description: Build metadata for the current API binary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+  /bootstrap:
+    get:
+      tags: [Bootstrap]
+      operationId: getBootstrap
+      summary: Get bootstrap metadata used by clients during app startup
+      security:
+        - bearerAuth: []
+        - apiTokenAuth: []
+        - {}
+      responses:
+        '200':
+          description: Bootstrap payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /modules/effective:
+    get:
+      tags: [Module Enablement]
+      operationId: getEffectiveModules
+      summary: Get effective module enablement map
+      responses:
+        '200':
+          description: Effective module flags.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleEnablementResponse'
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Authenticate with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshTokens
+      summary: Refresh access and refresh tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Refresh succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Request a password reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: Reset flow accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Reset a password using a reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoke the current refresh token/session
+      responses:
+        '200':
+          description: Logout succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: me
+      summary: Get the authenticated principal
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authenticated user summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /admin/api-tokens:
+    get:
+      tags: [API Tokens]
+      operationId: listApiTokens
+      summary: List API tokens
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: API token list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [API Tokens]
+      operationId: createApiToken
+      summary: Create an API token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreateRequest'
+      responses:
+        '201':
+          description: API token created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /admin/api-tokens/{id}/revoke:
+    post:
+      tags: [API Tokens]
+      operationId: revokeApiToken
+      summary: Revoke an API token
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: API token revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/{id}:
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Get a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: User details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [Users]
+      operationId: putUser
+      summary: Replace a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: User updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+    patch:
+      tags: [Users]
+      operationId: patchUser
+      summary: Partially update a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: User updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /users/{id}/reset-password:
+    post:
+      tags: [Users]
+      operationId: adminResetPassword
+      summary: Reset a user password as an administrator
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Password reset succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /audit:
+    get:
+      tags: [Audit]
+      operationId: listAuditLogs
+      summary: List audit log entries
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Audit log list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /settings/public/login-branding:
+    get:
+      tags: [Settings]
+      operationId: getPublicLoginBranding
+      summary: Get public login branding
+      responses:
+        '200':
+          description: Public login branding settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /settings/login-branding:
+    get:
+      tags: [Settings]
+      operationId: getLoginBranding
+      summary: Get editable login branding
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Login branding settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+    put:
+      tags: [Settings]
+      operationId: updateLoginBranding
+      summary: Update login branding
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Login branding updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /settings/module-enablement:
+    get:
+      tags: [Module Enablement]
+      operationId: getRuntimeModuleEnablement
+      summary: Get runtime module enablement overrides
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Effective module enablement view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleEnablementResponse'
+    put:
+      tags: [Module Enablement]
+      operationId: updateRuntimeModuleEnablement
+      summary: Update runtime module enablement overrides
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleEnablementUpdateRequest'
+      responses:
+        '200':
+          description: Runtime overrides updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleEnablementResponse'
+  /servers:
+    get:
+      tags: [Servers]
+      operationId: listServers
+      summary: List integration servers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Server list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+    post:
+      tags: [Servers]
+      operationId: createServer
+      summary: Create an integration server
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '201':
+          description: Server created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /servers/{id}:
+    get:
+      tags: [Servers]
+      operationId: getServer
+      summary: Get an integration server
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Server details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+    put:
+      tags: [Servers]
+      operationId: updateServer
+      summary: Update an integration server
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '200':
+          description: Server updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+    delete:
+      tags: [Servers]
+      operationId: deleteServer
+      summary: Delete an integration server
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Server deleted.
+  /requests:
+    get:
+      tags: [Requests]
+      operationId: listRequests
+      summary: List exchange requests
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Request list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+    post:
+      tags: [Requests]
+      operationId: createRequest
+      summary: Create an exchange request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericObject'
+      responses:
+        '201':
+          description: Request created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /requests/{id}:
+    get:
+      tags: [Requests]
+      operationId: getRequest
+      summary: Get an exchange request
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Request details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /requests/{id}/events:
+    get:
+      tags: [Requests]
+      operationId: listRequestEvents
+      summary: List events for a request
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Request event list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /deliveries:
+    get:
+      tags: [Deliveries]
+      operationId: listDeliveries
+      summary: List delivery attempts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Delivery list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /deliveries/{id}:
+    get:
+      tags: [Deliveries]
+      operationId: getDelivery
+      summary: Get a delivery attempt
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Delivery details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /deliveries/{id}/events:
+    get:
+      tags: [Deliveries]
+      operationId: listDeliveryEvents
+      summary: List events for a delivery attempt
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Delivery event list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /deliveries/{id}/retry:
+    post:
+      tags: [Deliveries]
+      operationId: retryDelivery
+      summary: Requeue a delivery attempt for retry
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Delivery retry accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /jobs:
+    get:
+      tags: [Jobs]
+      operationId: listJobs
+      summary: List async jobs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Job list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /jobs/{id}:
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      summary: Get an async job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Job details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /jobs/{id}/events:
+    get:
+      tags: [Jobs]
+      operationId: listJobEvents
+      summary: List events for an async job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Job event list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /jobs/{id}/polls:
+    get:
+      tags: [Jobs]
+      operationId: listJobPolls
+      summary: List poll records for an async job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Job poll list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /observability/workers:
+    get:
+      tags: [Observability]
+      operationId: listWorkers
+      summary: List worker runs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Worker list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /observability/workers/{id}:
+    get:
+      tags: [Observability]
+      operationId: getWorker
+      summary: Get a worker run
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Worker details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /observability/rate-limits:
+    get:
+      tags: [Observability]
+      operationId: listRateLimits
+      summary: List observed rate limit states
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Rate limit list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /observability/events:
+    get:
+      tags: [Observability]
+      operationId: listEvents
+      summary: List observability events
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Event list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /observability/events/{id}:
+    get:
+      tags: [Observability]
+      operationId: getEvent
+      summary: Get an observability event
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Event details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /observability/trace:
+    get:
+      tags: [Observability]
+      operationId: getTrace
+      summary: Query a trace or event correlation view
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Trace response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiTokenAuth:
+      type: apiKey
+      in: header
+      name: X-API-Token
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: Numeric resource identifier
+      schema:
+        type: integer
+        format: int64
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    GenericObject:
+      type: object
+      additionalProperties: true
+    GenericObjectResponse:
+      type: object
+      additionalProperties: true
+    HealthResponse:
+      type: object
+      required: [status, version, db]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: 0.1.0
+        db:
+          type: string
+          example: up
+    VersionResponse:
+      type: object
+      required: [version, commit, buildDate]
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        buildDate:
+          type: string
+          format: date-time
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    ForgotPasswordRequest:
+      type: object
+      required: [usernameOrEmail]
+      properties:
+        usernameOrEmail:
+          type: string
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          format: password
+    AuthTokenResponse:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+    PrincipalSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    PrincipalResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        user:
+          $ref: '#/components/schemas/PrincipalSummary'
+    BootstrapResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        version:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+        app:
+          $ref: '#/components/schemas/VersionResponse'
+        branding:
+          type: object
+          additionalProperties: true
+        modules:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        capabilities:
+          type: object
+          additionalProperties: true
+        cache:
+          type: object
+          additionalProperties: true
+        principal:
+          $ref: '#/components/schemas/PrincipalSummary'
+    ModuleEnablementUpdateRequest:
+      type: object
+      additionalProperties:
+        type: boolean
+    ModuleEnablementResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        modules:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        flags:
+          type: object
+          additionalProperties:
+            type: boolean
+    ApiTokenCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+    PaginationMeta:
+      type: object
+      additionalProperties: true
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+    ListEnvelope:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ErrorResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        error:
+          type: object
+          additionalProperties: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string

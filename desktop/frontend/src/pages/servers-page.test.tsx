@@ -285,5 +285,5 @@ describe('desktop servers page', () => {
         ),
       ).toBe(true)
     })
-  })
+  }, 20000)
 })

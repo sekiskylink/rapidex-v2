@@ -150,6 +150,46 @@ func ResolveJWTPrincipal(jwtManager *auth.JWTManager) gin.HandlerFunc {
 	}
 }
 
+func ResolveJWTPrincipalFromQuery(jwtManager *auth.JWTManager, queryParam string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, exists := c.Get(auth.PrincipalContextKey); exists {
+			c.Next()
+			return
+		}
+
+		candidate := strings.TrimSpace(c.Query(queryParam))
+		if candidate == "" || strings.Count(candidate, ".") != 2 {
+			c.Next()
+			return
+		}
+
+		claims, err := jwtManager.ParseAccessToken(candidate)
+		if err != nil {
+			if err == auth.ErrTokenExpired {
+				apperror.Write(c, apperror.Expired("Access token expired"))
+			} else {
+				apperror.Write(c, apperror.Unauthorized("Invalid access token"))
+			}
+			c.Abort()
+			return
+		}
+
+		principal := auth.Principal{
+			Type:             "user",
+			ID:               strconv.FormatInt(claims.UserID, 10),
+			UserID:           claims.UserID,
+			Username:         claims.Username,
+			Permissions:      []string{},
+			Roles:            []string{},
+			PermissionGrants: []auth.PermissionGrant{},
+		}
+		c.Set(auth.ClaimsContextKey, claims)
+		c.Set(auth.PrincipalContextKey, principal)
+		c.Set("actor_user_id", principal.UserID)
+		c.Next()
+	}
+}
+
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := PrincipalFromContext(c); !ok {

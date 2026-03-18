@@ -10,10 +10,12 @@ import (
 	"basepro/backend/internal/bootstrap"
 	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/moduleenablement"
+	"basepro/backend/internal/openapi"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad"
 	asyncjobs "basepro/backend/internal/sukumad/async"
+	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
@@ -48,6 +50,7 @@ type AppDeps struct {
 	DeliveryHandler      *delivery.Handler
 	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
+	DashboardHandler     *dashboard.Handler
 }
 
 func newRouter(deps AppDeps) *gin.Engine {
@@ -55,6 +58,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 	r.Use(middleware.RequestID())
 	r.Use(middleware.AccessLog())
 	r.Use(gin.Recovery())
+	openapi.RegisterRoutes(r)
 	if deps.CORSConfig.Enabled {
 		r.Use(middleware.CORS(deps.CORSConfig))
 	}
@@ -199,6 +203,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		DeliveryHandler:      deps.DeliveryHandler,
 		AsyncHandler:         deps.AsyncHandler,
 		ObservabilityHandler: deps.ObservabilityHandler,
+		DashboardHandler:     deps.DashboardHandler,
 	})
 
 	return r

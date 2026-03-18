@@ -1,6 +1,7 @@
 import React from 'react'
 import { Alert, Box, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { getAuthSnapshot } from '../auth/state'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { buildAdminListRequestQuery, useAdminListSearch } from '../components/admin/listSearch'
@@ -10,6 +11,7 @@ import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
 import { DeliveryDetailPage, type DeliveryDetailRecord } from './DeliveryDetailPage'
+import type { DeliveriesRouteSearch } from './listRouteSearch'
 import type { EventRecord } from './traceability'
 
 interface DeliveryRow extends DeliveryDetailRecord {}
@@ -45,19 +47,57 @@ function statusColor(status: string): 'default' | 'warning' | 'success' | 'error
 
 export function DeliveriesPage() {
   const notify = useAppNotify()
+  const navigate = useNavigate()
+  const routeSearch = useSearch({ strict: false }) as DeliveriesRouteSearch
   const permissions = getAuthSnapshot().user?.permissions ?? []
   const canWrite = permissions.includes('deliveries.write')
 
   const [reloadToken, setReloadToken] = React.useState(0)
-  const { searchInput, setSearchInput, search } = useAdminListSearch()
-  const [statusFilter, setStatusFilter] = React.useState('')
-  const [serverFilter, setServerFilter] = React.useState('')
-  const [dateFilter, setDateFilter] = React.useState('')
+  const { searchInput, setSearchInput, search } = useAdminListSearch(
+    routeSearch.q ?? '',
+  )
+  const [statusFilter, setStatusFilter] = React.useState(routeSearch.status ?? '')
+  const [serverFilter, setServerFilter] = React.useState(routeSearch.server ?? '')
+  const [dateFilter, setDateFilter] = React.useState(routeSearch.date ?? '')
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailDelivery, setDetailDelivery] = React.useState<DeliveryDetailRecord | null>(null)
   const [detailEvents, setDetailEvents] = React.useState<EventRecord[]>([])
   const [detailError, setDetailError] = React.useState('')
   const [retrying, setRetrying] = React.useState(false)
+
+  React.useEffect(() => {
+    setSearchInput(routeSearch.q ?? '')
+  }, [routeSearch.q, setSearchInput])
+
+  React.useEffect(() => {
+    setStatusFilter(routeSearch.status ?? '')
+  }, [routeSearch.status])
+
+  React.useEffect(() => {
+    setServerFilter(routeSearch.server ?? '')
+  }, [routeSearch.server])
+
+  React.useEffect(() => {
+    setDateFilter(routeSearch.date ?? '')
+  }, [routeSearch.date])
+
+  React.useEffect(() => {
+    const nextSearch: DeliveriesRouteSearch = {
+      q: search || undefined,
+      status: statusFilter || undefined,
+      server: serverFilter || undefined,
+      date: dateFilter || undefined,
+    }
+    if (
+      (routeSearch.q ?? '') === (nextSearch.q ?? '') &&
+      (routeSearch.status ?? '') === (nextSearch.status ?? '') &&
+      (routeSearch.server ?? '') === (nextSearch.server ?? '') &&
+      (routeSearch.date ?? '') === (nextSearch.date ?? '')
+    ) {
+      return
+    }
+    void navigate({ to: '/deliveries', search: nextSearch, replace: true })
+  }, [dateFilter, navigate, routeSearch, search, serverFilter, statusFilter])
 
   const refreshGrid = () => setReloadToken((value) => value + 1)
 

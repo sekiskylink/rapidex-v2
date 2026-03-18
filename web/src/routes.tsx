@@ -29,6 +29,11 @@ import { RouteErrorPage } from './pages/RouteErrorPage'
 import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
+import {
+  normalizeDeliveriesRouteSearch,
+  normalizeJobsRouteSearch,
+  normalizeObservabilityRouteSearch,
+} from './pages/listRouteSearch'
 import { getModuleLabelForPath } from './registry/moduleEnablement'
 import { getRouteAccessState } from './registry/navigation'
 
@@ -217,6 +222,8 @@ const requestsRoute = createRoute({
 const deliveriesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/deliveries',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeDeliveriesRouteSearch(search),
   component: () => {
     const state = getRouteAccessState('/deliveries', getAuthSnapshot().user)
     if (state === 'allowed') {
@@ -232,6 +239,8 @@ const deliveriesRoute = createRoute({
 const jobsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/jobs',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeJobsRouteSearch(search),
   component: () => {
     const state = getRouteAccessState('/jobs', getAuthSnapshot().user)
     if (state === 'allowed') {
@@ -247,6 +256,8 @@ const jobsRoute = createRoute({
 const observabilityRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/observability',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeObservabilityRouteSearch(search),
   component: () => {
     const state = getRouteAccessState('/observability', getAuthSnapshot().user)
     if (state === 'allowed') {

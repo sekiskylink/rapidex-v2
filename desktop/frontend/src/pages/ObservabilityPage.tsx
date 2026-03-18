@@ -1,10 +1,12 @@
 import React from 'react'
 import { Box, Button, Chip, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { PaginatedResponse } from '../api/pagination'
 import { useApiClient } from '../api/useApiClient'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
+import type { ObservabilityRouteSearch } from './listRouteSearch'
 import { EventDetailDialog, formatTraceDate, traceLevelColor, type EventRecord, type TraceResult } from './traceability'
 
 interface WorkerRow {
@@ -47,13 +49,59 @@ function statusColor(status: string): 'default' | 'warning' | 'success' | 'error
 
 export function ObservabilityPage() {
   const apiClient = useApiClient()
-  const [eventType, setEventType] = React.useState('')
-  const [level, setLevel] = React.useState('')
-  const [correlationId, setCorrelationId] = React.useState('')
-  const [from, setFrom] = React.useState('')
-  const [to, setTo] = React.useState('')
+  const navigate = useNavigate()
+  const routeSearch = useSearch({ strict: false }) as ObservabilityRouteSearch
+  const [eventType, setEventType] = React.useState(routeSearch.eventType ?? '')
+  const [level, setLevel] = React.useState(routeSearch.level ?? '')
+  const [correlationId, setCorrelationId] = React.useState(routeSearch.correlationId ?? '')
+  const [from, setFrom] = React.useState(routeSearch.from ?? '')
+  const [to, setTo] = React.useState(routeSearch.to ?? '')
   const [selectedEvent, setSelectedEvent] = React.useState<EventRecord | null>(null)
   const [traceResult, setTraceResult] = React.useState<TraceResult | null>(null)
+
+  React.useEffect(() => {
+    setEventType(routeSearch.eventType ?? '')
+  }, [routeSearch.eventType])
+
+  React.useEffect(() => {
+    setLevel(routeSearch.level ?? '')
+  }, [routeSearch.level])
+
+  React.useEffect(() => {
+    setCorrelationId(routeSearch.correlationId ?? '')
+  }, [routeSearch.correlationId])
+
+  React.useEffect(() => {
+    setFrom(routeSearch.from ?? '')
+  }, [routeSearch.from])
+
+  React.useEffect(() => {
+    setTo(routeSearch.to ?? '')
+  }, [routeSearch.to])
+
+  React.useEffect(() => {
+    const nextSearch: ObservabilityRouteSearch = {
+      eventType: eventType || undefined,
+      level: level || undefined,
+      correlationId: correlationId || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      requestId: routeSearch.requestId,
+      deliveryId: routeSearch.deliveryId,
+      jobId: routeSearch.jobId,
+      workerId: routeSearch.workerId,
+    }
+    if (
+      (routeSearch.eventType ?? '') === (nextSearch.eventType ?? '') &&
+      (routeSearch.level ?? '') === (nextSearch.level ?? '') &&
+      (routeSearch.correlationId ?? '') === (nextSearch.correlationId ?? '') &&
+      (routeSearch.from ?? '') === (nextSearch.from ?? '') &&
+      (routeSearch.to ?? '') === (nextSearch.to ?? '')
+    ) {
+      return
+    }
+    void navigate({ to: '/observability', search: nextSearch, replace: true })
+  }, [correlationId, eventType, from, level, navigate, routeSearch, to])
 
   const fetchEvents = React.useCallback(
     async (params: AppDataGridFetchParams) => {
@@ -71,6 +119,18 @@ export function ObservabilityPage() {
       if (correlationId.trim()) {
         query.set('correlationId', correlationId.trim())
       }
+      if (routeSearch.requestId?.trim()) {
+        query.set('requestId', routeSearch.requestId.trim())
+      }
+      if (routeSearch.deliveryId?.trim()) {
+        query.set('deliveryId', routeSearch.deliveryId.trim())
+      }
+      if (routeSearch.jobId?.trim()) {
+        query.set('jobId', routeSearch.jobId.trim())
+      }
+      if (routeSearch.workerId?.trim()) {
+        query.set('workerId', routeSearch.workerId.trim())
+      }
       if (from) {
         query.set('from', new Date(from).toISOString())
       }
@@ -80,7 +140,7 @@ export function ObservabilityPage() {
       const response = await apiClient.request<PaginatedResponse<EventRecord>>(`/api/v1/observability/events?${query.toString()}`)
       return { rows: response.items ?? [], total: response.totalCount }
     },
-    [apiClient, correlationId, eventType, from, level, to],
+    [apiClient, correlationId, eventType, from, level, routeSearch.deliveryId, routeSearch.jobId, routeSearch.requestId, routeSearch.workerId, to],
   )
 
   const fetchWorkers = React.useCallback(

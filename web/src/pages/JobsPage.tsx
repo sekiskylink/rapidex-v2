@@ -1,6 +1,7 @@
 import React from 'react'
 import { Alert, Box, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { buildAdminListRequestQuery, useAdminListSearch } from '../components/admin/listSearch'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
@@ -9,6 +10,7 @@ import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
 import { JobDetailPage, type JobDetailRecord, type JobPollRecord } from './JobDetailPage'
+import type { JobsRouteSearch } from './listRouteSearch'
 import type { EventRecord } from './traceability'
 
 interface JobRow extends JobDetailRecord {}
@@ -43,14 +45,40 @@ function stateColor(state: string): 'default' | 'warning' | 'success' | 'error' 
 
 export function JobsPage() {
   const notify = useAppNotify()
+  const navigate = useNavigate()
+  const routeSearch = useSearch({ strict: false }) as JobsRouteSearch
   const [reloadToken, setReloadToken] = React.useState(0)
-  const { searchInput, setSearchInput, search } = useAdminListSearch()
-  const [statusFilter, setStatusFilter] = React.useState('')
+  const { searchInput, setSearchInput, search } = useAdminListSearch(
+    routeSearch.q ?? '',
+  )
+  const [statusFilter, setStatusFilter] = React.useState(routeSearch.status ?? '')
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailJob, setDetailJob] = React.useState<JobDetailRecord | null>(null)
   const [polls, setPolls] = React.useState<JobPollRecord[]>([])
   const [events, setEvents] = React.useState<EventRecord[]>([])
   const [detailError, setDetailError] = React.useState('')
+
+  React.useEffect(() => {
+    setSearchInput(routeSearch.q ?? '')
+  }, [routeSearch.q, setSearchInput])
+
+  React.useEffect(() => {
+    setStatusFilter(routeSearch.status ?? '')
+  }, [routeSearch.status])
+
+  React.useEffect(() => {
+    const nextSearch: JobsRouteSearch = {
+      q: search || undefined,
+      status: statusFilter || undefined,
+    }
+    if (
+      (routeSearch.q ?? '') === (nextSearch.q ?? '') &&
+      (routeSearch.status ?? '') === (nextSearch.status ?? '')
+    ) {
+      return
+    }
+    void navigate({ to: '/jobs', search: nextSearch, replace: true })
+  }, [navigate, routeSearch, search, statusFilter])
 
   const fetchJobs = React.useCallback(
     async (params: AppDataGridFetchParams) => {

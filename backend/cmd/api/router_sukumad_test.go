@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,12 +14,14 @@ import (
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/rbac"
 	asyncjobs "basepro/backend/internal/sukumad/async"
+	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
+	"golang.org/x/net/websocket"
 )
 
 func newSukumadTestAppDeps(jwt *auth.JWTManager, rbacService *rbac.Service) AppDeps {
@@ -33,6 +36,91 @@ func newSukumadTestAppDeps(jwt *auth.JWTManager, rbacService *rbac.Service) AppD
 		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
 		AsyncHandler:         asyncjobs.NewHandler(asyncService),
 		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository(nil, workerService, rateLimitService))),
+		DashboardHandler: dashboard.NewHandler(dashboard.NewService(&dashboardTestRepository{
+			snapshot: dashboard.Snapshot{
+				GeneratedAt: time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC),
+				Health:      dashboard.Health{Status: "ok"},
+				KPIs:        dashboard.KPIs{RequestsToday: 1},
+			},
+		})),
+	}
+}
+
+type dashboardTestRepository struct {
+	snapshot dashboard.Snapshot
+}
+
+func (r *dashboardTestRepository) GetSnapshot(_ context.Context, _ time.Time) (dashboard.Snapshot, error) {
+	return r.snapshot, nil
+}
+
+func TestDashboardOperationsEventsRequiresObservabilityRead(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(111, "dashboard-reader", time.Now().UTC())
+	service := dashboard.NewService(&dashboardTestRepository{})
+
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(map[int64][]string{
+		111: {},
+	}))
+	deps.DashboardHandler = dashboard.NewHandler(service)
+	server := httptest.NewServer(newRouter(deps))
+	defer server.Close()
+
+	wsURL := "ws" + server.URL[len("http"):] + "/api/v1/dashboard/operations/events"
+	config, err := websocket.NewConfig(wsURL, "http://example.com")
+	if err != nil {
+		t.Fatalf("create websocket config: %v", err)
+	}
+	config.Location.RawQuery = "access_token=" + token
+
+	conn, err := websocket.DialConfig(config)
+	if err == nil {
+		conn.Close()
+		t.Fatal("expected websocket dial to fail without observability.read")
+	}
+}
+
+func TestDashboardOperationsEventsStreamsPublishedEvent(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(112, "dashboard-observer", time.Now().UTC())
+	service := dashboard.NewService(&dashboardTestRepository{})
+
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(map[int64][]string{
+		112: {rbac.PermissionObservabilityRead},
+	}))
+	deps.DashboardHandler = dashboard.NewHandler(service)
+	server := httptest.NewServer(newRouter(deps))
+	defer server.Close()
+
+	wsURL := "ws" + server.URL[len("http"):] + "/api/v1/dashboard/operations/events"
+	config, err := websocket.NewConfig(wsURL, "http://example.com")
+	if err != nil {
+		t.Fatalf("create websocket config: %v", err)
+	}
+	config.Location.RawQuery = "access_token=" + token
+
+	conn, err := websocket.DialConfig(config)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+
+	workerID := int64(5)
+	service.PublishSourceEvent(context.Background(), dashboard.SourceEvent{
+		Type:      "worker.heartbeat",
+		Timestamp: time.Date(2026, 3, 18, 12, 5, 0, 0, time.UTC),
+		Severity:  "info",
+		Message:   "Worker heartbeat",
+		WorkerID:  &workerID,
+		WorkerUID: "wrk_5",
+	})
+
+	var event dashboard.StreamEvent
+	if err := websocket.JSON.Receive(conn, &event); err != nil {
+		t.Fatalf("receive websocket event: %v", err)
+	}
+	if event.Type != "worker.heartbeat" || event.EntityType != "worker" || event.EntityID != workerID {
+		t.Fatalf("unexpected event payload: %+v", event)
 	}
 }
 
@@ -389,6 +477,7 @@ func TestJobsAndObservabilityRoutesRequireReadPermissions(t *testing.T) {
 	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
 
 	for _, path := range []string{
+		"/api/v1/dashboard/operations",
 		"/api/v1/jobs",
 		"/api/v1/jobs/1/events",
 		"/api/v1/requests/1/events",
@@ -405,6 +494,32 @@ func TestJobsAndObservabilityRoutesRequireReadPermissions(t *testing.T) {
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403 for %s, got %d body=%s", path, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestDashboardOperationsRouteReturnsSnapshot(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(101, "dashboard-reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		101: {rbac.PermissionObservabilityRead},
+	})
+
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/operations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var snapshot map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	if _, ok := snapshot["kpis"]; !ok {
+		t.Fatalf("expected kpis in response, got %+v", snapshot)
 	}
 }
 
