@@ -862,6 +862,16 @@ describe('web settings page', () => {
             JSON.stringify({
               modules: [
                 {
+                  moduleId: 'settings',
+                  flagKey: 'modules.settings.enabled',
+                  enabled: true,
+                  enabledByDefault: true,
+                  description: 'Settings surfaces',
+                  source: 'default',
+                  adminControl: 'static',
+                  editable: false,
+                },
+                {
                   moduleId: 'administration',
                   flagKey: 'modules.administration.enabled',
                   enabled: true,
@@ -893,7 +903,9 @@ describe('web settings page', () => {
     )
 
     renderWithRouter('/settings')
-    expect(await screen.findByText('Administration surfaces')).toBeInTheDocument()
+    expect(await screen.findByText('Administration')).toBeInTheDocument()
+    expect(screen.getByText('Administration surfaces')).toBeInTheDocument()
+    expect(screen.queryByText('Settings surfaces')).not.toBeInTheDocument()
     expect(
       screen.getByText('You need settings.write permission to change runtime-manageable module flags.'),
     ).toBeInTheDocument()

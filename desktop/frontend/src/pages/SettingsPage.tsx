@@ -25,6 +25,7 @@ import { handleAppError } from '../errors/handleAppError'
 import { notify } from '../notifications/facade'
 import { hasPermission } from '../rbac/permissions'
 import type { ModuleEffectiveConfig } from '../registry/moduleEnablement'
+import { moduleRegistry } from '../registry/modules'
 import { THEME_MODES, type AppSettings, type ThemeMode } from '../settings/types'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
@@ -84,6 +85,28 @@ export function SettingsPage() {
   const [moduleEnablementLoading, setModuleEnablementLoading] = React.useState(true)
   const [moduleEnablementSaving, setModuleEnablementSaving] = React.useState(false)
   const [moduleEnablementError, setModuleEnablementError] = React.useState('')
+
+  const runtimeToggleModules = React.useMemo(() => {
+    const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
+
+    return moduleEnablement
+      .filter((module): module is ModuleEffectiveConfig & { moduleId: (typeof moduleRegistry)[number]['id'] } => {
+        return definitionsById.has(module.moduleId) && module.editable === true
+      })
+      .sort(
+        (left, right) =>
+          moduleRegistry.findIndex((module) => module.id === left.moduleId) -
+          moduleRegistry.findIndex((module) => module.id === right.moduleId),
+      )
+      .map((module) => {
+        const definition = definitionsById.get(module.moduleId)
+        return {
+          ...module,
+          label: definition?.label ?? module.moduleId,
+          description: module.description ?? definition?.metadata?.description ?? 'No description provided.',
+        }
+      })
+  }, [moduleEnablement])
 
   React.useEffect(() => {
     let active = true
@@ -495,7 +518,7 @@ export function SettingsPage() {
           <Stack spacing={2}>
             <Typography variant="h6">Module Enablement</Typography>
             <Typography color="text.secondary">
-              Review effective module flags. Only runtime-manageable flags are editable at runtime.
+              Turn runtime-manageable application modules on or off. Static modules are not listed here.
             </Typography>
             {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view module flags.</Alert> : null}
             {moduleEnablementError ? <Alert severity="error">{moduleEnablementError}</Alert> : null}
@@ -505,53 +528,54 @@ export function SettingsPage() {
                   <CircularProgress size={24} />
                 </Box>
               ) : (
-                <Stack spacing={1.5}>
-                  {moduleEnablement.map((module) => {
-                    const isEditable = module.editable === true && canWriteBranding
-                    return (
-                      <Box
-                        key={module.moduleId}
-                        data-testid={`module-flag-${module.moduleId}`}
-                        sx={{
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 2,
-                          p: 1.5,
-                        }}
-                      >
-                        <Stack spacing={1}>
-                          <Stack direction="row" alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
-                            <Typography variant="subtitle1" sx={{ textTransform: 'capitalize' }}>
-                              {module.moduleId}
-                            </Typography>
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  checked={module.enabled}
-                                  disabled={!isEditable || moduleEnablementSaving}
-                                  inputProps={{ 'aria-label': `Toggle ${module.moduleId} module` }}
-                                  onChange={(event) => void onToggleModuleEnablement(module.moduleId, event.target.checked)}
-                                />
-                              }
-                              label={module.enabled ? 'Enabled' : 'Disabled'}
-                            />
+                runtimeToggleModules.length === 0 ? (
+                  <Alert severity="info">No runtime-manageable modules are available for toggle control.</Alert>
+                ) : (
+                  <Stack spacing={1.5}>
+                    {runtimeToggleModules.map((module) => {
+                      const isEditable = canWriteBranding
+                      return (
+                        <Box
+                          key={module.moduleId}
+                          data-testid={`module-flag-${module.moduleId}`}
+                          sx={{
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 2,
+                            p: 1.5,
+                          }}
+                        >
+                          <Stack spacing={1}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
+                              <Typography variant="subtitle1">{module.label}</Typography>
+                              <FormControlLabel
+                                control={
+                                  <Switch
+                                    checked={module.enabled}
+                                    disabled={!isEditable || moduleEnablementSaving}
+                                    inputProps={{ 'aria-label': `Toggle ${module.label} module` }}
+                                    onChange={(event) => void onToggleModuleEnablement(module.moduleId, event.target.checked)}
+                                  />
+                                }
+                                label={module.enabled ? 'Enabled' : 'Disabled'}
+                              />
+                            </Stack>
+                            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                              <Chip
+                                size="small"
+                                label={module.enabled ? 'Enabled' : 'Disabled'}
+                                color={module.enabled ? 'success' : 'default'}
+                              />
+                              <Chip size="small" label={`Source: ${module.source}`} variant="outlined" />
+                              {module.experimental ? <Chip size="small" label="Experimental" color="warning" /> : null}
+                            </Stack>
+                            <Typography color="text.secondary">{module.description}</Typography>
                           </Stack>
-                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                            <Chip
-                              size="small"
-                              label={module.enabled ? 'Enabled' : 'Disabled'}
-                              color={module.enabled ? 'success' : 'default'}
-                            />
-                            <Chip size="small" label={module.adminControl ?? (module.editable ? 'runtime' : 'static')} />
-                            <Chip size="small" label={`Source: ${module.source}`} variant="outlined" />
-                            {module.experimental ? <Chip size="small" label="Experimental" color="warning" /> : null}
-                          </Stack>
-                          <Typography color="text.secondary">{module.description ?? 'No description provided.'}</Typography>
-                        </Stack>
-                      </Box>
-                    )
-                  })}
-                </Stack>
+                        </Box>
+                      )
+                    })}
+                  </Stack>
+                )
               )
             ) : null}
             {canReadModuleEnablement && !canWriteBranding ? (

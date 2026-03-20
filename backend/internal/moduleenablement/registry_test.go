@@ -31,8 +31,8 @@ func TestResolveEffectiveUsesDefaultsAndConfigOverrides(t *testing.T) {
 				continue
 			}
 			found = true
-			if !item.Enabled || item.Source != "default" || item.Editable {
-				t.Fatalf("expected %s module enabled by default and static: %+v", moduleID, item)
+			if !item.Enabled || item.Source != "default" || !item.Editable {
+				t.Fatalf("expected %s module enabled by default and runtime-editable: %+v", moduleID, item)
 			}
 		}
 		if !found {

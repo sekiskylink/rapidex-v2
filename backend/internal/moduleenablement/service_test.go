@@ -57,6 +57,7 @@ func TestUpdateRuntimeOverridesPersistsAndLogsAudit(t *testing.T) {
 	actorID := int64(42)
 	modules, err := svc.UpdateRuntimeOverrides(context.Background(), []RuntimeModuleOverride{
 		{ModuleID: "administration", Enabled: false},
+		{ModuleID: "servers", Enabled: false},
 	}, nil, &actorID)
 	if err != nil {
 		t.Fatalf("update runtime overrides: %v", err)
@@ -78,5 +79,8 @@ func TestUpdateRuntimeOverridesPersistsAndLogsAudit(t *testing.T) {
 	}
 	if enabled, ok := stored.Flags["modules.administration.enabled"]; !ok || enabled {
 		t.Fatalf("expected administration runtime override false, got %+v", stored.Flags)
+	}
+	if enabled, ok := stored.Flags["modules.servers.enabled"]; !ok || enabled {
+		t.Fatalf("expected servers runtime override false, got %+v", stored.Flags)
 	}
 }

@@ -73,7 +73,7 @@ var registry = []Definition{
 		EnabledByDefault: true,
 		Description:      "Sukumad integration server management surfaces.",
 		Scope:            ScopeFullStack,
-		AdminControl:     AdminControlStatic,
+		AdminControl:     AdminControlRuntime,
 	},
 	{
 		ModuleID:         "requests",
@@ -81,7 +81,7 @@ var registry = []Definition{
 		EnabledByDefault: true,
 		Description:      "Sukumad request lifecycle surfaces.",
 		Scope:            ScopeFullStack,
-		AdminControl:     AdminControlStatic,
+		AdminControl:     AdminControlRuntime,
 	},
 	{
 		ModuleID:         "deliveries",
@@ -89,7 +89,7 @@ var registry = []Definition{
 		EnabledByDefault: true,
 		Description:      "Sukumad delivery monitoring surfaces.",
 		Scope:            ScopeFullStack,
-		AdminControl:     AdminControlStatic,
+		AdminControl:     AdminControlRuntime,
 	},
 	{
 		ModuleID:         "jobs",
@@ -97,7 +97,7 @@ var registry = []Definition{
 		EnabledByDefault: true,
 		Description:      "Sukumad worker and job monitoring surfaces.",
 		Scope:            ScopeFullStack,
-		AdminControl:     AdminControlStatic,
+		AdminControl:     AdminControlRuntime,
 	},
 	{
 		ModuleID:         "observability",
@@ -105,7 +105,7 @@ var registry = []Definition{
 		EnabledByDefault: true,
 		Description:      "Sukumad observability surfaces.",
 		Scope:            ScopeFullStack,
-		AdminControl:     AdminControlStatic,
+		AdminControl:     AdminControlRuntime,
 	},
 }
 

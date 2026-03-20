@@ -1701,6 +1701,16 @@ describe('app shell routes', () => {
             JSON.stringify({
               modules: [
                 {
+                  moduleId: 'settings',
+                  flagKey: 'modules.settings.enabled',
+                  enabled: true,
+                  enabledByDefault: true,
+                  description: 'Settings module',
+                  source: 'default',
+                  adminControl: 'static',
+                  editable: false,
+                },
+                {
                   moduleId: 'administration',
                   flagKey: 'modules.administration.enabled',
                   enabled: true,
@@ -1729,7 +1739,9 @@ describe('app shell routes', () => {
     )
 
     renderWithRouter('/settings', store)
+    expect(await screen.findByTestId('module-flag-administration')).toHaveTextContent('Administration')
     expect(await screen.findByText('Admin module')).toBeInTheDocument()
+    expect(screen.queryByText('Settings module')).not.toBeInTheDocument()
     expect(
       screen.getByText('You need settings.write permission to change runtime-manageable module flags.'),
     ).toBeInTheDocument()
