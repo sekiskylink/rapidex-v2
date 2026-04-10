@@ -7,6 +7,7 @@ import (
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
+	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
@@ -23,6 +24,7 @@ type RouteDeps struct {
 	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
 	DashboardHandler     *dashboard.Handler
+	DocumentationHandler *documentation.Handler
 }
 
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
@@ -32,6 +34,7 @@ func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerAsyncRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.AsyncHandler, deps.ObservabilityHandler)
 	registerObservabilityRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ObservabilityHandler)
 	registerDashboardRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DashboardHandler)
+	registerDocumentationRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.DocumentationHandler)
 }
 
 func registerServerRoutes(
@@ -197,4 +200,25 @@ func registerDashboardRoutes(
 	)
 	group.GET("/operations", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetOperations)
 	group.GET("/operations/events", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.StreamOperations)
+}
+
+func registerDocumentationRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	handler *documentation.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/documentation")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "documentation"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("", handler.List)
+	group.GET("/:slug", handler.Get)
 }

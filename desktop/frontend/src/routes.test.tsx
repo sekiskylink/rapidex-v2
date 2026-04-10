@@ -507,6 +507,87 @@ describe('app shell routes', () => {
     expect(screen.getByRole('button', { name: 'Observability' })).toBeInTheDocument()
   })
 
+  it('renders documentation route and navigation for authenticated users', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 19,
+              username: 'docs-reader',
+              roles: ['Staff'],
+              permissions: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/documentation')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { slug: 'overview', title: 'Overview', sourcePath: 'overview.md' },
+                { slug: 'operations', title: 'Operations', sourcePath: 'operations.md' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/documentation/overview')) {
+          return new Response(
+            JSON.stringify({
+              slug: 'overview',
+              title: 'Overview',
+              sourcePath: 'overview.md',
+              content: '# Overview\n\nDocumentation body',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/documentation/operations')) {
+          return new Response(
+            JSON.stringify({
+              slug: 'operations',
+              title: 'Operations',
+              sourcePath: 'operations.md',
+              content: '# Operations\n\nOperational handoff',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/documentation', store)
+
+    expect(await screen.findByRole('heading', { name: 'Documentation', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Documentation body')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /operations/i }))
+    expect(await screen.findByRole('heading', { name: 'Operations', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Operational handoff')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Documentation' })).toBeInTheDocument()
+  })
+
   it('hides Administration group when no admin route permission is granted', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

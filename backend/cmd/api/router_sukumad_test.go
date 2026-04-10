@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
+	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
@@ -42,6 +45,9 @@ func newSukumadTestAppDeps(jwt *auth.JWTManager, rbacService *rbac.Service) AppD
 				Health:      dashboard.Health{Status: "ok"},
 				KPIs:        dashboard.KPIs{RequestsToday: 1},
 			},
+		})),
+		DocumentationHandler: documentation.NewHandler(documentation.NewService(func() documentation.SourceConfig {
+			return documentation.SourceConfig{}
 		})),
 	}
 }
@@ -121,6 +127,69 @@ func TestDashboardOperationsEventsStreamsPublishedEvent(t *testing.T) {
 	}
 	if event.Type != "worker.heartbeat" || event.EntityType != "worker" || event.EntityID != workerID {
 		t.Fatalf("unexpected event payload: %+v", event)
+	}
+}
+
+func TestDocumentationRoutesRequireAuthenticationAndServeConfiguredMarkdown(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "overview.md"), []byte("# Overview\n\nBody"), 0o600); err != nil {
+		t.Fatalf("write doc: %v", err)
+	}
+
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(115, "docs-reader", time.Now().UTC())
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(map[int64][]string{
+		115: {},
+	}))
+	deps.DocumentationHandler = documentation.NewHandler(documentation.NewService(func() documentation.SourceConfig {
+		return documentation.SourceConfig{
+			RootPath: root,
+			Files: []documentation.SourceFile{
+				{Slug: "overview", Title: "Overview", Path: "overview.md"},
+			},
+		}
+	}))
+	router := newRouter(deps)
+
+	unauthReq := httptest.NewRequest(http.MethodGet, "/api/v1/documentation", nil)
+	unauthW := httptest.NewRecorder()
+	router.ServeHTTP(unauthW, unauthReq)
+	if unauthW.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without auth, got %d body=%s", unauthW.Code, unauthW.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/documentation", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listW := httptest.NewRecorder()
+	router.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from list, got %d body=%s", listW.Code, listW.Body.String())
+	}
+
+	var list struct {
+		Items []documentation.DocumentSummary `json:"items"`
+	}
+	if err := json.Unmarshal(listW.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list.Items) != 1 || list.Items[0].Slug != "overview" {
+		t.Fatalf("unexpected list response: %+v", list)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/documentation/overview", nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getW := httptest.NewRecorder()
+	router.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from get, got %d body=%s", getW.Code, getW.Body.String())
+	}
+
+	var detail documentation.DocumentDetail
+	if err := json.Unmarshal(getW.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if detail.Content != "# Overview\n\nBody" {
+		t.Fatalf("unexpected detail response: %+v", detail)
 	}
 }
 

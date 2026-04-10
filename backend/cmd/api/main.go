@@ -28,6 +28,7 @@ import (
 	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/dhis2"
+	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
@@ -155,6 +156,22 @@ func run() error {
 	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
+	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
+		cfg := config.Get()
+		files := make([]documentation.SourceFile, 0, len(cfg.Documentation.Files))
+		for _, file := range cfg.Documentation.Files {
+			files = append(files, documentation.SourceFile{
+				Slug:  file.Slug,
+				Title: file.Title,
+				Path:  file.Path,
+				Order: file.Order,
+			})
+		}
+		return documentation.SourceConfig{
+			RootPath: cfg.Documentation.RootPath,
+			Files:    files,
+		}
+	})
 	sukumadObservabilityService.WithDashboardPublisher(sukumadDashboardService)
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithServerService(sukumadServerService).WithEventWriter(sukumadObservabilityService)
@@ -252,6 +269,7 @@ func run() error {
 			AsyncHandler:         asyncjobs.NewHandler(sukumadAsyncService),
 			ObservabilityHandler: observability.NewHandler(sukumadObservabilityService),
 			DashboardHandler:     dashboard.NewHandler(sukumadDashboardService),
+			DocumentationHandler: documentation.NewHandler(sukumadDocumentationService),
 		}),
 	}
 

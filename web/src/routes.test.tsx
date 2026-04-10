@@ -456,6 +456,72 @@ describe('web auth routes', () => {
     expect(screen.getByRole('button', { name: 'Observability' })).toBeInTheDocument()
   })
 
+  it('renders documentation route and navigation for authenticated users', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 16,
+        username: 'docs-reader',
+        roles: ['Staff'],
+        permissions: [],
+      },
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/documentation')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { slug: 'overview', title: 'Overview', sourcePath: 'overview.md' },
+                { slug: 'operations', title: 'Operations', sourcePath: 'operations.md' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/documentation/overview')) {
+          return new Response(
+            JSON.stringify({
+              slug: 'overview',
+              title: 'Overview',
+              sourcePath: 'overview.md',
+              content: '# Overview\n\nDocumentation body',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/documentation/operations')) {
+          return new Response(
+            JSON.stringify({
+              slug: 'operations',
+              title: 'Operations',
+              sourcePath: 'operations.md',
+              content: '# Operations\n\nOperational handoff',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/documentation')
+
+    expect(await screen.findByRole('heading', { name: 'Documentation', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Documentation body')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /operations/i }))
+    expect(await screen.findByRole('heading', { name: 'Operations', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Operational handoff')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Documentation' })).toBeInTheDocument()
+  })
+
   it('renders branding display name from backend on login page', async () => {
     vi.stubGlobal(
       'fetch',

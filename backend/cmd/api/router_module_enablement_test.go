@@ -68,8 +68,8 @@ func TestModulesEffectiveEndpointReturnsResolvedModuleFlags(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if len(body.Modules) != 8 {
-		t.Fatalf("expected 8 modules, got %d", len(body.Modules))
+	if len(body.Modules) != 9 {
+		t.Fatalf("expected 9 modules, got %d", len(body.Modules))
 	}
 
 	var settingsItem *moduleenablement.EffectiveModule

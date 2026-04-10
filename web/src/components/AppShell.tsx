@@ -93,7 +93,8 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
-      pathname.startsWith('/observability'),
+      pathname.startsWith('/observability') ||
+      pathname.startsWith('/documentation'),
   )
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
@@ -130,7 +131,8 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
-      pathname.startsWith('/observability')
+      pathname.startsWith('/observability') ||
+      pathname.startsWith('/documentation')
     ) {
       setSukumadExpanded(true)
     }
@@ -156,6 +158,7 @@ export function AppShell() {
     deliveries: <EventAvailableRoundedIcon fontSize="small" />,
     jobs: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
+    documentation: <FactCheckRoundedIcon fontSize="small" />,
   }
   const activeDrawerWidth = collapsed ? miniDrawerWidth : drawerWidth
 

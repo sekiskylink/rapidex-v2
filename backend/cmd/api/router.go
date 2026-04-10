@@ -17,6 +17,7 @@ import (
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/dashboard"
 	"basepro/backend/internal/sukumad/delivery"
+	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
@@ -51,6 +52,7 @@ type AppDeps struct {
 	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
 	DashboardHandler     *dashboard.Handler
+	DocumentationHandler *documentation.Handler
 }
 
 func newRouter(deps AppDeps) *gin.Engine {
@@ -204,6 +206,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		AsyncHandler:         deps.AsyncHandler,
 		ObservabilityHandler: deps.ObservabilityHandler,
 		DashboardHandler:     deps.DashboardHandler,
+		DocumentationHandler: deps.DocumentationHandler,
 	})
 
 	return r

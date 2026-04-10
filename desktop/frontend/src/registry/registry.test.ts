@@ -25,6 +25,7 @@ describe('desktop registries', () => {
       'deliveries',
       'jobs',
       'observability',
+      'documentation',
     ])
     expect(moduleEnablementRegistry.every((item) => item.enabledByDefault)).toBe(true)
   })
@@ -59,6 +60,7 @@ describe('desktop registries', () => {
       'deliveries',
       'jobs',
       'observability',
+      'documentation',
     ])
     expect(moduleRegistry.find((item) => item.id === 'administration')?.navItems).toEqual([
       'users',
@@ -73,7 +75,7 @@ describe('desktop registries', () => {
     const admin = authenticatedNavigationRegistry.find((item) => item.id === 'administration')
     expect(admin?.children?.map((item) => item.id)).toEqual(['users', 'roles', 'permissions', 'audit', 'settings'])
     const sukumad = authenticatedNavigationRegistry.find((item) => item.id === 'sukumad')
-    expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'observability'])
+    expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'observability', 'documentation'])
   })
 
   it('enforces navigation access from required permissions', () => {
@@ -90,6 +92,7 @@ describe('desktop registries', () => {
     const serversReader = principalWith(['servers.read'], ['Staff'])
     expect(canAccessNavigationPath(serversReader, '/servers')).toBe(true)
     expect(canAccessNavigationPath(serversReader, '/observability')).toBe(false)
+    expect(canAccessNavigationPath(serversReader, '/documentation')).toBe(true)
   })
 
   it('blocks module paths when effective config disables a module', () => {

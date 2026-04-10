@@ -60,6 +60,102 @@ seed:
 modules:
   flags: {}
 
+documentation:
+  root_path: "../docs/notes"
+  files:
+    - slug: "sukumad-overview"
+      title: "Sukumad Overview"
+      path: "sukumad-overview.md"
+      order: 10
+    - slug: "sukumad-architecture"
+      title: "Sukumad Architecture"
+      path: "sukumad-archtecture.md"
+      order: 20
+    - slug: "sukumad-operations-dashboard"
+      title: "Sukumad Operations Dashboard"
+      path: "sukumad-operations-dashboard.md"
+      order: 30
+    - slug: "api-documentation"
+      title: "API Documentation"
+      path: "api-documentation.md"
+      order: 40
+    - slug: "configuration"
+      title: "Configuration"
+      path: "configuration.md"
+      order: 50
+    - slug: "configuration-reference"
+      title: "Configuration Reference"
+      path: "configuration-reference.md"
+      order: 60
+    - slug: "error-handling"
+      title: "Error Handling"
+      path: "error-handling.md"
+      order: 70
+    - slug: "module-registry"
+      title: "Module Registry"
+      path: "module-registry.md"
+      order: 80
+    - slug: "password-reset-flow"
+      title: "Password Reset Flow"
+      path: "password-reset-flow.md"
+      order: 90
+    - slug: "integrating-external-apps-with-request-create"
+      title: "Integrating External Apps With Request Create"
+      path: "integrating-external-apps-with-request-create.md"
+      order: 100
+    - slug: "sukumad-addons"
+      title: "Sukumad Addons"
+      path: "sukumad-addons.md"
+      order: 110
+    - slug: "sukumad-codex-development-plan"
+      title: "Sukumad Codex Development Plan"
+      path: "sukumad-codex-development-plan.md"
+      order: 120
+    - slug: "sukumad-db-architecture"
+      title: "Sukumad DB Architecture"
+      path: "sukumad-db-architecture.md"
+      order: 130
+    - slug: "sukumad-delivery-engine"
+      title: "Sukumad Delivery Engine"
+      path: "sukumad-delivery-engine.md"
+      order: 140
+    - slug: "sukumad-dhis2-async-integration"
+      title: "Sukumad DHIS2 Async Integration"
+      path: "sukumad-dhis2-async-integration.md"
+      order: 150
+    - slug: "sukumad-directory-ingestion"
+      title: "Sukumad Directory Ingestion"
+      path: "sukumad-directory-ingestion.md"
+      order: 160
+    - slug: "sukumad-how-requests-are-processed"
+      title: "Sukumad Request Processing"
+      path: "sukumad-how-requests-are-processed.md"
+      order: 170
+    - slug: "sukumad-merge-map"
+      title: "Sukumad Merge Map"
+      path: "sukumad-merge-map.md"
+      order: 180
+    - slug: "sukumad-rate-limiting-correction"
+      title: "Sukumad Rate Limiting Correction"
+      path: "sukumad-rate-limiting-correction.md"
+      order: 190
+    - slug: "sukumad-request-payload-transport"
+      title: "Sukumad Request Payload Transport"
+      path: "sukumad-request-payload-transport.md"
+      order: 200
+    - slug: "sukumad-target-repo-structure"
+      title: "Sukumad Target Repo Structure"
+      path: "sukumad-target-repo-structure.md"
+      order: 210
+    - slug: "sukumad-workers"
+      title: "Sukumad Workers"
+      path: "sukumad-workers.md"
+      order: 220
+    - slug: "sukumad-workers-async"
+      title: "Sukumad Workers Async"
+      path: "sukumad-workers-async.md"
+      order: 230
+
 sukumad:
   submission_window:
     default:

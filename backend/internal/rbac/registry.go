@@ -240,6 +240,14 @@ func BaseModuleRegistry() []ModuleDefinition {
 			},
 			NavItems: []string{"observability"},
 		},
+		{
+			ID:          "documentation",
+			Label:       "Documentation",
+			NavGroup:    "sukumad",
+			BasePath:    "/documentation",
+			Permissions: []string{},
+			NavItems:    []string{"documentation"},
+		},
 	}
 }
 

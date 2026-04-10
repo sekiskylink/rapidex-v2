@@ -87,6 +87,13 @@ export const moduleEnablementRegistry = [
     description: 'Sukumad observability surfaces.',
     scope: 'full-stack',
   },
+  {
+    moduleId: 'documentation',
+    flagKey: 'modules.documentation.enabled',
+    enabledByDefault: true,
+    description: 'Authenticated markdown documentation browser.',
+    scope: 'full-stack',
+  },
 ] as const satisfies readonly ModuleEnablementDefinition[]
 
 interface ModuleEnablementSnapshot {

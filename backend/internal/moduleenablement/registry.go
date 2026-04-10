@@ -107,6 +107,14 @@ var registry = []Definition{
 		Scope:            ScopeFullStack,
 		AdminControl:     AdminControlRuntime,
 	},
+	{
+		ModuleID:         "documentation",
+		FlagKey:          "modules.documentation.enabled",
+		EnabledByDefault: true,
+		Description:      "Authenticated markdown documentation browser.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlRuntime,
+	},
 }
 
 func Definitions() []Definition {

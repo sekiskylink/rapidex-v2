@@ -17,6 +17,7 @@ export type NavigationIconKey =
   | 'deliveries'
   | 'jobs'
   | 'observability'
+  | 'documentation'
 export type NavigationGroupKey = 'dashboard' | 'administration' | 'sukumad' | 'settings'
 
 export interface NavigationVisibilityContext {
@@ -135,6 +136,13 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
         path: '/observability',
         group: 'sukumad',
         requiredPermissions: ['observability.read'],
+      },
+      {
+        id: 'documentation',
+        label: 'Documentation',
+        icon: 'documentation',
+        path: '/documentation',
+        group: 'sukumad',
       },
     ],
   },

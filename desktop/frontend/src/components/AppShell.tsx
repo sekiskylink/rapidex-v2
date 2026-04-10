@@ -32,6 +32,7 @@ import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded'
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
+import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded'
@@ -99,7 +100,8 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
-      pathname.startsWith('/observability'),
+      pathname.startsWith('/observability') ||
+      pathname.startsWith('/documentation'),
   )
 
   const navCollapsed = !isMobile && prefs.navCollapsed
@@ -128,7 +130,8 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
-      pathname.startsWith('/observability')
+      pathname.startsWith('/observability') ||
+      pathname.startsWith('/documentation')
     ) {
       setSukumadExpanded(true)
     }
@@ -147,6 +150,7 @@ export function AppShell() {
     deliveries: <LocalShippingRoundedIcon fontSize="small" />,
     jobs: <WorkOutlineRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
+    documentation: <ArticleRoundedIcon fontSize="small" />,
   }
 
   const closeMenus = () => {

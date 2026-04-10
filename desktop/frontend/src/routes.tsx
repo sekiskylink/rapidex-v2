@@ -14,6 +14,7 @@ import { configureSessionStorage, getSessionPrincipal, isAuthenticated, setSessi
 import { AppShell } from './components/AppShell'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { DocumentationPage } from './pages/DocumentationPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ForbiddenPage } from './pages/ForbiddenPage'
 import { LoginPage } from './pages/LoginPage'
@@ -406,6 +407,18 @@ function ObservabilityRoutePage() {
   return <ForbiddenPage />
 }
 
+function DocumentationRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/documentation')
+  if (accessState === 'allowed') {
+    return <DocumentationPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/documentation') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -514,6 +527,12 @@ const observabilityRoute = createRoute({
   component: ObservabilityRoutePage,
 })
 
+const documentationRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/documentation',
+  component: DocumentationRoutePage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
@@ -532,6 +551,7 @@ const routeTree = rootRoute.addChildren([
     deliveriesRoute,
     jobsRoute,
     observabilityRoute,
+    documentationRoute,
   ]),
 ])
 

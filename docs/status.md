@@ -1,5 +1,58 @@
 # Status
 
+## Milestone — Authenticated Markdown Documentation Browser (Complete)
+
+### What changed
+- Added an authenticated Sukumad documentation backend under [backend/internal/sukumad/documentation](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/documentation) with:
+  - configurable markdown root path
+  - explicit allowlist of relevant markdown files
+  - slug-based document listing and detail reads
+  - path traversal, absolute path, duplicate slug, extension, and missing file validation
+- Added documentation configuration defaults and config-file entries in:
+  - [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go)
+  - [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml)
+- Registered the `documentation` module across backend module enablement and RBAC metadata in:
+  - [backend/internal/moduleenablement/registry.go](/Users/sam/projects/go/sukumadpro/backend/internal/moduleenablement/registry.go)
+  - [backend/internal/rbac/registry.go](/Users/sam/projects/go/sukumadpro/backend/internal/rbac/registry.go)
+- Wired authenticated backend routes through the existing Sukumad router:
+  - `GET /api/v1/documentation`
+  - `GET /api/v1/documentation/:slug`
+- Added a MUI-styled markdown documentation page to web at [web/src/pages/DocumentationPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DocumentationPage.tsx), with matching route, navigation, module registry, module enablement, and settings label wiring.
+- Added the matching desktop documentation page at [desktop/frontend/src/pages/DocumentationPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DocumentationPage.tsx), using the backend API only.
+- Added `react-markdown` and `remark-gfm` to the web and desktop frontend packages for markdown rendering. Versions were pinned to the Vite-compatible React Markdown 8 / Remark GFM 3 line.
+- Added architecture notes in [docs/notes/documentation-browser.md](/Users/sam/projects/go/sukumadpro/docs/notes/documentation-browser.md).
+- Saved prompt traceability copy in `docs/prompts/2026-04-10-documentation-pages.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added documentation service coverage in [backend/internal/sukumad/documentation/service_test.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/documentation/service_test.go)
+  - extended authenticated route coverage in [backend/cmd/api/router_sukumad_test.go](/Users/sam/projects/go/sukumadpro/backend/cmd/api/router_sukumad_test.go)
+  - updated module enablement and RBAC registry expectations for the new module
+- Web:
+  - added documentation route coverage in [web/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.test.tsx)
+  - updated registry coverage in [web/src/registry/registry.test.ts](/Users/sam/projects/go/sukumadpro/web/src/registry/registry.test.ts)
+- Desktop:
+  - added documentation route coverage in [desktop/frontend/src/routes.test.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.test.tsx)
+  - updated registry coverage in [desktop/frontend/src/registry/registry.test.ts](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/registry/registry.test.ts)
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`
+- `cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`
+- `cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`
+- `cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`)
+- Web build: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`)
+- Desktop tests: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test`)
+- Desktop build: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`)
+
+### Known follow-ups
+- Web and desktop verification still emit existing non-blocking MUI `anchorEl`, desktop `useRouter`, third-party `'use client'`, and bundle-size warnings.
+- `npm install` emitted existing audit and engine warnings in this environment; the build and test commands were run with the nvm-managed Node 22 binary.
+
 ## Milestone — Sukumad Operations Dashboard (Complete)
 
 ### What changed

@@ -105,4 +105,15 @@ export const moduleRegistry = [
       description: 'Sukumad observability placeholders.',
     },
   },
+  {
+    id: 'documentation',
+    label: 'Documentation',
+    navGroup: 'sukumad',
+    basePath: '/documentation',
+    permissions: [],
+    navItems: ['documentation'],
+    metadata: {
+      description: 'Authenticated markdown documentation browser.',
+    },
+  },
 ] as const satisfies readonly ModuleDefinition[]

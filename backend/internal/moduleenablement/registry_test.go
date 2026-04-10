@@ -8,8 +8,8 @@ func TestResolveEffectiveUsesDefaultsAndConfigOverrides(t *testing.T) {
 		map[string]bool{"modules.administration.enabled": false},
 	)
 
-	if len(items) != 8 {
-		t.Fatalf("expected 8 module definitions, got %d", len(items))
+	if len(items) != 9 {
+		t.Fatalf("expected 9 module definitions, got %d", len(items))
 	}
 
 	if items[0].ModuleID != "dashboard" || !items[0].Enabled || items[0].Source != "default" || items[0].Editable {
@@ -24,7 +24,7 @@ func TestResolveEffectiveUsesDefaultsAndConfigOverrides(t *testing.T) {
 		t.Fatalf("expected settings module to be disabled by config override: %+v", items[2])
 	}
 
-	for _, moduleID := range []string{"servers", "requests", "deliveries", "jobs", "observability"} {
+	for _, moduleID := range []string{"servers", "requests", "deliveries", "jobs", "observability", "documentation"} {
 		found := false
 		for _, item := range items {
 			if item.ModuleID != moduleID {

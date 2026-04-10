@@ -64,6 +64,15 @@ type Config struct {
 	Modules struct {
 		Flags map[string]bool `mapstructure:"flags"`
 	} `mapstructure:"modules"`
+	Documentation struct {
+		RootPath string `mapstructure:"root_path"`
+		Files    []struct {
+			Slug  string `mapstructure:"slug"`
+			Title string `mapstructure:"title"`
+			Path  string `mapstructure:"path"`
+			Order int    `mapstructure:"order"`
+		} `mapstructure:"files"`
+	} `mapstructure:"documentation"`
 	Sukumad struct {
 		SubmissionWindow struct {
 			Default struct {
@@ -259,6 +268,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.cors.allow_credentials", false)
 	v.SetDefault("seed.enable_dev_bootstrap", false)
 	v.SetDefault("modules.flags", map[string]bool{})
+	v.SetDefault("documentation.root_path", "../docs/notes")
+	v.SetDefault("documentation.files", defaultDocumentationFiles())
 	v.SetDefault("sukumad.submission_window.default.start_hour", 0)
 	v.SetDefault("sukumad.submission_window.default.end_hour", 0)
 	v.SetDefault("sukumad.submission_window.destinations", map[string]any{})
@@ -332,6 +343,8 @@ func defaultConfig() Config {
 	cfg.Security.CORS.AllowCredentials = false
 	cfg.Seed.EnableDevBootstrap = false
 	cfg.Modules.Flags = map[string]bool{}
+	cfg.Documentation.RootPath = "../docs/notes"
+	cfg.Documentation.Files = defaultDocumentationFiles()
 	cfg.Sukumad.SubmissionWindow.Default.StartHour = 0
 	cfg.Sukumad.SubmissionWindow.Default.EndHour = 0
 	cfg.Sukumad.SubmissionWindow.Destinations = map[string]struct {
@@ -576,7 +589,65 @@ func validate(cfg Config) error {
 	if err := moduleenablement.ValidateOverrides(cfg.Modules.Flags); err != nil {
 		return err
 	}
+	if strings.TrimSpace(cfg.Documentation.RootPath) == "" {
+		return errors.New("documentation.root_path must not be empty")
+	}
+	seenDocumentSlugs := map[string]struct{}{}
+	for _, file := range cfg.Documentation.Files {
+		slug := strings.TrimSpace(file.Slug)
+		if slug == "" {
+			return errors.New("documentation.files.slug must not be empty")
+		}
+		if _, ok := seenDocumentSlugs[slug]; ok {
+			return fmt.Errorf("documentation.files contains duplicate slug %q", slug)
+		}
+		seenDocumentSlugs[slug] = struct{}{}
+		if strings.TrimSpace(file.Title) == "" {
+			return fmt.Errorf("documentation.files.%s.title must not be empty", slug)
+		}
+		if strings.TrimSpace(file.Path) == "" {
+			return fmt.Errorf("documentation.files.%s.path must not be empty", slug)
+		}
+	}
 	return nil
+}
+
+func defaultDocumentationFiles() []struct {
+	Slug  string `mapstructure:"slug"`
+	Title string `mapstructure:"title"`
+	Path  string `mapstructure:"path"`
+	Order int    `mapstructure:"order"`
+} {
+	return []struct {
+		Slug  string `mapstructure:"slug"`
+		Title string `mapstructure:"title"`
+		Path  string `mapstructure:"path"`
+		Order int    `mapstructure:"order"`
+	}{
+		{Slug: "sukumad-overview", Title: "Sukumad Overview", Path: "sukumad-overview.md", Order: 10},
+		{Slug: "sukumad-architecture", Title: "Sukumad Architecture", Path: "sukumad-archtecture.md", Order: 20},
+		{Slug: "sukumad-operations-dashboard", Title: "Sukumad Operations Dashboard", Path: "sukumad-operations-dashboard.md", Order: 30},
+		{Slug: "api-documentation", Title: "API Documentation", Path: "api-documentation.md", Order: 40},
+		{Slug: "configuration", Title: "Configuration", Path: "configuration.md", Order: 50},
+		{Slug: "configuration-reference", Title: "Configuration Reference", Path: "configuration-reference.md", Order: 60},
+		{Slug: "error-handling", Title: "Error Handling", Path: "error-handling.md", Order: 70},
+		{Slug: "module-registry", Title: "Module Registry", Path: "module-registry.md", Order: 80},
+		{Slug: "password-reset-flow", Title: "Password Reset Flow", Path: "password-reset-flow.md", Order: 90},
+		{Slug: "integrating-external-apps-with-request-create", Title: "Integrating External Apps With Request Create", Path: "integrating-external-apps-with-request-create.md", Order: 100},
+		{Slug: "sukumad-addons", Title: "Sukumad Addons", Path: "sukumad-addons.md", Order: 110},
+		{Slug: "sukumad-codex-development-plan", Title: "Sukumad Codex Development Plan", Path: "sukumad-codex-development-plan.md", Order: 120},
+		{Slug: "sukumad-db-architecture", Title: "Sukumad DB Architecture", Path: "sukumad-db-architecture.md", Order: 130},
+		{Slug: "sukumad-delivery-engine", Title: "Sukumad Delivery Engine", Path: "sukumad-delivery-engine.md", Order: 140},
+		{Slug: "sukumad-dhis2-async-integration", Title: "Sukumad DHIS2 Async Integration", Path: "sukumad-dhis2-async-integration.md", Order: 150},
+		{Slug: "sukumad-directory-ingestion", Title: "Sukumad Directory Ingestion", Path: "sukumad-directory-ingestion.md", Order: 160},
+		{Slug: "sukumad-how-requests-are-processed", Title: "Sukumad Request Processing", Path: "sukumad-how-requests-are-processed.md", Order: 170},
+		{Slug: "sukumad-merge-map", Title: "Sukumad Merge Map", Path: "sukumad-merge-map.md", Order: 180},
+		{Slug: "sukumad-rate-limiting-correction", Title: "Sukumad Rate Limiting Correction", Path: "sukumad-rate-limiting-correction.md", Order: 190},
+		{Slug: "sukumad-request-payload-transport", Title: "Sukumad Request Payload Transport", Path: "sukumad-request-payload-transport.md", Order: 200},
+		{Slug: "sukumad-target-repo-structure", Title: "Sukumad Target Repo Structure", Path: "sukumad-target-repo-structure.md", Order: 210},
+		{Slug: "sukumad-workers", Title: "Sukumad Workers", Path: "sukumad-workers.md", Order: 220},
+		{Slug: "sukumad-workers-async", Title: "Sukumad Workers Async", Path: "sukumad-workers-async.md", Order: 230},
+	}
 }
 
 func validateWindow(start int, end int, prefix string) error {

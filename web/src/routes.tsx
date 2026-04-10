@@ -13,6 +13,7 @@ import { getAuthSnapshot } from './auth/state'
 import { AppShell } from './components/AppShell'
 import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { DocumentationPage } from './pages/DocumentationPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
@@ -270,6 +271,21 @@ const observabilityRoute = createRoute({
   },
 })
 
+const documentationRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/documentation',
+  component: () => {
+    const state = getRouteAccessState('/documentation', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <DocumentationPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/documentation') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -286,6 +302,7 @@ const routeTree = rootRoute.addChildren([
     deliveriesRoute,
     jobsRoute,
     observabilityRoute,
+    documentationRoute,
     settingsRoute,
   ]),
 ])
