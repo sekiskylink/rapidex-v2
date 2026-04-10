@@ -10,11 +10,12 @@ import (
 )
 
 type fakeRepo struct {
-	listFn   func(ctx context.Context, query ListQuery) (ListResult, error)
-	getFn    func(ctx context.Context, id int64) (Record, error)
-	createFn func(ctx context.Context, params CreateParams) (Record, error)
-	updateFn func(ctx context.Context, params UpdateParams) (Record, error)
-	deleteFn func(ctx context.Context, id int64) error
+	listFn     func(ctx context.Context, query ListQuery) (ListResult, error)
+	getFn      func(ctx context.Context, id int64) (Record, error)
+	getByUIDFn func(ctx context.Context, uid string) (Record, error)
+	createFn   func(ctx context.Context, params CreateParams) (Record, error)
+	updateFn   func(ctx context.Context, params UpdateParams) (Record, error)
+	deleteFn   func(ctx context.Context, id int64) error
 }
 
 func (f *fakeRepo) ListServers(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -22,6 +23,12 @@ func (f *fakeRepo) ListServers(ctx context.Context, query ListQuery) (ListResult
 }
 func (f *fakeRepo) GetServerByID(ctx context.Context, id int64) (Record, error) {
 	return f.getFn(ctx, id)
+}
+func (f *fakeRepo) GetServerByUID(ctx context.Context, uid string) (Record, error) {
+	if f.getByUIDFn == nil {
+		return Record{}, sql.ErrNoRows
+	}
+	return f.getByUIDFn(ctx, uid)
 }
 func (f *fakeRepo) CreateServer(ctx context.Context, params CreateParams) (Record, error) {
 	return f.createFn(ctx, params)

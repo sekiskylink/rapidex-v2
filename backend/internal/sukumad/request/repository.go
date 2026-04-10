@@ -36,7 +36,9 @@ type recordRow struct {
 	UID                    string          `db:"uid"`
 	SourceSystem           string          `db:"source_system"`
 	DestinationServerID    int64           `db:"destination_server_id"`
+	DestinationServerUID   string          `db:"destination_server_uid"`
 	DestinationServerName  string          `db:"destination_server_name"`
+	DestinationServerCode  string          `db:"destination_server_code"`
 	BatchID                string          `db:"batch_id"`
 	CorrelationID          string          `db:"correlation_id"`
 	IdempotencyKey         string          `db:"idempotency_key"`
@@ -148,7 +150,9 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
@@ -190,10 +194,32 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 }
 
 func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, error) {
+	return r.getRequestByWhere(ctx, "r.id = $1", id)
+}
+
+func (r *SQLRepository) GetRequestByUID(ctx context.Context, uid string) (Record, error) {
+	return r.getRequestByWhere(ctx, "r.uid::text = $1", strings.TrimSpace(uid))
+}
+
+func (r *SQLRepository) ListRequestsByBatchID(ctx context.Context, batchID string) ([]Record, error) {
+	return r.listRequestsByWhere(ctx, "r.batch_id = $1", strings.TrimSpace(batchID))
+}
+
+func (r *SQLRepository) ListRequestsByCorrelationID(ctx context.Context, correlationID string) ([]Record, error) {
+	return r.listRequestsByWhere(ctx, "r.correlation_id = $1", strings.TrimSpace(correlationID))
+}
+
+func (r *SQLRepository) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error) {
+	return r.getRequestByWhere(ctx, "r.source_system = $1 AND r.idempotency_key = $2", strings.TrimSpace(sourceSystem), strings.TrimSpace(idempotencyKey))
+}
+
+func (r *SQLRepository) getRequestByWhere(ctx context.Context, whereClause string, args ...any) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
@@ -217,8 +243,8 @@ func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, e
 			LIMIT 1
 		) ld ON TRUE
 		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
-		WHERE r.id = $1
-	`, id); err != nil {
+		WHERE `+whereClause+`
+	`, args...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Record{}, sql.ErrNoRows
 		}
@@ -233,6 +259,51 @@ func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, e
 		return Record{}, err
 	}
 	return items[0], nil
+}
+
+func (r *SQLRepository) listRequestsByWhere(ctx context.Context, whereClause string, args ...any) ([]Record, error) {
+	rows := []recordRow{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
+		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
+		       r.batch_id, r.correlation_id, r.idempotency_key,
+		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.extras, r.created_at, r.updated_at, r.created_by,
+		       ld.id AS latest_delivery_id,
+		       COALESCE(ld.uid, '') AS latest_delivery_uid,
+		       COALESCE(ld.status, '') AS latest_delivery_status,
+		       a.id AS latest_async_task_id,
+		       COALESCE(a.uid::text, '') AS latest_async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS latest_async_state,
+		       COALESCE(a.remote_job_id, '') AS latest_async_remote_job_id,
+		       COALESCE(a.poll_url, '') AS latest_async_poll_url
+		FROM exchange_requests r
+		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = r.id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
+		WHERE `+whereClause+`
+		ORDER BY r.created_at DESC, r.id DESC
+	`, args...); err != nil {
+		return nil, fmt.Errorf("list exchange requests by selector: %w", err)
+	}
+	items, err := decodeRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateRequests(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) (Record, error) {
@@ -332,7 +403,9 @@ func decodeRow(row recordRow) (Record, error) {
 		UID:                    row.UID,
 		SourceSystem:           row.SourceSystem,
 		DestinationServerID:    row.DestinationServerID,
+		DestinationServerUID:   row.DestinationServerUID,
 		DestinationServerName:  row.DestinationServerName,
+		DestinationServerCode:  row.DestinationServerCode,
 		BatchID:                row.BatchID,
 		CorrelationID:          row.CorrelationID,
 		IdempotencyKey:         row.IdempotencyKey,
@@ -392,7 +465,7 @@ func (r *SQLRepository) hydrateRequests(ctx context.Context, items []Record) err
 
 func (r *SQLRepository) listTargetsByRequestIDs(ctx context.Context, requestIDs []int64) (map[int64][]TargetRecord, error) {
 	query, args, err := sqlx.In(`
-		SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code,
+		SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, COALESCE(s.uid::text, '') AS server_uid, COALESCE(s.name, '') AS server_name, COALESCE(s.code, '') AS server_code,
 		       t.target_kind, t.priority, t.status, COALESCE(t.blocked_reason, '') AS blocked_reason, t.deferred_until, t.last_released_at,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -429,6 +502,7 @@ func (r *SQLRepository) listTargetsByRequestIDs(ctx context.Context, requestIDs 
 		UID                    string     `db:"uid"`
 		RequestID              int64      `db:"request_id"`
 		ServerID               int64      `db:"server_id"`
+		ServerUID              string     `db:"server_uid"`
 		ServerName             string     `db:"server_name"`
 		ServerCode             string     `db:"server_code"`
 		TargetKind             string     `db:"target_kind"`
@@ -461,6 +535,7 @@ func (r *SQLRepository) listTargetsByRequestIDs(ctx context.Context, requestIDs 
 			UID:                    row.UID,
 			RequestID:              row.RequestID,
 			ServerID:               row.ServerID,
+			ServerUID:              row.ServerUID,
 			ServerName:             row.ServerName,
 			ServerCode:             row.ServerCode,
 			TargetKind:             row.TargetKind,
@@ -638,9 +713,69 @@ func (r *memoryRepository) GetRequestByID(_ context.Context, id int64) (Record, 
 	return cloneRecord(item), nil
 }
 
+func (r *memoryRepository) GetRequestByUID(_ context.Context, uid string) (Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, item := range r.items {
+		if item.UID == strings.TrimSpace(uid) {
+			return cloneRecord(item), nil
+		}
+	}
+	return Record{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) ListRequestsByBatchID(_ context.Context, batchID string) ([]Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := []Record{}
+	for _, item := range r.items {
+		if item.BatchID == strings.TrimSpace(batchID) {
+			items = append(items, cloneRecord(item))
+		}
+	}
+	slices.SortFunc(items, func(a, b Record) int { return compareTimes(b.CreatedAt, a.CreatedAt) })
+	return items, nil
+}
+
+func (r *memoryRepository) ListRequestsByCorrelationID(_ context.Context, correlationID string) ([]Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := []Record{}
+	for _, item := range r.items {
+		if item.CorrelationID == strings.TrimSpace(correlationID) {
+			items = append(items, cloneRecord(item))
+		}
+	}
+	slices.SortFunc(items, func(a, b Record) int { return compareTimes(b.CreatedAt, a.CreatedAt) })
+	return items, nil
+}
+
+func (r *memoryRepository) GetRequestBySourceSystemAndIdempotencyKey(_ context.Context, sourceSystem string, idempotencyKey string) (Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sourceSystem = strings.TrimSpace(sourceSystem)
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	for _, item := range r.items {
+		if item.SourceSystem == sourceSystem && item.IdempotencyKey == idempotencyKey {
+			return cloneRecord(item), nil
+		}
+	}
+	return Record{}, sql.ErrNoRows
+}
+
 func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams) (Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	for _, existing := range r.items {
+		if existing.SourceSystem == params.SourceSystem && existing.IdempotencyKey != "" && existing.IdempotencyKey == params.IdempotencyKey {
+			return Record{}, fmt.Errorf("create exchange request: duplicate idempotency key")
+		}
+	}
 
 	id := r.nextID
 	r.nextID++
@@ -650,7 +785,9 @@ func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams)
 		UID:                   params.UID,
 		SourceSystem:          params.SourceSystem,
 		DestinationServerID:   params.DestinationServerID,
+		DestinationServerUID:  fmt.Sprintf("server-uid-%d", params.DestinationServerID),
 		DestinationServerName: fmt.Sprintf("Server #%d", params.DestinationServerID),
+		DestinationServerCode: fmt.Sprintf("server-%d", params.DestinationServerID),
 		BatchID:               params.BatchID,
 		CorrelationID:         params.CorrelationID,
 		IdempotencyKey:        params.IdempotencyKey,
@@ -831,6 +968,7 @@ func (r *memoryRepository) CreateTargets(_ context.Context, requestID int64, tar
 			UID:        target.UID,
 			RequestID:  requestID,
 			ServerID:   target.ServerID,
+			ServerUID:  fmt.Sprintf("server-uid-%d", target.ServerID),
 			ServerName: fmt.Sprintf("Server #%d", target.ServerID),
 			ServerCode: fmt.Sprintf("server-%d", target.ServerID),
 			TargetKind: target.TargetKind,

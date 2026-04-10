@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS exchange_requests_batch_id_idx;
+DROP INDEX IF EXISTS exchange_requests_source_system_idempotency_key_unique;

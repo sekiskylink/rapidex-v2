@@ -66,7 +66,7 @@ export const moduleRegistry = [
     label: 'Requests',
     navGroup: 'sukumad',
     basePath: '/requests',
-    permissions: ['requests.read', 'requests.write'],
+    permissions: ['requests.read'],
     navItems: ['requests'],
     metadata: {
       description: 'Sukumad request placeholders.',

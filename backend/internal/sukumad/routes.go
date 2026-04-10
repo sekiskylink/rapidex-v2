@@ -84,6 +84,16 @@ func registerRequestRoutes(
 		group.GET("/:id/events", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), observabilityHandler.ListRequestEvents)
 	}
 	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.Create)
+
+	externalGroup := api.Group("/external/requests")
+	externalGroup.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "requests"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+	)
+	externalGroup.GET("/lookup", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.LookupExternal)
+	externalGroup.GET("/:uid", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.GetExternal)
+	externalGroup.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.CreateExternal)
 }
 
 func registerAsyncRoutes(

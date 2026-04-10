@@ -139,6 +139,22 @@ func (r *SQLRepository) GetServerByID(ctx context.Context, id int64) (Record, er
 	return decodeRow(row)
 }
 
+func (r *SQLRepository) GetServerByUID(ctx context.Context, uid string) (Record, error) {
+	var row recordRow
+	if err := r.db.GetContext(ctx, &row, `
+		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
+		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		FROM integration_servers
+		WHERE uid::text = $1
+	`, strings.TrimSpace(uid)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, sql.ErrNoRows
+		}
+		return Record{}, fmt.Errorf("get integration server by uid: %w", err)
+	}
+	return decodeRow(row)
+}
+
 func (r *SQLRepository) CreateServer(ctx context.Context, params CreateParams) (Record, error) {
 	headers, err := json.Marshal(cloneStringMap(params.Headers))
 	if err != nil {
@@ -396,6 +412,18 @@ func (r *memoryRepository) GetServerByID(_ context.Context, id int64) (Record, e
 		return Record{}, sql.ErrNoRows
 	}
 	return cloneRecord(item), nil
+}
+
+func (r *memoryRepository) GetServerByUID(_ context.Context, uid string) (Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, item := range r.items {
+		if item.UID == strings.TrimSpace(uid) {
+			return cloneRecord(item), nil
+		}
+	}
+	return Record{}, sql.ErrNoRows
 }
 
 func (r *memoryRepository) CreateServer(_ context.Context, params CreateParams) (Record, error) {

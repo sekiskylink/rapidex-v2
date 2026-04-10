@@ -8,14 +8,19 @@ import (
 
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/delivery"
+	sukumadserver "basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/traceevent"
 )
 
 type fakeRepo struct {
-	listFn   func(ctx context.Context, query ListQuery) (ListResult, error)
-	getFn    func(ctx context.Context, id int64) (Record, error)
-	createFn func(ctx context.Context, params CreateParams) (Record, error)
-	updateFn func(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
+	listFn                      func(ctx context.Context, query ListQuery) (ListResult, error)
+	getFn                       func(ctx context.Context, id int64) (Record, error)
+	getByUIDFn                  func(ctx context.Context, uid string) (Record, error)
+	listByBatchFn               func(ctx context.Context, batchID string) ([]Record, error)
+	listByCorrelationFn         func(ctx context.Context, correlationID string) ([]Record, error)
+	getBySourceAndIdempotencyFn func(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
+	createFn                    func(ctx context.Context, params CreateParams) (Record, error)
+	updateFn                    func(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
 }
 
 func (f *fakeRepo) ListRequests(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -24,6 +29,34 @@ func (f *fakeRepo) ListRequests(ctx context.Context, query ListQuery) (ListResul
 
 func (f *fakeRepo) GetRequestByID(ctx context.Context, id int64) (Record, error) {
 	return f.getFn(ctx, id)
+}
+
+func (f *fakeRepo) GetRequestByUID(ctx context.Context, uid string) (Record, error) {
+	if f.getByUIDFn == nil {
+		return Record{}, sql.ErrNoRows
+	}
+	return f.getByUIDFn(ctx, uid)
+}
+
+func (f *fakeRepo) ListRequestsByBatchID(ctx context.Context, batchID string) ([]Record, error) {
+	if f.listByBatchFn == nil {
+		return []Record{}, nil
+	}
+	return f.listByBatchFn(ctx, batchID)
+}
+
+func (f *fakeRepo) ListRequestsByCorrelationID(ctx context.Context, correlationID string) ([]Record, error) {
+	if f.listByCorrelationFn == nil {
+		return []Record{}, nil
+	}
+	return f.listByCorrelationFn(ctx, correlationID)
+}
+
+func (f *fakeRepo) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error) {
+	if f.getBySourceAndIdempotencyFn == nil {
+		return Record{}, sql.ErrNoRows
+	}
+	return f.getBySourceAndIdempotencyFn(ctx, sourceSystem, idempotencyKey)
 }
 
 func (f *fakeRepo) CreateRequest(ctx context.Context, params CreateParams) (Record, error) {
@@ -83,6 +116,10 @@ type fakeRequestDeliveryService struct {
 	created []delivery.Record
 }
 
+type fakeServerResolver struct {
+	items map[string]int64
+}
+
 func (f *fakeEventWriter) AppendEvent(_ context.Context, input traceevent.WriteInput) error {
 	f.events = append(f.events, input)
 	return nil
@@ -124,6 +161,14 @@ func (f *fakeRequestDeliveryService) CreatePendingDelivery(_ context.Context, in
 	}
 	f.repo.items[input.RequestID] = item
 	return record, nil
+}
+
+func (f *fakeServerResolver) GetServerByUID(_ context.Context, uid string) (sukumadserver.Record, error) {
+	id, ok := f.items[uid]
+	if !ok {
+		return sukumadserver.Record{}, sql.ErrNoRows
+	}
+	return sukumadserver.Record{ID: id, UID: uid, Name: "Server", Code: "server-code"}, nil
 }
 
 func TestServiceCreateRequestValidatesInput(t *testing.T) {
@@ -242,6 +287,70 @@ func TestServiceGetRequestNotFound(t *testing.T) {
 
 	if _, err := service.GetRequest(context.Background(), 99); err == nil {
 		t.Fatal("expected not found error")
+	}
+}
+
+func TestServiceCreateExternalRequestResolvesUIDs(t *testing.T) {
+	repo := NewRepository().(*memoryRepository)
+	deliverySvc := &fakeRequestDeliveryService{repo: repo}
+	service := NewService(repo, audit.NewService(&fakeAuditRepo{})).
+		WithDeliveryService(deliverySvc).
+		WithServerService(&fakeServerResolver{items: map[string]int64{
+			"srv-primary": 3,
+			"srv-copy":    4,
+		}})
+
+	result, err := service.CreateExternalRequest(context.Background(), ExternalCreateInput{
+		SourceSystem:          "emr",
+		DestinationServerUID:  "srv-primary",
+		DestinationServerUIDs: []string{"srv-copy"},
+		BatchID:               "batch-1",
+		CorrelationID:         "corr-1",
+		IdempotencyKey:        "idem-1",
+		Payload:               []byte(`{"trackedEntity":"123"}`),
+	})
+	if err != nil {
+		t.Fatalf("create external request: %v", err)
+	}
+	if !result.Created || result.Deduped {
+		t.Fatalf("expected newly created request result, got %+v", result)
+	}
+	if result.Record.SourceSystem != "emr" || result.Record.BatchID != "batch-1" || result.Record.CorrelationID != "corr-1" {
+		t.Fatalf("unexpected created record %+v", result.Record)
+	}
+	if len(result.Record.Targets) != 2 {
+		t.Fatalf("expected two targets from uid resolution, got %+v", result.Record.Targets)
+	}
+}
+
+func TestServiceCreateExternalRequestReturnsExistingByIdempotencyKey(t *testing.T) {
+	repo := NewRepository().(*memoryRepository)
+	service := NewService(repo, audit.NewService(&fakeAuditRepo{})).
+		WithServerService(&fakeServerResolver{items: map[string]int64{"srv-primary": 3}})
+
+	first, err := service.CreateExternalRequest(context.Background(), ExternalCreateInput{
+		SourceSystem:         "emr",
+		DestinationServerUID: "srv-primary",
+		IdempotencyKey:       "idem-1",
+		Payload:              []byte(`{"trackedEntity":"123"}`),
+	})
+	if err != nil {
+		t.Fatalf("create first external request: %v", err)
+	}
+	second, err := service.CreateExternalRequest(context.Background(), ExternalCreateInput{
+		SourceSystem:         "emr",
+		DestinationServerUID: "srv-primary",
+		IdempotencyKey:       "idem-1",
+		Payload:              []byte(`{"trackedEntity":"123"}`),
+	})
+	if err != nil {
+		t.Fatalf("replay external request: %v", err)
+	}
+	if !second.Deduped || second.Created {
+		t.Fatalf("expected deduped replay, got %+v", second)
+	}
+	if second.Record.UID != first.Record.UID {
+		t.Fatalf("expected same request uid on replay, got first=%s second=%s", first.Record.UID, second.Record.UID)
 	}
 }
 

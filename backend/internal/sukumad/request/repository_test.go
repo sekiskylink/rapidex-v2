@@ -22,11 +22,11 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 	now := time.Now().UTC()
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
-		"id", "uid", "source_system", "destination_server_id", "destination_server_name", "batch_id", "correlation_id",
+		"id", "uid", "source_system", "destination_server_id", "destination_server_uid", "destination_server_name", "destination_server_code", "batch_id", "correlation_id",
 		"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 		"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 	}).AddRow(
-		8, "11111111-1111-1111-1111-111111111111", "emr", 3, "DHIS2 Uganda", "batch-1", "corr-1",
+		8, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "batch-1", "corr-1",
 		"idem-1", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(7),
 		nil, "", "", nil, "", "", "", "",
 	)
@@ -58,7 +58,9 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
@@ -97,7 +99,7 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").
 		WithArgs(int64(8)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "server_id", "server_name", "server_code", "target_kind", "priority", "status", "blocked_reason", "deferred_until", "last_released_at",
+			"id", "uid", "request_id", "server_id", "server_uid", "server_name", "server_code", "target_kind", "priority", "status", "blocked_reason", "deferred_until", "last_released_at",
 			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url", "created_at", "updated_at",
 		}))
 	mock.ExpectQuery("(?s)SELECT d.request_id, d.depends_on_request_id, .*WHERE d.request_id IN \\(\\?\\).*").
@@ -142,7 +144,9 @@ func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
@@ -215,7 +219,9 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
 		       r.batch_id, r.correlation_id, r.idempotency_key,
 		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
@@ -243,18 +249,18 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 	`)).
 		WithArgs(int64(15)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "source_system", "destination_server_id", "destination_server_name", "batch_id", "correlation_id",
+			"id", "uid", "source_system", "destination_server_id", "destination_server_uid", "destination_server_name", "destination_server_code", "batch_id", "correlation_id",
 			"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 		}).AddRow(
-			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "DHIS2 Uganda", "batch-1", "corr-1",
+			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "batch-1", "corr-1",
 			"idem-1", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
 			nil, "", "", nil, "", "", "", "",
 		))
 	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").
 		WithArgs(int64(15)).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "uid", "request_id", "server_id", "server_name", "server_code", "target_kind", "priority", "status", "blocked_reason", "deferred_until", "last_released_at",
+			"id", "uid", "request_id", "server_id", "server_uid", "server_name", "server_code", "target_kind", "priority", "status", "blocked_reason", "deferred_until", "last_released_at",
 			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url", "created_at", "updated_at",
 		}))
 	mock.ExpectQuery("(?s)SELECT d.request_id, d.depends_on_request_id, .*WHERE d.request_id IN \\(\\?\\).*").

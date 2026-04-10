@@ -44,6 +44,17 @@ func (s *Service) GetServer(ctx context.Context, id int64) (Record, error) {
 	return record, nil
 }
 
+func (s *Service) GetServerByUID(ctx context.Context, uid string) (Record, error) {
+	record, err := s.repo.GetServerByUID(ctx, uid)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"destinationServerUid": []string{"server not found"}})
+		}
+		return Record{}, err
+	}
+	return record, nil
+}
+
 func (s *Service) CreateServer(ctx context.Context, input CreateInput) (Record, error) {
 	normalized, details := normalizeInput(input)
 	if len(details) > 0 {

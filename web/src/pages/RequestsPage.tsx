@@ -389,11 +389,16 @@ export function RequestsPage() {
             Create, inspect, and trace Sukumad exchange requests.
           </Typography>
         </Box>
-        {canWrite ? (
-          <Button variant="contained" onClick={openCreateDialog}>
-            Create Request
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={refreshGrid}>
+            Refresh
           </Button>
-        ) : null}
+          {canWrite ? (
+            <Button variant="contained" onClick={openCreateDialog}>
+              Create Request
+            </Button>
+          ) : null}
+        </Stack>
       </Stack>
 
       {detailError ? <Alert severity="error">{detailError}</Alert> : null}

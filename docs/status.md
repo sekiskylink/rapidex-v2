@@ -3470,6 +3470,71 @@ Verification for this update:
 - Frontend verification still emits existing non-blocking warnings from MUI/jsdom anchor handling and upstream Vite bundle warnings; behavior remains unchanged.
 - Demo seed uses fixed sample payloads against the DHIS2 play instance for display/testing purposes and should not be used as production fixture data.
 
+## Milestone — External Request Tracking API Complete
+
+### What changed
+- Added a dedicated external Sukumad request contract for machine integrations without internal numeric IDs.
+- Added external request routes in [backend/internal/sukumad/routes.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/routes.go):
+  - `POST /api/v1/external/requests`
+  - `GET /api/v1/external/requests/:uid`
+  - `GET /api/v1/external/requests/lookup`
+- Kept existing internal `/api/v1/requests` routes unchanged for current desktop and web clients.
+- Extended request lookup and projection support in:
+  - [backend/internal/sukumad/request/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/types.go)
+  - [backend/internal/sukumad/request/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/repository.go)
+  - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+  - [backend/internal/sukumad/request/handler.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/handler.go)
+- External create now accepts only public references:
+  - `destinationServerUid`
+  - `destinationServerUids`
+  - `dependencyRequestUids`
+- External status responses now return only public identifiers and tracking metadata:
+  - request `uid`
+  - per-target `uid`
+  - `batchId`
+  - `correlationId`
+  - `idempotencyKey`
+  - request roll-up status
+  - per-destination target status
+  - latest delivery UID/status
+  - latest async task UID/state/remote job metadata
+- Added exact lookup support for:
+  - request UID
+  - `correlationId`
+  - `sourceSystem + idempotencyKey`
+  - `batchId`
+- Enabled API-token principals for the external create/read-status routes by reusing the existing platform API-token middleware and `requests.read` / `requests.write` permission checks.
+- Added server UID lookup support in:
+  - [backend/internal/sukumad/server/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server/types.go)
+  - [backend/internal/sukumad/server/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server/repository.go)
+  - [backend/internal/sukumad/server/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/server/service.go)
+- Added database enforcement for external idempotency and faster batch lookup in:
+  - [backend/migrations/000022_add_exchange_request_external_lookup_indexes.up.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000022_add_exchange_request_external_lookup_indexes.up.sql)
+  - [backend/migrations/000022_add_exchange_request_external_lookup_indexes.down.sql](/Users/sam/projects/go/sukumadpro/backend/migrations/000022_add_exchange_request_external_lookup_indexes.down.sql)
+  - unique idempotency scope: `source_system + idempotency_key` when the key is present
+  - added `batch_id` index for batch lookup
+- Updated the integration note in [docs/notes/integrating-external-apps-with-request-create.md](/Users/sam/projects/go/sukumadpro/docs/notes/integrating-external-apps-with-request-create.md) to document the new API-token and UID-only integration path.
+- Saved the milestone prompt copy under `docs/prompts/2026-04-08-external-request-tracking-api.md` (gitignored, not committed).
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`
+- `cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`
+- `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`
+- `cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Web build: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`)
+- Desktop tests: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Desktop build: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vite/bin/vite.js build`)
+
+### Known follow-ups
+- Existing frontend test output still includes non-blocking MUI/jsdom anchor warnings; no frontend code was changed in this milestone.
+- Existing Vite build warnings about ignored `'use client'` directives and chunk-size thresholds remain unchanged.
+- The new external contract is intentionally parallel to the existing internal `/api/v1/requests` routes so current web and desktop request pages can continue using numeric-ID-backed internal APIs until a later parity decision is made.
+
 ## Planned Milestone — Shared Administration UX + Parity (Upcoming)
 
 ### Planned scope

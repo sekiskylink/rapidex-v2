@@ -110,7 +110,7 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
         icon: 'requests',
         path: '/requests',
         group: 'sukumad',
-        requiredPermissions: ['requests.read', 'requests.write'],
+        requiredPermissions: ['requests.read'],
       },
       {
         id: 'deliveries',

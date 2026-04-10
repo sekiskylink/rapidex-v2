@@ -157,7 +157,7 @@ func run() error {
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
 	sukumadObservabilityService.WithDashboardPublisher(sukumadDashboardService)
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
-	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithEventWriter(sukumadObservabilityService)
+	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithServerService(sukumadServerService).WithEventWriter(sukumadObservabilityService)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)

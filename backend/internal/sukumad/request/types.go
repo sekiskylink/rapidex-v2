@@ -36,7 +36,9 @@ type Record struct {
 	UID                    string          `db:"uid" json:"uid"`
 	SourceSystem           string          `db:"source_system" json:"sourceSystem"`
 	DestinationServerID    int64           `db:"destination_server_id" json:"destinationServerId"`
+	DestinationServerUID   string          `json:"destinationServerUid"`
 	DestinationServerName  string          `json:"destinationServerName"`
+	DestinationServerCode  string          `json:"destinationServerCode"`
 	BatchID                string          `db:"batch_id" json:"batchId"`
 	CorrelationID          string          `db:"correlation_id" json:"correlationId"`
 	IdempotencyKey         string          `db:"idempotency_key" json:"idempotencyKey"`
@@ -115,9 +117,35 @@ type CreateInput struct {
 	ActorID              *int64
 }
 
+type ExternalCreateInput struct {
+	SourceSystem          string
+	DestinationServerUID  string
+	DestinationServerUIDs []string
+	DependencyRequestUIDs []string
+	BatchID               string
+	CorrelationID         string
+	IdempotencyKey        string
+	Payload               any
+	PayloadFormat         string
+	SubmissionBinding     string
+	URLSuffix             string
+	Extras                map[string]any
+	ActorID               *int64
+}
+
+type CreateResult struct {
+	Record  Record
+	Deduped bool
+	Created bool
+}
+
 type Repository interface {
 	ListRequests(ctx context.Context, query ListQuery) (ListResult, error)
 	GetRequestByID(ctx context.Context, id int64) (Record, error)
+	GetRequestByUID(ctx context.Context, uid string) (Record, error)
+	ListRequestsByBatchID(ctx context.Context, batchID string) ([]Record, error)
+	ListRequestsByCorrelationID(ctx context.Context, correlationID string) ([]Record, error)
+	GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
 	CreateRequest(ctx context.Context, params CreateParams) (Record, error)
 	UpdateRequestStatus(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
 	CreateTargets(ctx context.Context, requestID int64, targets []CreateTargetParams) ([]TargetRecord, error)
@@ -135,6 +163,7 @@ type TargetRecord struct {
 	UID                    string     `db:"uid" json:"uid"`
 	RequestID              int64      `db:"request_id" json:"requestId"`
 	ServerID               int64      `db:"server_id" json:"serverId"`
+	ServerUID              string     `json:"serverUid"`
 	ServerName             string     `json:"serverName"`
 	ServerCode             string     `json:"serverCode"`
 	TargetKind             string     `db:"target_kind" json:"targetKind"`
@@ -189,4 +218,64 @@ type UpdateTargetParams struct {
 	BlockedReason  string
 	DeferredUntil  *time.Time
 	LastReleasedAt *time.Time
+}
+
+type ExternalRecord struct {
+	UID                   string               `json:"uid"`
+	SourceSystem          string               `json:"sourceSystem"`
+	DestinationServerUID  string               `json:"destinationServerUid"`
+	DestinationServerCode string               `json:"destinationServerCode"`
+	DestinationServerName string               `json:"destinationServerName"`
+	BatchID               string               `json:"batchId"`
+	CorrelationID         string               `json:"correlationId"`
+	IdempotencyKey        string               `json:"idempotencyKey"`
+	PayloadFormat         string               `json:"payloadFormat"`
+	SubmissionBinding     string               `json:"submissionBinding"`
+	URLSuffix             string               `json:"urlSuffix"`
+	Status                string               `json:"status"`
+	StatusReason          string               `json:"statusReason"`
+	DeferredUntil         *time.Time           `json:"deferredUntil,omitempty"`
+	Metadata              map[string]any       `json:"metadata"`
+	AwaitingAsync         bool                 `json:"awaitingAsync"`
+	Targets               []ExternalTarget     `json:"targets"`
+	Dependencies          []ExternalDependency `json:"dependencies"`
+	CreatedAt             time.Time            `json:"createdAt"`
+	UpdatedAt             time.Time            `json:"updatedAt"`
+}
+
+type ExternalTarget struct {
+	UID                   string              `json:"uid"`
+	DestinationServerUID  string              `json:"destinationServerUid"`
+	DestinationServerCode string              `json:"destinationServerCode"`
+	DestinationServerName string              `json:"destinationServerName"`
+	TargetKind            string              `json:"targetKind"`
+	Priority              int                 `json:"priority"`
+	Status                string              `json:"status"`
+	BlockedReason         string              `json:"blockedReason"`
+	DeferredUntil         *time.Time          `json:"deferredUntil,omitempty"`
+	LastReleasedAt        *time.Time          `json:"lastReleasedAt,omitempty"`
+	LatestDelivery        ExternalDeliveryRef `json:"latestDelivery"`
+	LatestAsyncTask       ExternalAsyncRef    `json:"latestAsyncTask"`
+	AwaitingAsync         bool                `json:"awaitingAsync"`
+}
+
+type ExternalDeliveryRef struct {
+	UID    string `json:"uid"`
+	Status string `json:"status"`
+}
+
+type ExternalAsyncRef struct {
+	UID         string `json:"uid"`
+	State       string `json:"state"`
+	RemoteJobID string `json:"remoteJobId"`
+	PollURL     string `json:"pollUrl"`
+}
+
+type ExternalDependency struct {
+	RequestUID            string     `json:"requestUid"`
+	DependsOnRequestUID   string     `json:"dependsOnRequestUid"`
+	Status                string     `json:"status"`
+	StatusReason          string     `json:"statusReason"`
+	DeferredUntil         *time.Time `json:"deferredUntil,omitempty"`
+	DestinationServerName string     `json:"destinationServerName"`
 }

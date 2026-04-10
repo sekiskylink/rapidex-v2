@@ -14,6 +14,7 @@ import (
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/delivery"
+	sukumadserver "basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/traceevent"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -21,7 +22,10 @@ import (
 type Service struct {
 	repo         Repository
 	auditService *audit.Service
-	deliverySvc  interface {
+	serverSvc    interface {
+		GetServerByUID(context.Context, string) (sukumadserver.Record, error)
+	}
+	deliverySvc interface {
 		CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
 	}
 	eventWriter traceevent.Writer
@@ -39,6 +43,13 @@ func (s *Service) WithDeliveryService(deliverySvc interface {
 	CreatePendingDelivery(context.Context, delivery.CreateInput) (delivery.Record, error)
 }) *Service {
 	s.deliverySvc = deliverySvc
+	return s
+}
+
+func (s *Service) WithServerService(serverSvc interface {
+	GetServerByUID(context.Context, string) (sukumadserver.Record, error)
+}) *Service {
+	s.serverSvc = serverSvc
 	return s
 }
 
@@ -62,12 +73,85 @@ func (s *Service) GetRequest(ctx context.Context, id int64) (Record, error) {
 	return record, nil
 }
 
+func (s *Service) GetRequestByUID(ctx context.Context, uid string) (Record, error) {
+	record, err := s.repo.GetRequestByUID(ctx, strings.TrimSpace(uid))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"uid": []string{"request not found"}})
+		}
+		return Record{}, err
+	}
+	return record, nil
+}
+
+func (s *Service) ListRequestsByBatchID(ctx context.Context, batchID string) ([]Record, error) {
+	return s.repo.ListRequestsByBatchID(ctx, strings.TrimSpace(batchID))
+}
+
+func (s *Service) ListRequestsByCorrelationID(ctx context.Context, correlationID string) ([]Record, error) {
+	return s.repo.ListRequestsByCorrelationID(ctx, strings.TrimSpace(correlationID))
+}
+
+func (s *Service) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error) {
+	record, err := s.repo.GetRequestBySourceSystemAndIdempotencyKey(ctx, strings.TrimSpace(sourceSystem), strings.TrimSpace(idempotencyKey))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"idempotencyKey": []string{"request not found"}})
+		}
+		return Record{}, err
+	}
+	return record, nil
+}
+
 func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record, error) {
 	normalized, details := normalizeCreateInput(input)
 	if len(details) > 0 {
 		return Record{}, apperror.ValidationWithDetails("validation failed", details)
 	}
 
+	created, err := s.createRequestNormalized(ctx, normalized)
+	if err != nil {
+		if mapped := mapConstraintError(err); mapped != nil {
+			return Record{}, mapped
+		}
+		return Record{}, err
+	}
+	return created, nil
+}
+
+func (s *Service) CreateExternalRequest(ctx context.Context, input ExternalCreateInput) (CreateResult, error) {
+	normalized, details := s.normalizeExternalCreateInput(ctx, input)
+	if len(details) > 0 {
+		return CreateResult{}, apperror.ValidationWithDetails("validation failed", details)
+	}
+
+	if normalized.IdempotencyKey != "" {
+		existing, err := s.repo.GetRequestBySourceSystemAndIdempotencyKey(ctx, normalized.SourceSystem, normalized.IdempotencyKey)
+		if err == nil {
+			return CreateResult{Record: existing, Deduped: true, Created: false}, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return CreateResult{}, err
+		}
+	}
+
+	created, err := s.createRequestNormalized(ctx, normalized)
+	if err != nil {
+		if normalized.IdempotencyKey != "" && isIdempotencyConstraintError(err) {
+			existing, lookupErr := s.repo.GetRequestBySourceSystemAndIdempotencyKey(ctx, normalized.SourceSystem, normalized.IdempotencyKey)
+			if lookupErr == nil {
+				return CreateResult{Record: existing, Deduped: true, Created: false}, nil
+			}
+		}
+		if mapped := mapConstraintError(err); mapped != nil {
+			return CreateResult{}, mapped
+		}
+		return CreateResult{}, err
+	}
+	return CreateResult{Record: created, Created: true}, nil
+}
+
+func (s *Service) createRequestNormalized(ctx context.Context, normalized CreateInput) (Record, error) {
 	created, err := s.repo.CreateRequest(ctx, CreateParams{
 		UID:                 newUID(),
 		SourceSystem:        normalized.SourceSystem,
@@ -81,12 +165,9 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 		URLSuffix:           normalized.URLSuffix,
 		Status:              StatusPending,
 		Extras:              normalized.Extras,
-		CreatedBy:           input.ActorID,
+		CreatedBy:           normalized.ActorID,
 	})
 	if err != nil {
-		if mapped := mapConstraintError(err); mapped != nil {
-			return Record{}, mapped
-		}
 		return Record{}, err
 	}
 	s.appendEvent(ctx, traceevent.WriteInput{
@@ -95,7 +176,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 		EventLevel:      "info",
 		Message:         traceevent.Message("Request created", "Request %s created", created.UID),
 		CorrelationID:   created.CorrelationID,
-		Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+		Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: normalized.ActorID},
 		SourceComponent: "request.service",
 		EventData: map[string]any{
 			"requestUid":            created.UID,
@@ -109,7 +190,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 
 	s.logAudit(ctx, audit.Event{
 		Action:      "request.created",
-		ActorUserID: input.ActorID,
+		ActorUserID: normalized.ActorID,
 		EntityType:  "request",
 		EntityID:    strPtr(fmt.Sprintf("%d", created.ID)),
 		Metadata: map[string]any{
@@ -150,7 +231,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 			EventLevel:      "info",
 			Message:         traceevent.Message("Request target created", "Request %s target %s created", created.UID, target.UID),
 			CorrelationID:   created.CorrelationID,
-			Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+			Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: normalized.ActorID},
 			SourceComponent: "request.service",
 			EventData: map[string]any{
 				"requestUid": created.UID,
@@ -179,7 +260,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 				EventLevel:      "warning",
 				Message:         traceevent.Message("Request failed by dependency", "Request %s failed because dependency %s failed", created.UID, dependency.RequestUID),
 				CorrelationID:   created.CorrelationID,
-				Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+				Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: normalized.ActorID},
 				SourceComponent: "request.service",
 				EventData: map[string]any{
 					"requestUid":        created.UID,
@@ -199,7 +280,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 				RequestID:     created.ID,
 				ServerID:      targetID,
 				CorrelationID: created.CorrelationID,
-				ActorID:       input.ActorID,
+				ActorID:       normalized.ActorID,
 			})
 			if err != nil {
 				return Record{}, err
@@ -211,7 +292,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 				EventLevel:        "info",
 				Message:           traceevent.Message("Request submitted to delivery", "Request %s submitted to delivery %s", created.UID, deliveryRecord.UID),
 				CorrelationID:     created.CorrelationID,
-				Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+				Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: normalized.ActorID},
 				SourceComponent:   "request.service",
 				EventData: map[string]any{
 					"requestUid":    created.UID,
@@ -237,7 +318,7 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 					EventLevel:        "info",
 					Message:           traceevent.Message("Request blocked by dependency", "Request %s is waiting on dependencies", created.UID),
 					CorrelationID:     created.CorrelationID,
-					Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: input.ActorID},
+					Actor:             traceevent.Actor{Type: traceevent.ActorUser, UserID: normalized.ActorID},
 					SourceComponent:   "request.service",
 					EventData:         map[string]any{"requestUid": created.UID},
 				})
@@ -248,6 +329,109 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record,
 	}
 
 	return created, nil
+}
+
+func (s *Service) normalizeExternalCreateInput(ctx context.Context, input ExternalCreateInput) (CreateInput, map[string]any) {
+	normalized := ExternalCreateInput{
+		SourceSystem:          strings.TrimSpace(input.SourceSystem),
+		DestinationServerUID:  strings.TrimSpace(input.DestinationServerUID),
+		DestinationServerUIDs: normalizeUIDs(input.DestinationServerUIDs),
+		DependencyRequestUIDs: normalizeUIDs(input.DependencyRequestUIDs),
+		BatchID:               strings.TrimSpace(input.BatchID),
+		CorrelationID:         strings.TrimSpace(input.CorrelationID),
+		IdempotencyKey:        strings.TrimSpace(input.IdempotencyKey),
+		Payload:               input.Payload,
+		PayloadFormat:         input.PayloadFormat,
+		SubmissionBinding:     input.SubmissionBinding,
+		URLSuffix:             strings.TrimSpace(input.URLSuffix),
+		Extras:                cloneExtras(input.Extras),
+		ActorID:               input.ActorID,
+	}
+
+	details := map[string]any{}
+	if normalized.SourceSystem == "" {
+		details["sourceSystem"] = []string{"is required"}
+	}
+	if normalized.DestinationServerUID == "" {
+		details["destinationServerUid"] = []string{"is required"}
+	}
+	if s.serverSvc == nil {
+		details["destinationServerUid"] = []string{"server lookup is not configured"}
+	}
+	if err := validateExtras(normalized.Extras); err != nil {
+		details["metadata"] = []string{err.Error()}
+	}
+	if len(details) > 0 {
+		return CreateInput{}, details
+	}
+
+	primaryServer, err := s.serverSvc.GetServerByUID(ctx, normalized.DestinationServerUID)
+	if err != nil {
+		details["destinationServerUid"] = []string{"server not found"}
+		return CreateInput{}, details
+	}
+
+	destinationIDs := make([]int64, 0, len(normalized.DestinationServerUIDs))
+	for _, uid := range normalized.DestinationServerUIDs {
+		serverRecord, lookupErr := s.serverSvc.GetServerByUID(ctx, uid)
+		if lookupErr != nil {
+			details["destinationServerUids"] = []string{"must reference valid server uids"}
+			return CreateInput{}, details
+		}
+		destinationIDs = append(destinationIDs, serverRecord.ID)
+	}
+
+	dependencyIDs := make([]int64, 0, len(normalized.DependencyRequestUIDs))
+	for _, uid := range normalized.DependencyRequestUIDs {
+		record, lookupErr := s.repo.GetRequestByUID(ctx, uid)
+		if lookupErr != nil {
+			details["dependencyRequestUids"] = []string{"must reference valid request uids"}
+			return CreateInput{}, details
+		}
+		dependencyIDs = append(dependencyIDs, record.ID)
+	}
+
+	internal := CreateInput{
+		SourceSystem:         normalized.SourceSystem,
+		DestinationServerID:  primaryServer.ID,
+		DestinationServerIDs: destinationIDs,
+		DependencyRequestIDs: dependencyIDs,
+		BatchID:              normalized.BatchID,
+		CorrelationID:        normalized.CorrelationID,
+		IdempotencyKey:       normalized.IdempotencyKey,
+		Payload:              normalized.Payload,
+		PayloadFormat:        normalized.PayloadFormat,
+		SubmissionBinding:    normalized.SubmissionBinding,
+		URLSuffix:            normalized.URLSuffix,
+		Extras:               normalized.Extras,
+		ActorID:              normalized.ActorID,
+	}
+
+	internal, validationDetails := normalizeCreateInput(internal)
+	for key, value := range validationDetails {
+		details[key] = value
+	}
+	if len(details) > 0 {
+		return CreateInput{}, details
+	}
+	return internal, nil
+}
+
+func normalizeUIDs(input []string) []string {
+	items := make([]string, 0, len(input))
+	seen := map[string]struct{}{}
+	for _, raw := range input {
+		uid := strings.TrimSpace(raw)
+		if uid == "" {
+			continue
+		}
+		if _, ok := seen[uid]; ok {
+			continue
+		}
+		seen[uid] = struct{}{}
+		items = append(items, uid)
+	}
+	return items
 }
 
 func (s *Service) SetProcessing(ctx context.Context, requestID int64) error {
@@ -637,8 +821,16 @@ func mapConstraintError(err error) *apperror.AppError {
 		if strings.Contains(pgErr.ConstraintName, "uid") {
 			return apperror.ValidationWithDetails("validation failed", map[string]any{"uid": []string{"must be unique"}})
 		}
+		if strings.Contains(pgErr.ConstraintName, "idempotency") {
+			return apperror.ValidationWithDetails("validation failed", map[string]any{"idempotencyKey": []string{"must be unique within the source system"}})
+		}
 	}
 	return nil
+}
+
+func isIdempotencyConstraintError(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "idempotency")
 }
 
 func strPtr(v string) *string {

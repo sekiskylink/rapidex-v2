@@ -361,5 +361,5 @@ func settingsFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "basepro-desktop", "settings.json"), nil
+	return filepath.Join(dir, "sukumadpro-desktop", "settings.json"), nil
 }

@@ -34,6 +34,21 @@ type createRequestRequest struct {
 	Metadata             map[string]any `json:"metadata"`
 }
 
+type createExternalRequestRequest struct {
+	SourceSystem          string         `json:"sourceSystem"`
+	DestinationServerUID  string         `json:"destinationServerUid"`
+	DestinationServerUIDs []string       `json:"destinationServerUids"`
+	DependencyRequestUIDs []string       `json:"dependencyRequestUids"`
+	BatchID               string         `json:"batchId"`
+	CorrelationID         string         `json:"correlationId"`
+	IdempotencyKey        string         `json:"idempotencyKey"`
+	Payload               any            `json:"payload"`
+	PayloadFormat         string         `json:"payloadFormat"`
+	SubmissionBinding     string         `json:"submissionBinding"`
+	URLSuffix             string         `json:"urlSuffix"`
+	Metadata              map[string]any `json:"metadata"`
+}
+
 func (h *Handler) List(c *gin.Context) {
 	page, err := listquery.ParseInt(c.Query("page"), 1, 1, 100000, "page")
 	if err != nil {
@@ -146,6 +161,94 @@ func (h *Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, created)
 }
 
+func (h *Handler) CreateExternal(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	var req createExternalRequestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+		return
+	}
+
+	result, err := h.service.CreateExternalRequest(c.Request.Context(), ExternalCreateInput{
+		SourceSystem:          req.SourceSystem,
+		DestinationServerUID:  req.DestinationServerUID,
+		DestinationServerUIDs: req.DestinationServerUIDs,
+		DependencyRequestUIDs: req.DependencyRequestUIDs,
+		BatchID:               req.BatchID,
+		CorrelationID:         req.CorrelationID,
+		IdempotencyKey:        req.IdempotencyKey,
+		Payload:               req.Payload,
+		PayloadFormat:         req.PayloadFormat,
+		SubmissionBinding:     req.SubmissionBinding,
+		URLSuffix:             req.URLSuffix,
+		Extras:                req.Metadata,
+		ActorID:               actorUserID(principal),
+	})
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if result.Deduped {
+		statusCode = http.StatusOK
+	}
+	c.JSON(statusCode, toExternalRecord(result.Record))
+}
+
+func (h *Handler) GetExternal(c *gin.Context) {
+	item, err := h.service.GetRequestByUID(c.Request.Context(), strings.TrimSpace(c.Param("uid")))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toExternalRecord(item))
+}
+
+func (h *Handler) LookupExternal(c *gin.Context) {
+	correlationID := strings.TrimSpace(c.Query("correlationId"))
+	sourceSystem := strings.TrimSpace(c.Query("sourceSystem"))
+	idempotencyKey := strings.TrimSpace(c.Query("idempotencyKey"))
+	batchID := strings.TrimSpace(c.Query("batchId"))
+
+	var (
+		items []Record
+		err   error
+	)
+
+	switch {
+	case correlationID != "":
+		items, err = h.service.ListRequestsByCorrelationID(c.Request.Context(), correlationID)
+	case batchID != "":
+		items, err = h.service.ListRequestsByBatchID(c.Request.Context(), batchID)
+	case sourceSystem != "" && idempotencyKey != "":
+		var item Record
+		item, err = h.service.GetRequestBySourceSystemAndIdempotencyKey(c.Request.Context(), sourceSystem, idempotencyKey)
+		if err == nil {
+			items = []Record{item}
+		}
+	default:
+		err = apperror.ValidationWithDetails("validation failed", map[string]any{
+			"lookup": []string{"provide correlationId, batchId, or sourceSystem with idempotencyKey"},
+		})
+	}
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+
+	response := make([]ExternalRecord, 0, len(items))
+	for _, item := range items {
+		response = append(response, toExternalRecord(item))
+	}
+	c.JSON(http.StatusOK, gin.H{"items": response, "totalCount": len(response)})
+}
+
 func principalFromContext(c *gin.Context) (auth.Principal, bool) {
 	value, ok := c.Get(auth.PrincipalContextKey)
 	if !ok {
@@ -168,5 +271,69 @@ func isValidStatus(value string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func toExternalRecord(record Record) ExternalRecord {
+	targets := make([]ExternalTarget, 0, len(record.Targets))
+	for _, target := range record.Targets {
+		targets = append(targets, ExternalTarget{
+			UID:                   target.UID,
+			DestinationServerUID:  target.ServerUID,
+			DestinationServerCode: target.ServerCode,
+			DestinationServerName: target.ServerName,
+			TargetKind:            target.TargetKind,
+			Priority:              target.Priority,
+			Status:                target.Status,
+			BlockedReason:         target.BlockedReason,
+			DeferredUntil:         target.DeferredUntil,
+			LastReleasedAt:        target.LastReleasedAt,
+			LatestDelivery: ExternalDeliveryRef{
+				UID:    target.LatestDeliveryUID,
+				Status: target.LatestDeliveryStatus,
+			},
+			LatestAsyncTask: ExternalAsyncRef{
+				UID:         target.LatestAsyncTaskUID,
+				State:       target.LatestAsyncState,
+				RemoteJobID: target.LatestAsyncRemoteJobID,
+				PollURL:     target.LatestAsyncPollURL,
+			},
+			AwaitingAsync: target.AwaitingAsync,
+		})
+	}
+
+	dependencies := make([]ExternalDependency, 0, len(record.Dependencies))
+	for _, dependency := range record.Dependencies {
+		dependencies = append(dependencies, ExternalDependency{
+			RequestUID:            dependency.RequestUID,
+			DependsOnRequestUID:   dependency.DependsOnUID,
+			Status:                dependency.Status,
+			StatusReason:          dependency.StatusReason,
+			DeferredUntil:         dependency.DeferredUntil,
+			DestinationServerName: dependency.DependsOnDestinationServerName,
+		})
+	}
+
+	return ExternalRecord{
+		UID:                   record.UID,
+		SourceSystem:          record.SourceSystem,
+		DestinationServerUID:  record.DestinationServerUID,
+		DestinationServerCode: record.DestinationServerCode,
+		DestinationServerName: record.DestinationServerName,
+		BatchID:               record.BatchID,
+		CorrelationID:         record.CorrelationID,
+		IdempotencyKey:        record.IdempotencyKey,
+		PayloadFormat:         record.PayloadFormat,
+		SubmissionBinding:     record.SubmissionBinding,
+		URLSuffix:             record.URLSuffix,
+		Status:                record.Status,
+		StatusReason:          record.StatusReason,
+		DeferredUntil:         record.DeferredUntil,
+		Metadata:              record.Extras,
+		AwaitingAsync:         record.AwaitingAsync,
+		Targets:               targets,
+		Dependencies:          dependencies,
+		CreatedAt:             record.CreatedAt,
+		UpdatedAt:             record.UpdatedAt,
 	}
 }

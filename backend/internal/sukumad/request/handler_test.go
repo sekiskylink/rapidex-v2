@@ -121,3 +121,42 @@ func TestHandlerListReturnsPaginatedPayload(t *testing.T) {
 		t.Fatalf("expected totalCount 1, got %+v", payload)
 	}
 }
+
+func TestHandlerCreateExternalReturnsUIDOnlyContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := NewRepository().(*memoryRepository)
+	deliverySvc := &fakeRequestDeliveryService{repo: repo}
+	handler := NewHandler(NewService(repo).
+		WithDeliveryService(deliverySvc).
+		WithServerService(&fakeServerResolver{items: map[string]int64{"srv-primary": 3}}))
+	router := gin.New()
+	router.POST("/external/requests", func(c *gin.Context) {
+		c.Set(auth.PrincipalContextKey, auth.Principal{Type: "api_token"})
+		handler.CreateExternal(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/external/requests", bytes.NewReader([]byte(`{
+		"sourceSystem": "emr",
+		"destinationServerUid": "srv-primary",
+		"idempotencyKey": "idem-1",
+		"payload": {"trackedEntity":"123"}
+	}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, ok := payload["id"]; ok {
+		t.Fatalf("expected external response to omit internal id, got %+v", payload)
+	}
+	if payload["uid"] == "" || payload["destinationServerUid"] != "server-uid-3" {
+		t.Fatalf("unexpected external payload %+v", payload)
+	}
+}
