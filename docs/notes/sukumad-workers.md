@@ -247,6 +247,9 @@ Worker loop timing lives under `sukumad.workers` in backend config:
 sukumad:
   workers:
     heartbeat_seconds: 10
+    outbound_logging:
+      enabled: false
+      body_preview_bytes: 256
     recovery:
       stale_delivery_after_seconds: 300
     send:
@@ -262,6 +265,8 @@ sukumad:
     retention:
       interval_seconds: 300
 ```
+
+`sukumad.workers.outbound_logging.enabled` turns worker-process DHIS2 outbound request logging on and off. When enabled, the worker emits `worker_outbound_request` with the HTTP method, sanitized URL, destination key, body byte count, and a redacted body preview capped by `body_preview_bytes`. Headers and secrets are not logged.
 
 Start the worker process separately from the API process, for example:
 

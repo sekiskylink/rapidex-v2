@@ -137,7 +137,11 @@ type Config struct {
 		} `mapstructure:"ingest"`
 		Workers struct {
 			HeartbeatSeconds int `mapstructure:"heartbeat_seconds"`
-			Recovery         struct {
+			OutboundLogging  struct {
+				Enabled          bool `mapstructure:"enabled"`
+				BodyPreviewBytes int  `mapstructure:"body_preview_bytes"`
+			} `mapstructure:"outbound_logging"`
+			Recovery struct {
 				StaleDeliveryAfterSeconds int `mapstructure:"stale_delivery_after_seconds"`
 			} `mapstructure:"recovery"`
 			Send struct {
@@ -299,6 +303,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("sukumad.ingest.directory.scan_interval_seconds", 30)
 	v.SetDefault("sukumad.ingest.directory.batch_size", 10)
 	v.SetDefault("sukumad.workers.heartbeat_seconds", 10)
+	v.SetDefault("sukumad.workers.outbound_logging.enabled", false)
+	v.SetDefault("sukumad.workers.outbound_logging.body_preview_bytes", 256)
 	v.SetDefault("sukumad.workers.recovery.stale_delivery_after_seconds", 300)
 	v.SetDefault("sukumad.workers.send.interval_seconds", 5)
 	v.SetDefault("sukumad.workers.send.batch_size", 10)
@@ -380,6 +386,8 @@ func defaultConfig() Config {
 	cfg.Sukumad.Ingest.Directory.ScanIntervalSeconds = 30
 	cfg.Sukumad.Ingest.Directory.BatchSize = 10
 	cfg.Sukumad.Workers.HeartbeatSeconds = 10
+	cfg.Sukumad.Workers.OutboundLogging.Enabled = false
+	cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes = 256
 	cfg.Sukumad.Workers.Recovery.StaleDeliveryAfterSeconds = 300
 	cfg.Sukumad.Workers.Send.IntervalSeconds = 5
 	cfg.Sukumad.Workers.Send.BatchSize = 10
@@ -513,6 +521,9 @@ func validate(cfg Config) error {
 	}
 	if cfg.Sukumad.Workers.HeartbeatSeconds <= 0 {
 		return errors.New("sukumad.workers.heartbeat_seconds must be > 0")
+	}
+	if cfg.Sukumad.Workers.OutboundLogging.Enabled && cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes <= 0 {
+		return errors.New("sukumad.workers.outbound_logging.body_preview_bytes must be > 0 when outbound logging is enabled")
 	}
 	if cfg.Sukumad.Workers.Recovery.StaleDeliveryAfterSeconds <= 0 {
 		return errors.New("sukumad.workers.recovery.stale_delivery_after_seconds must be > 0")

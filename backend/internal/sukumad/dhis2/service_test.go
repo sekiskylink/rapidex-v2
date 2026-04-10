@@ -1,6 +1,7 @@
 package dhis2
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"basepro/backend/internal/logging"
 	asyncjobs "basepro/backend/internal/sukumad/async"
 	"basepro/backend/internal/sukumad/delivery"
 )
@@ -189,10 +191,10 @@ func TestServiceSubmitJSONQueryPayloadBuildsURLWithoutBody(t *testing.T) {
 	}), nil)
 
 	_, err := service.Submit(context.Background(), delivery.DispatchInput{
-		PayloadBody:        `{"trackedEntity":"abc","orgUnit":"ou-1"}`,
-		PayloadFormat:      "json",
-		SubmissionBinding:  "query",
-		URLSuffix:          "/tracker",
+		PayloadBody:       `{"trackedEntity":"abc","orgUnit":"ou-1"}`,
+		PayloadFormat:     "json",
+		SubmissionBinding: "query",
+		URLSuffix:         "/tracker",
 		Server: delivery.ServerSnapshot{
 			Code:       "dhis2-ug",
 			BaseURL:    "https://dhis.example.com?existing=1",
@@ -221,10 +223,10 @@ func TestServiceSubmitTextBodyDefaultsToTextPlain(t *testing.T) {
 	}), nil)
 
 	_, err := service.Submit(context.Background(), delivery.DispatchInput{
-		PayloadBody:        `raw text payload`,
-		PayloadFormat:      "text",
-		SubmissionBinding:  "body",
-		URLSuffix:          "/tracker",
+		PayloadBody:       `raw text payload`,
+		PayloadFormat:     "text",
+		SubmissionBinding: "body",
+		URLSuffix:         "/tracker",
 		Server: delivery.ServerSnapshot{
 			Code:       "dhis2-ug",
 			BaseURL:    "https://dhis.example.com",
@@ -255,10 +257,10 @@ func TestServiceSubmitTextQueryPayloadBuildsURLWithoutBody(t *testing.T) {
 	}), nil)
 
 	_, err := service.Submit(context.Background(), delivery.DispatchInput{
-		PayloadBody:        `trackedEntity=abc&orgUnit=ou-1`,
-		PayloadFormat:      "text",
-		SubmissionBinding:  "query",
-		URLSuffix:          "/tracker",
+		PayloadBody:       `trackedEntity=abc&orgUnit=ou-1`,
+		PayloadFormat:     "text",
+		SubmissionBinding: "query",
+		URLSuffix:         "/tracker",
 		Server: delivery.ServerSnapshot{
 			Code:       "dhis2-ug",
 			BaseURL:    "https://dhis.example.com?existing=1",
@@ -393,6 +395,122 @@ func TestServicePollFilteredResponseSanitizesRemoteResponse(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitOutboundLoggingDisabledEmitsNoRequestLog(t *testing.T) {
+	logOutput := captureDHIS2Logs(t)
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"status":"OK","response":{"status":"SUCCESS"}}`, nil), nil
+	}), nil).WithOutboundLoggingConfig(func() OutboundLoggingConfig {
+		return OutboundLoggingConfig{Enabled: false, BodyPreviewBytes: 32}
+	})
+
+	_, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody: `{"trackedEntity":"123"}`,
+		URLSuffix:   "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: http.MethodPost,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if strings.Contains(logOutput.String(), "worker_outbound_request") {
+		t.Fatalf("expected no outbound request log, got:\n%s", logOutput.String())
+	}
+}
+
+func TestServiceSubmitOutboundLoggingSamplesRedactedBodyWithoutConsumingIt(t *testing.T) {
+	logOutput := captureDHIS2Logs(t)
+	transportSawBody := false
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		transportSawBody = string(body) == `{"trackedEntity":"123","token":"abc123","value":"done"}`
+		return jsonResponse(http.StatusOK, `{"status":"OK","response":{"status":"SUCCESS"}}`, nil), nil
+	}), nil).WithOutboundLoggingConfig(func() OutboundLoggingConfig {
+		return OutboundLoggingConfig{Enabled: true, BodyPreviewBytes: 256}
+	})
+
+	_, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody: `{"trackedEntity":"123","token":"abc123","value":"done"}`,
+		URLSuffix:   "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://user:pass@dhis.example.com?password=query-secret",
+			HTTPMethod: http.MethodPost,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if !transportSawBody {
+		t.Fatal("expected transport to receive the original request body")
+	}
+	assertDHIS2LogContains(t, logOutput.String(),
+		"worker_outbound_request",
+		`"method":"POST"`,
+		`"url":"https://dhis.example.com/tracker?password=%5BREDACTED%5D"`,
+		`"destination_key":"dhis2-ug"`,
+		`"body_bytes":55`,
+		`\"token\":\"[REDACTED]\"`,
+		`"body_preview_truncated":false`,
+	)
+	if strings.Contains(logOutput.String(), "abc123") || strings.Contains(logOutput.String(), "query-secret") || strings.Contains(logOutput.String(), "user:pass") {
+		t.Fatalf("expected sensitive values to be redacted, got:\n%s", logOutput.String())
+	}
+}
+
+func TestServiceSubmitOutboundLoggingTruncatesBodyPreview(t *testing.T) {
+	logOutput := captureDHIS2Logs(t)
+	payload := `{"first":"` + strings.Repeat("a", 40) + `","last":"` + strings.Repeat("z", 40) + `"}`
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"status":"OK","response":{"status":"SUCCESS"}}`, nil), nil
+	}), nil).WithOutboundLoggingConfig(func() OutboundLoggingConfig {
+		return OutboundLoggingConfig{Enabled: true, BodyPreviewBytes: 40}
+	})
+
+	_, err := service.Submit(context.Background(), delivery.DispatchInput{
+		PayloadBody: payload,
+		URLSuffix:   "/tracker",
+		Server: delivery.ServerSnapshot{
+			Code:       "dhis2-ug",
+			BaseURL:    "https://dhis.example.com",
+			HTTPMethod: http.MethodPost,
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	assertDHIS2LogContains(t, logOutput.String(), "worker_outbound_request", "bytes omitted", `"body_preview_truncated":true`)
+}
+
+func TestServicePollOutboundLoggingIncludesURLAndEmptyBody(t *testing.T) {
+	logOutput := captureDHIS2Logs(t)
+	service := NewService(newTestHTTPClient(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"status":"SUCCESS"}`, nil), nil
+	}), nil).WithOutboundLoggingConfig(func() OutboundLoggingConfig {
+		return OutboundLoggingConfig{Enabled: true, BodyPreviewBytes: 64}
+	})
+
+	_, err := service.Poll(context.Background(), asyncjobs.Record{
+		PollURL:         "https://dhis.example.com/tracker/jobs/job-9",
+		DestinationCode: "dhis2-ug",
+	})
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	assertDHIS2LogContains(t, logOutput.String(),
+		"worker_outbound_request",
+		`"method":"GET"`,
+		`"url":"https://dhis.example.com/tracker/jobs/job-9"`,
+		`"destination_key":"dhis2-ug"`,
+		`"body_bytes":0`,
+	)
+}
+
 func jsonResponse(status int, body string, headers map[string]string) *http.Response {
 	header := make(http.Header)
 	header.Set("Content-Type", "application/json")
@@ -403,6 +521,27 @@ func jsonResponse(status int, body string, headers map[string]string) *http.Resp
 		StatusCode: status,
 		Header:     header,
 		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func captureDHIS2Logs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	t.Cleanup(func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	})
+	return &logOutput
+}
+
+func assertDHIS2LogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("expected logs to contain %q, got:\n%s", fragment, logs)
+		}
 	}
 }
 

@@ -1,5 +1,31 @@
 # Status
 
+## Milestone — Worker Outbound Logging Configuration (Complete)
+
+### What changed
+- Added `sukumad.workers.outbound_logging.enabled` and `sukumad.workers.outbound_logging.body_preview_bytes` backend config for worker-process outbound DHIS2 request logging.
+- Wired the worker process to emit `worker_outbound_request` logs for DHIS2 submit and poll calls when enabled.
+- Outbound logs include method, sanitized URL, destination key, body byte count, and a redacted preview; headers and secrets are not logged.
+- Updated worker/configuration notes and saved prompt traceability copy in `docs/prompts/2026-04-10-worker-outbound-logging-configuration.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added config default/load/validation coverage for worker outbound logging
+  - added DHIS2 service coverage for disabled logging, redacted previews, truncation, poll logging, and preserving request bodies for transport
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/config ./internal/sukumad/dhis2`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`make backend-build`)
+- Web tests: PASS (`make web-test`)
+- Web build: PASS (`make web-build`)
+- Desktop tests: PASS (`make desktop-test`)
+- Desktop build: PASS (`make desktop-build`)
+
+### Known follow-ups
+- The initial sandboxed backend full-test run failed because an existing API test could not create a local `httptest` listener (`bind: operation not permitted`); rerunning with approved local listener permissions passed.
+- Existing non-blocking frontend warnings remain: MUI/jsdom `anchorEl` warnings, desktop `useRouter` warnings, third-party `"use client"` build warnings, and Vite chunk-size warnings.
+
 ## Milestone — Request Delete and Response Body Persistence (Complete)
 
 ### What changed

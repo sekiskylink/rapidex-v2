@@ -14,6 +14,11 @@ type SubmissionInput struct {
 	UseAsync          bool
 }
 
+type OutboundLoggingConfig struct {
+	Enabled          bool
+	BodyPreviewBytes int
+}
+
 type SubmissionResult struct {
 	HTTPStatus           *int
 	ResponseBody         string

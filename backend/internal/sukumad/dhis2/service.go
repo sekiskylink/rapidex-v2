@@ -20,6 +20,14 @@ func NewService(httpClient *http.Client, limiter interface {
 	return &Service{client: NewClient(httpClient, limiter)}
 }
 
+func (s *Service) WithOutboundLoggingConfig(provider func() OutboundLoggingConfig) *Service {
+	if s == nil || s.client == nil {
+		return s
+	}
+	s.client.WithOutboundLoggingConfig(provider)
+	return s
+}
+
 func (s *Service) Submit(ctx context.Context, input delivery.DispatchInput) (delivery.DispatchResult, error) {
 	response, body, err := s.client.Submit(ctx, destinationKeyFromServer(input.Server), SubmissionInput{
 		BaseURL:           input.Server.BaseURL,

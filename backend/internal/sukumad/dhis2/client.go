@@ -6,16 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
+	"basepro/backend/internal/logging"
 	requests "basepro/backend/internal/sukumad/request"
 )
 
 type Client struct {
-	executor RequestExecutor
+	executor              RequestExecutor
+	outboundLoggingConfig func() OutboundLoggingConfig
 }
 
 type RequestExecutor interface {
@@ -29,6 +33,14 @@ type outboundExecutor struct {
 	limiter interface {
 		Wait(context.Context, string) error
 	}
+}
+
+func (c *Client) WithOutboundLoggingConfig(provider func() OutboundLoggingConfig) *Client {
+	if c == nil {
+		return c
+	}
+	c.outboundLoggingConfig = provider
+	return c
 }
 
 func NewClient(httpClient *http.Client, limiter interface {
@@ -66,6 +78,7 @@ func (c *Client) Submit(ctx context.Context, destinationKey string, input Submis
 		req.Header.Set("Content-Type", defaultContentType)
 	}
 
+	c.logOutboundRequest(ctx, destinationKey, req)
 	response, err := c.executor.Do(ctx, destinationKey, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("submit to dhis2: %w", err)
@@ -88,6 +101,7 @@ func (c *Client) Poll(ctx context.Context, destinationKey string, pollURL string
 		req.Header.Set(key, value)
 	}
 
+	c.logOutboundRequest(ctx, destinationKey, req)
 	response, err := c.executor.Do(ctx, destinationKey, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("poll dhis2 async task: %w", err)
@@ -108,6 +122,160 @@ func (e outboundExecutor) Do(ctx context.Context, destinationKey string, req *ht
 		}
 	}
 	return e.httpClient.Do(req)
+}
+
+func (c *Client) logOutboundRequest(ctx context.Context, destinationKey string, req *http.Request) {
+	if c == nil || c.outboundLoggingConfig == nil || req == nil {
+		return
+	}
+	cfg := c.outboundLoggingConfig()
+	if !cfg.Enabled {
+		return
+	}
+	if cfg.BodyPreviewBytes <= 0 {
+		cfg.BodyPreviewBytes = 256
+	}
+	bodyBytes, preview, truncated, bodyUnavailable := outboundBodyPreview(req, cfg.BodyPreviewBytes)
+	logging.ForContext(ctx).Info("worker_outbound_request",
+		slog.String("method", req.Method),
+		slog.String("url", sanitizeOutboundURL(req.URL)),
+		slog.String("destination_key", destinationKey),
+		slog.Int("body_bytes", bodyBytes),
+		slog.String("body_preview", preview),
+		slog.Bool("body_preview_truncated", truncated),
+		slog.Bool("body_unavailable", bodyUnavailable),
+	)
+}
+
+func outboundBodyPreview(req *http.Request, limit int) (int, string, bool, bool) {
+	if req == nil || req.Body == nil {
+		return 0, "", false, false
+	}
+	if req.GetBody == nil {
+		return -1, "", false, true
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return -1, "", false, true
+	}
+	defer body.Close()
+
+	bytes, err := io.ReadAll(body)
+	if err != nil {
+		return -1, "", false, true
+	}
+	safeBody := redactSensitivePreview(normalizePreview(string(bytes)))
+	sample, truncated := edgeSample([]byte(safeBody), limit)
+	return len(bytes), sample, truncated, false
+}
+
+func edgeSample(body []byte, limit int) (string, bool) {
+	if len(body) == 0 {
+		return "", false
+	}
+	if limit <= 0 {
+		limit = 256
+	}
+	if len(body) <= limit {
+		return string(body), false
+	}
+	if limit < 32 {
+		return string(body[:limit]), true
+	}
+	headLen := limit / 2
+	tailLen := limit - headLen
+	omitted := len(body) - headLen - tailLen
+	return fmt.Sprintf("%s ...[%d bytes omitted]... %s", string(body[:headLen]), omitted, string(body[len(body)-tailLen:])), true
+}
+
+func sanitizeOutboundURL(input *url.URL) string {
+	if input == nil {
+		return ""
+	}
+	safeURL := *input
+	safeURL.User = nil
+	values := safeURL.Query()
+	for key := range values {
+		if isSensitiveKey(key) {
+			values.Set(key, "[REDACTED]")
+		}
+	}
+	safeURL.RawQuery = values.Encode()
+	return safeURL.String()
+}
+
+func normalizePreview(input string) string {
+	return strings.Join(strings.Fields(input), " ")
+}
+
+func redactSensitivePreview(input string) string {
+	if redacted, ok := redactJSONPreview(input); ok {
+		return redacted
+	}
+	input = redactJSONStringFields(input)
+	input = redactQueryLikeFields(input)
+	return input
+}
+
+func redactJSONPreview(input string) (string, bool) {
+	var parsed any
+	if err := json.Unmarshal([]byte(input), &parsed); err != nil {
+		return "", false
+	}
+	redacted := redactJSONValue(parsed)
+	bytes, err := json.Marshal(redacted)
+	if err != nil {
+		return "", false
+	}
+	return string(bytes), true
+}
+
+func redactJSONValue(input any) any {
+	switch typed := input.(type) {
+	case map[string]any:
+		redacted := make(map[string]any, len(typed))
+		for key, value := range typed {
+			if isSensitiveKey(key) {
+				redacted[key] = "[REDACTED]"
+				continue
+			}
+			redacted[key] = redactJSONValue(value)
+		}
+		return redacted
+	case []any:
+		redacted := make([]any, 0, len(typed))
+		for _, value := range typed {
+			redacted = append(redacted, redactJSONValue(value))
+		}
+		return redacted
+	default:
+		return input
+	}
+}
+
+var (
+	jsonSensitiveFieldPattern  = regexp.MustCompile(`(?i)"(password|token|authorization|apiKey|api_key|secret)"\s*:\s*"[^"]*"`)
+	querySensitiveFieldPattern = regexp.MustCompile(`(?i)\b(password|token|authorization|apiKey|api_key|secret)=([^&\s]+)`)
+)
+
+func redactJSONStringFields(input string) string {
+	return jsonSensitiveFieldPattern.ReplaceAllStringFunc(input, func(match string) string {
+		field := match[:strings.Index(match, ":")]
+		return field + `:"[REDACTED]"`
+	})
+}
+
+func redactQueryLikeFields(input string) string {
+	return querySensitiveFieldPattern.ReplaceAllString(input, `$1=[REDACTED]`)
+}
+
+func isSensitiveKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "password", "token", "authorization", "apikey", "api_key", "secret":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildSubmissionRequest(input SubmissionInput) (string, *bytes.Buffer, string, error) {

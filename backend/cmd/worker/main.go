@@ -97,7 +97,13 @@ func run() error {
 		}
 		return policy
 	})
-	sukumadDHIS2Service := dhis2.NewService(nil, outboundLimiter)
+	sukumadDHIS2Service := dhis2.NewService(nil, outboundLimiter).WithOutboundLoggingConfig(func() dhis2.OutboundLoggingConfig {
+		nextCfg := config.Get().Sukumad.Workers.OutboundLogging
+		return dhis2.OutboundLoggingConfig{
+			Enabled:          nextCfg.Enabled,
+			BodyPreviewBytes: nextCfg.BodyPreviewBytes,
+		}
+	})
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
 	sukumadIngestService := ingest.NewService(ingest.NewRepository(database), sukumadRequestService, auditService)

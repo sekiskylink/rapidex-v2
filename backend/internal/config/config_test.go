@@ -191,6 +191,69 @@ func TestValidateSecurityConfig(t *testing.T) {
 	}
 }
 
+func TestValidateSukumadWorkerOutboundLoggingConfig(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	if cfg.Sukumad.Workers.OutboundLogging.Enabled {
+		t.Fatal("expected outbound worker logging default to false")
+	}
+	if cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes != 256 {
+		t.Fatalf("expected default body preview bytes 256, got %d", cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes)
+	}
+
+	cfg.Sukumad.Workers.OutboundLogging.Enabled = true
+	cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes = 64
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected valid outbound worker logging config: %v", err)
+	}
+
+	cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes = 0
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid outbound worker logging preview size to fail validation")
+	}
+}
+
+func TestLoadSukumadWorkerOutboundLoggingConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+server:
+  port: ":8080"
+  shutdown_timeout_seconds: 10
+database:
+  dsn: "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+  max_open_conns: 10
+  max_idle_conns: 5
+auth:
+  access_token_ttl_seconds: 900
+  refresh_token_ttl_seconds: 604800
+  jwt_signing_key: "test-signing-key"
+  password_hash_cost: 12
+  api_token_header_name: "X-API-Token"
+  api_token_ttl_seconds: 2592000
+sukumad:
+  workers:
+    outbound_logging:
+      enabled: true
+      body_preview_bytes: 80
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if _, err := Load(Options{ConfigFile: cfgPath, Watch: false}); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg := Get()
+	if !cfg.Sukumad.Workers.OutboundLogging.Enabled {
+		t.Fatal("expected outbound worker logging to load as enabled")
+	}
+	if cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes != 80 {
+		t.Fatalf("expected body preview bytes 80, got %d", cfg.Sukumad.Workers.OutboundLogging.BodyPreviewBytes)
+	}
+}
+
 func TestLoadInvalidConfigFails(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "invalid-config.yaml")

@@ -203,6 +203,9 @@ sukumad:
       batch_size: 10
   workers:
     heartbeat_seconds: 10
+    outbound_logging:
+      enabled: false
+      body_preview_bytes: 256
     recovery:
       stale_delivery_after_seconds: 300
     send:

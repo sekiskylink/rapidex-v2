@@ -228,6 +228,8 @@ sukumad:
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `sukumad.workers.heartbeat_seconds` | int | `10` | Worker heartbeat interval. Must be greater than `0`. |
+| `sukumad.workers.outbound_logging.enabled` | bool | `false` | Enables worker-process outbound DHIS2 request logs. |
+| `sukumad.workers.outbound_logging.body_preview_bytes` | int | `256` | Max outbound request body preview size when worker outbound logging is enabled. Must be greater than `0` when enabled. |
 | `sukumad.workers.recovery.stale_delivery_after_seconds` | int | `300` | Age after which running deliveries are considered stale for recovery. Must be greater than `0`. |
 | `sukumad.workers.send.interval_seconds` | int | `5` | Send worker interval. Must be greater than `0`. |
 | `sukumad.workers.send.batch_size` | int | `10` | Send worker batch size. Must be greater than `0`. |
@@ -237,6 +239,8 @@ sukumad:
 | `sukumad.workers.poll.batch_size` | int | `10` | Async poll worker batch size. Must be greater than `0`. |
 | `sukumad.workers.poll.claim_timeout_seconds` | int | `60` | Async poll claim timeout. Must be greater than `0`. |
 | `sukumad.workers.retention.interval_seconds` | int | `300` | Retention worker interval. Must be greater than `0`. |
+
+Worker outbound logging is off by default. When enabled, the worker logs `worker_outbound_request` before DHIS2 submit and poll calls with method, sanitized URL, destination key, body size, and a small redacted body preview. It does not log headers, API tokens, authorization values, passwords, or full request bodies.
 
 ## API CLI Flags
 
