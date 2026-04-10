@@ -1,5 +1,20 @@
 # Status
 
+## Milestone — Worker Delivery Target Roll-Up Fix (Complete)
+
+### What changed
+- Fixed API and worker bootstrap wiring so the Sukumad delivery service updates request targets as deliveries move through the worker lifecycle.
+- Successful worker deliveries now mark the matching request target `succeeded`, allowing the existing request target roll-up to move the exchange request from `pending` to `completed` once all targets succeed.
+- Added a regression assertion to the durable worker-restart lifecycle test so completed worker dispatch must also persist the target success state.
+- No web or desktop code changes were required because clients already read the backend request and target status fields.
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/worker ./internal/sukumad/delivery ./internal/sukumad/request`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+
+### Known follow-ups
+- The initial sandboxed backend full-test run failed because local `httptest` listener creation was blocked (`bind: operation not permitted`); rerunning with approved local listener permissions passed.
+
 ## Milestone — Worker Outbound Logging Configuration (Complete)
 
 ### What changed

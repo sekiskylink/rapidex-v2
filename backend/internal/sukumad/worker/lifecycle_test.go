@@ -322,6 +322,9 @@ func TestWorkerRestartPicksDurablePendingDelivery(t *testing.T) {
 	if completed.Status != requests.StatusCompleted {
 		t.Fatalf("expected restarted worker to complete durable pending work, got %+v", completed)
 	}
+	if len(completed.Targets) != 1 || completed.Targets[0].Status != requests.TargetStatusSucceeded {
+		t.Fatalf("expected restarted worker to mark target succeeded, got %+v", completed.Targets)
+	}
 }
 
 func intPtr(value int) *int {

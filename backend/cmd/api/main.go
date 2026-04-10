@@ -149,7 +149,8 @@ func run() error {
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
-		WithRequestStatusUpdater(sukumadRequestService)
+		WithRequestStatusUpdater(sukumadRequestService).
+		WithTargetUpdater(sukumadRequestService)
 	sukumadAsyncService := asyncjobs.NewService(asyncjobs.NewRepository(database), auditService)
 	sukumadWorkerService := worker.NewService(worker.NewRepository(database), auditService)
 	sukumadRetentionService := retention.NewService(retention.NewRepository(database), auditService)
