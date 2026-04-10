@@ -23,10 +23,10 @@ func TestSQLRepositoryListServers(t *testing.T) {
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
 		"id", "uid", "name", "code", "system_type", "base_url", "endpoint_type", "http_method",
-		"use_async", "parse_responses", "headers", "url_params", "suspended", "created_at", "updated_at", "created_by",
+		"use_async", "parse_responses", "response_body_persistence", "headers", "url_params", "suspended", "created_at", "updated_at", "created_by",
 	}).AddRow(
 		1, "11111111-1111-1111-1111-111111111111", "DHIS2 Uganda", "dhis2-ug", "dhis2", "https://dhis.example.com", "http", "POST",
-		true, true, []byte(`{"Authorization":"Bearer token"}`), []byte(`{"orgUnit":"OU_123"}`), false, now, now, int64(7),
+		true, true, "filter", []byte(`{"Authorization":"Bearer token"}`), []byte(`{"orgUnit":"OU_123"}`), false, now, now, int64(7),
 	)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM integration_servers WHERE name ILIKE $1 OR code ILIKE $1 OR system_type ILIKE $1 OR base_url ILIKE $1`)).
@@ -34,7 +34,7 @@ func TestSQLRepositoryListServers(t *testing.T) {
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		       use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 	 WHERE name ILIKE $1 OR code ILIKE $1 OR system_type ILIKE $1 OR base_url ILIKE $1 ORDER BY name ASC LIMIT $2 OFFSET $3`)).
 		WithArgs("%dhis%", 25, 0).
@@ -69,7 +69,7 @@ func TestSQLRepositoryGetServerByIDNotFound(t *testing.T) {
 	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		       use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 		WHERE id = $1
 	`)).
@@ -92,38 +92,39 @@ func TestSQLRepositoryCreateServer(t *testing.T) {
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows([]string{
 		"id", "uid", "name", "code", "system_type", "base_url", "endpoint_type", "http_method",
-		"use_async", "parse_responses", "headers", "url_params", "suspended", "created_at", "updated_at", "created_by",
+		"use_async", "parse_responses", "response_body_persistence", "headers", "url_params", "suspended", "created_at", "updated_at", "created_by",
 	}).AddRow(
 		9, "11111111-1111-1111-1111-111111111111", "OpenHIM", "openhim", "api", "https://openhim.example.com", "http", "POST",
-		false, true, []byte(`{"X-Api-Key":"abc"}`), []byte(`{}`), false, now, now, int64(3),
+		false, true, "save", []byte(`{"X-Api-Key":"abc"}`), []byte(`{}`), false, now, now, int64(3),
 	)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		INSERT INTO integration_servers (
 			uid, name, code, system_type, base_url, endpoint_type, http_method,
-			use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+			use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, NOW(), NOW(), $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, NOW(), NOW(), $14)
 		RETURNING id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		          use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		          use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 	`)).
-		WithArgs("11111111-1111-1111-1111-111111111111", "OpenHIM", "openhim", "api", "https://openhim.example.com", "http", "POST", false, true, `{"X-Api-Key":"abc"}`, `{}`, false, int64(3)).
+		WithArgs("11111111-1111-1111-1111-111111111111", "OpenHIM", "openhim", "api", "https://openhim.example.com", "http", "POST", false, true, "save", `{"X-Api-Key":"abc"}`, `{}`, false, int64(3)).
 		WillReturnRows(rows)
 
 	record, err := repo.CreateServer(context.Background(), CreateParams{
-		UID:            "11111111-1111-1111-1111-111111111111",
-		Name:           "OpenHIM",
-		Code:           "openhim",
-		SystemType:     "api",
-		BaseURL:        "https://openhim.example.com",
-		EndpointType:   "http",
-		HTTPMethod:     "POST",
-		UseAsync:       false,
-		ParseResponses: true,
-		Headers:        map[string]string{"X-Api-Key": "abc"},
-		URLParams:      map[string]string{},
-		Suspended:      false,
-		CreatedBy:      int64Ptr(3),
+		UID:                     "11111111-1111-1111-1111-111111111111",
+		Name:                    "OpenHIM",
+		Code:                    "openhim",
+		SystemType:              "api",
+		BaseURL:                 "https://openhim.example.com",
+		EndpointType:            "http",
+		HTTPMethod:              "POST",
+		UseAsync:                false,
+		ParseResponses:          true,
+		ResponseBodyPersistence: "save",
+		Headers:                 map[string]string{"X-Api-Key": "abc"},
+		URLParams:               map[string]string{},
+		Suspended:               false,
+		CreatedBy:               int64Ptr(3),
 	})
 	if err != nil {
 		t.Fatalf("create server: %v", err)

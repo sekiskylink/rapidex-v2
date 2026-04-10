@@ -14,6 +14,12 @@ const (
 	StatusRetrying  = "retrying"
 )
 
+const (
+	ResponseBodyPersistenceFilter  = "filter"
+	ResponseBodyPersistenceSave    = "save"
+	ResponseBodyPersistenceDiscard = "discard"
+)
+
 var ErrNoEligibleDelivery = errors.New("no eligible delivery")
 
 type Record struct {
@@ -136,6 +142,7 @@ type ServerSnapshot struct {
 	EndpointType              string
 	HTTPMethod                string
 	UseAsync                  bool
+	ResponseBodyPersistence   string
 	Headers                   map[string]string
 	URLParams                 map[string]string
 	SubmissionWindowStartHour int
@@ -143,16 +150,17 @@ type ServerSnapshot struct {
 }
 
 type DispatchInput struct {
-	DeliveryID        int64
-	RequestID         int64
-	RequestUID        string
-	CorrelationID     string
-	PayloadBody       string
-	PayloadFormat     string
-	SubmissionBinding string
-	URLSuffix         string
-	Server            ServerSnapshot
-	ActorID           *int64
+	DeliveryID              int64
+	RequestID               int64
+	RequestUID              string
+	CorrelationID           string
+	PayloadBody             string
+	PayloadFormat           string
+	SubmissionBinding       string
+	ResponseBodyPersistence string
+	URLSuffix               string
+	Server                  ServerSnapshot
+	ActorID                 *int64
 }
 
 type Repository interface {

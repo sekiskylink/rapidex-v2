@@ -16,26 +16,27 @@ const (
 var ErrNoEligibleTask = errors.New("no eligible async task")
 
 type Record struct {
-	ID                 int64          `db:"id" json:"id"`
-	UID                string         `db:"uid" json:"uid"`
-	DeliveryAttemptID  int64          `db:"delivery_attempt_id" json:"deliveryAttemptId"`
-	DeliveryUID        string         `json:"deliveryUid"`
-	RequestID          int64          `json:"requestId"`
-	RequestUID         string         `json:"requestUid"`
-	CorrelationID      string         `json:"correlationId"`
-	DestinationCode    string         `json:"destinationCode"`
-	RemoteJobID        string         `db:"remote_job_id" json:"remoteJobId"`
-	PollURL            string         `db:"poll_url" json:"pollUrl"`
-	RemoteStatus       string         `db:"remote_status" json:"remoteStatus"`
-	TerminalState      string         `db:"terminal_state" json:"terminalState"`
-	CurrentState       string         `json:"currentState"`
-	NextPollAt         *time.Time     `db:"next_poll_at" json:"nextPollAt,omitempty"`
-	CompletedAt        *time.Time     `db:"completed_at" json:"completedAt,omitempty"`
-	PollClaimedAt      *time.Time     `db:"poll_claimed_at" json:"pollClaimedAt,omitempty"`
-	PollClaimedByRunID *int64         `db:"poll_claimed_by_worker_run_id" json:"pollClaimedByWorkerRunId,omitempty"`
-	RemoteResponse     map[string]any `json:"remoteResponse"`
-	CreatedAt          time.Time      `db:"created_at" json:"createdAt"`
-	UpdatedAt          time.Time      `db:"updated_at" json:"updatedAt"`
+	ID                      int64          `db:"id" json:"id"`
+	UID                     string         `db:"uid" json:"uid"`
+	DeliveryAttemptID       int64          `db:"delivery_attempt_id" json:"deliveryAttemptId"`
+	DeliveryUID             string         `json:"deliveryUid"`
+	RequestID               int64          `json:"requestId"`
+	RequestUID              string         `json:"requestUid"`
+	CorrelationID           string         `json:"correlationId"`
+	DestinationCode         string         `json:"destinationCode"`
+	ResponseBodyPersistence string         `json:"responseBodyPersistence"`
+	RemoteJobID             string         `db:"remote_job_id" json:"remoteJobId"`
+	PollURL                 string         `db:"poll_url" json:"pollUrl"`
+	RemoteStatus            string         `db:"remote_status" json:"remoteStatus"`
+	TerminalState           string         `db:"terminal_state" json:"terminalState"`
+	CurrentState            string         `json:"currentState"`
+	NextPollAt              *time.Time     `db:"next_poll_at" json:"nextPollAt,omitempty"`
+	CompletedAt             *time.Time     `db:"completed_at" json:"completedAt,omitempty"`
+	PollClaimedAt           *time.Time     `db:"poll_claimed_at" json:"pollClaimedAt,omitempty"`
+	PollClaimedByRunID      *int64         `db:"poll_claimed_by_worker_run_id" json:"pollClaimedByWorkerRunId,omitempty"`
+	RemoteResponse          map[string]any `json:"remoteResponse"`
+	CreatedAt               time.Time      `db:"created_at" json:"createdAt"`
+	UpdatedAt               time.Time      `db:"updated_at" json:"updatedAt"`
 }
 
 type PollRecord struct {

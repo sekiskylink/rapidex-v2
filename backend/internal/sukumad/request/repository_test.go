@@ -23,11 +23,11 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
 		"id", "uid", "source_system", "destination_server_id", "destination_server_uid", "destination_server_name", "destination_server_code", "batch_id", "correlation_id",
-		"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
+		"idempotency_key", "payload_body", "payload_format", "submission_binding", "response_body_persistence", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 		"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 	}).AddRow(
 		8, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "batch-1", "corr-1",
-		"idem-1", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(7),
+		"idem-1", `{"trackedEntity":"123"}`, "json", "body", "", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(7),
 		nil, "", "", nil, "", "", "", "",
 	)
 
@@ -62,7 +62,7 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
 		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -148,7 +148,7 @@ func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
 		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -193,9 +193,9 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`
 		INSERT INTO exchange_requests (
 			uid, source_system, destination_server_id, batch_id, correlation_id, idempotency_key,
-			payload_body, payload_format, submission_binding, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
+			payload_body, payload_format, submission_binding, response_body_persistence, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW(), $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, NOW(), NOW(), $16)
 		RETURNING id
 	`)).
 		WithArgs(
@@ -208,6 +208,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 			`{"trackedEntity":"123"}`,
 			"json",
 			"body",
+			"",
 			"/api/data",
 			"pending",
 			"",
@@ -223,7 +224,7 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
 		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -250,11 +251,11 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		WithArgs(int64(15)).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "uid", "source_system", "destination_server_id", "destination_server_uid", "destination_server_name", "destination_server_code", "batch_id", "correlation_id",
-			"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
+			"idempotency_key", "payload_body", "payload_format", "submission_binding", "response_body_persistence", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 		}).AddRow(
 			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "", "",
-			"", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
+			"", `{"trackedEntity":"123"}`, "json", "body", "", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
 			nil, "", "", nil, "", "", "", "",
 		))
 	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").

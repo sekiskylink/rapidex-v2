@@ -1,5 +1,40 @@
 # Status
 
+## Milestone — Request Delete and Response Body Persistence (Complete)
+
+### What changed
+- Added `DELETE /api/v1/requests/:id` with `requests.write` enforcement and service/repository deletion logic for exchange requests and associated Sukumad domain rows.
+- Added a destructive Delete action to the Requests page actions menu in both web and desktop clients, with confirmation and refresh behavior.
+- Added integration-server response body persistence configuration with server default `filter` and request-level optional override for `filter`, `save`, or `discard`.
+- Threaded the effective persistence policy through delivery, DHIS2 submit/poll, async task reads, and worker dispatch so response bodies are saved, filtered, or discarded consistently.
+- Added migration `000024_request_delete_response_body_persistence` for the new server/request policy columns and check constraints.
+- Added architecture notes in [request-delete-response-body-persistence.md](/Users/sam/projects/go/sukumadpro/docs/notes/request-delete-response-body-persistence.md).
+- Saved prompt traceability copy in `docs/prompts/2026-04-10-request-delete-response-body-persistence.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added request delete handler/service coverage
+  - updated request, server, and async repository coverage for response body persistence columns
+  - updated delivery/DHIS2/worker paths for effective response body persistence behavior
+- Web:
+  - updated request and server page coverage around request/server form payloads and route smoke behavior
+- Desktop:
+  - updated matching request and server page coverage around request/server form payloads and route smoke behavior
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/request ./internal/sukumad/server ./internal/sukumad/delivery ./internal/sukumad/dhis2 ./internal/sukumad/async ./internal/sukumad/worker`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx src/pages/servers-page.test.tsx --run`)
+- Web tests: PASS (`cd web && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run src/pages/requests-page.test.tsx src/pages/servers-page.test.tsx --run`)
+- Desktop tests: PASS (`cd desktop/frontend && /Users/sam/.nvm/versions/node/v22.15.1/bin/node node_modules/vitest/vitest.mjs run --run`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- The initial sandboxed backend full-test run failed because local `httptest` listener creation was blocked (`bind: operation not permitted`); rerunning with approved local listener permissions passed.
+- Existing non-blocking MUI/jsdom `anchorEl` warnings, desktop `useRouter` warnings, third-party `'use client'` build warnings, and Vite chunk-size warnings remain in verification logs.
+
 ## Milestone — Worker Processing Logs (Complete)
 
 ### What changed

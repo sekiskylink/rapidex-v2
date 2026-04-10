@@ -87,6 +87,7 @@ func registerRequestRoutes(
 		group.GET("/:id/events", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), observabilityHandler.ListRequestEvents)
 	}
 	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.Create)
+	group.DELETE("/:id", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.Delete)
 
 	externalGroup := api.Group("/external/requests")
 	externalGroup.Use(

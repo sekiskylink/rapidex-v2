@@ -32,39 +32,40 @@ const (
 )
 
 type Record struct {
-	ID                     int64           `db:"id" json:"id"`
-	UID                    string          `db:"uid" json:"uid"`
-	SourceSystem           string          `db:"source_system" json:"sourceSystem"`
-	DestinationServerID    int64           `db:"destination_server_id" json:"destinationServerId"`
-	DestinationServerUID   string          `json:"destinationServerUid"`
-	DestinationServerName  string          `json:"destinationServerName"`
-	DestinationServerCode  string          `json:"destinationServerCode"`
-	BatchID                string          `db:"batch_id" json:"batchId"`
-	CorrelationID          string          `db:"correlation_id" json:"correlationId"`
-	IdempotencyKey         string          `db:"idempotency_key" json:"idempotencyKey"`
-	PayloadBody            string          `db:"payload_body" json:"payloadBody"`
-	PayloadFormat          string          `db:"payload_format" json:"payloadFormat"`
-	SubmissionBinding      string          `db:"submission_binding" json:"submissionBinding"`
-	URLSuffix              string          `db:"url_suffix" json:"urlSuffix"`
-	Status                 string          `db:"status" json:"status"`
-	StatusReason           string          `db:"status_reason" json:"statusReason"`
-	DeferredUntil          *time.Time      `db:"deferred_until" json:"deferredUntil,omitempty"`
-	Extras                 map[string]any  `json:"extras"`
-	CreatedAt              time.Time       `db:"created_at" json:"createdAt"`
-	UpdatedAt              time.Time       `db:"updated_at" json:"updatedAt"`
-	CreatedBy              *int64          `db:"created_by" json:"createdBy,omitempty"`
-	Payload                any             `json:"payload"`
-	LatestDeliveryID       *int64          `json:"latestDeliveryId,omitempty"`
-	LatestDeliveryUID      string          `json:"latestDeliveryUid"`
-	LatestDeliveryStatus   string          `json:"latestDeliveryStatus"`
-	LatestAsyncTaskID      *int64          `json:"latestAsyncTaskId,omitempty"`
-	LatestAsyncTaskUID     string          `json:"latestAsyncTaskUid"`
-	LatestAsyncState       string          `json:"latestAsyncState"`
-	LatestAsyncRemoteJobID string          `json:"latestAsyncRemoteJobId"`
-	LatestAsyncPollURL     string          `json:"latestAsyncPollUrl"`
-	AwaitingAsync          bool            `json:"awaitingAsync"`
-	Targets                []TargetRecord  `json:"targets"`
-	Dependencies           []DependencyRef `json:"dependencies"`
+	ID                      int64           `db:"id" json:"id"`
+	UID                     string          `db:"uid" json:"uid"`
+	SourceSystem            string          `db:"source_system" json:"sourceSystem"`
+	DestinationServerID     int64           `db:"destination_server_id" json:"destinationServerId"`
+	DestinationServerUID    string          `json:"destinationServerUid"`
+	DestinationServerName   string          `json:"destinationServerName"`
+	DestinationServerCode   string          `json:"destinationServerCode"`
+	BatchID                 string          `db:"batch_id" json:"batchId"`
+	CorrelationID           string          `db:"correlation_id" json:"correlationId"`
+	IdempotencyKey          string          `db:"idempotency_key" json:"idempotencyKey"`
+	PayloadBody             string          `db:"payload_body" json:"payloadBody"`
+	PayloadFormat           string          `db:"payload_format" json:"payloadFormat"`
+	SubmissionBinding       string          `db:"submission_binding" json:"submissionBinding"`
+	ResponseBodyPersistence string          `db:"response_body_persistence" json:"responseBodyPersistence"`
+	URLSuffix               string          `db:"url_suffix" json:"urlSuffix"`
+	Status                  string          `db:"status" json:"status"`
+	StatusReason            string          `db:"status_reason" json:"statusReason"`
+	DeferredUntil           *time.Time      `db:"deferred_until" json:"deferredUntil,omitempty"`
+	Extras                  map[string]any  `json:"extras"`
+	CreatedAt               time.Time       `db:"created_at" json:"createdAt"`
+	UpdatedAt               time.Time       `db:"updated_at" json:"updatedAt"`
+	CreatedBy               *int64          `db:"created_by" json:"createdBy,omitempty"`
+	Payload                 any             `json:"payload"`
+	LatestDeliveryID        *int64          `json:"latestDeliveryId,omitempty"`
+	LatestDeliveryUID       string          `json:"latestDeliveryUid"`
+	LatestDeliveryStatus    string          `json:"latestDeliveryStatus"`
+	LatestAsyncTaskID       *int64          `json:"latestAsyncTaskId,omitempty"`
+	LatestAsyncTaskUID      string          `json:"latestAsyncTaskUid"`
+	LatestAsyncState        string          `json:"latestAsyncState"`
+	LatestAsyncRemoteJobID  string          `json:"latestAsyncRemoteJobId"`
+	LatestAsyncPollURL      string          `json:"latestAsyncPollUrl"`
+	AwaitingAsync           bool            `json:"awaitingAsync"`
+	Targets                 []TargetRecord  `json:"targets"`
+	Dependencies            []DependencyRef `json:"dependencies"`
 }
 
 type ListQuery struct {
@@ -84,53 +85,56 @@ type ListResult struct {
 }
 
 type CreateParams struct {
-	UID                 string
-	SourceSystem        string
-	DestinationServerID int64
-	BatchID             string
-	CorrelationID       string
-	IdempotencyKey      string
-	PayloadBody         string
-	PayloadFormat       string
-	SubmissionBinding   string
-	URLSuffix           string
-	Status              string
-	StatusReason        string
-	DeferredUntil       *time.Time
-	Extras              map[string]any
-	CreatedBy           *int64
+	UID                     string
+	SourceSystem            string
+	DestinationServerID     int64
+	BatchID                 string
+	CorrelationID           string
+	IdempotencyKey          string
+	PayloadBody             string
+	PayloadFormat           string
+	SubmissionBinding       string
+	ResponseBodyPersistence string
+	URLSuffix               string
+	Status                  string
+	StatusReason            string
+	DeferredUntil           *time.Time
+	Extras                  map[string]any
+	CreatedBy               *int64
 }
 
 type CreateInput struct {
-	SourceSystem         string
-	DestinationServerID  int64
-	DestinationServerIDs []int64
-	DependencyRequestIDs []int64
-	BatchID              string
-	CorrelationID        string
-	IdempotencyKey       string
-	Payload              any
-	PayloadFormat        string
-	SubmissionBinding    string
-	URLSuffix            string
-	Extras               map[string]any
-	ActorID              *int64
+	SourceSystem            string
+	DestinationServerID     int64
+	DestinationServerIDs    []int64
+	DependencyRequestIDs    []int64
+	BatchID                 string
+	CorrelationID           string
+	IdempotencyKey          string
+	Payload                 any
+	PayloadFormat           string
+	SubmissionBinding       string
+	ResponseBodyPersistence string
+	URLSuffix               string
+	Extras                  map[string]any
+	ActorID                 *int64
 }
 
 type ExternalCreateInput struct {
-	SourceSystem          string
-	DestinationServerUID  string
-	DestinationServerUIDs []string
-	DependencyRequestUIDs []string
-	BatchID               string
-	CorrelationID         string
-	IdempotencyKey        string
-	Payload               any
-	PayloadFormat         string
-	SubmissionBinding     string
-	URLSuffix             string
-	Extras                map[string]any
-	ActorID               *int64
+	SourceSystem            string
+	DestinationServerUID    string
+	DestinationServerUIDs   []string
+	DependencyRequestUIDs   []string
+	BatchID                 string
+	CorrelationID           string
+	IdempotencyKey          string
+	Payload                 any
+	PayloadFormat           string
+	SubmissionBinding       string
+	ResponseBodyPersistence string
+	URLSuffix               string
+	Extras                  map[string]any
+	ActorID                 *int64
 }
 
 type CreateResult struct {
@@ -148,6 +152,7 @@ type Repository interface {
 	GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
 	CreateRequest(ctx context.Context, params CreateParams) (Record, error)
 	UpdateRequestStatus(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
+	DeleteRequest(ctx context.Context, id int64) error
 	CreateTargets(ctx context.Context, requestID int64, targets []CreateTargetParams) ([]TargetRecord, error)
 	ListTargetsByRequest(ctx context.Context, requestID int64) ([]TargetRecord, error)
 	UpdateTarget(ctx context.Context, params UpdateTargetParams) (TargetRecord, error)
@@ -221,26 +226,27 @@ type UpdateTargetParams struct {
 }
 
 type ExternalRecord struct {
-	UID                   string               `json:"uid"`
-	SourceSystem          string               `json:"sourceSystem"`
-	DestinationServerUID  string               `json:"destinationServerUid"`
-	DestinationServerCode string               `json:"destinationServerCode"`
-	DestinationServerName string               `json:"destinationServerName"`
-	BatchID               string               `json:"batchId"`
-	CorrelationID         string               `json:"correlationId"`
-	IdempotencyKey        string               `json:"idempotencyKey"`
-	PayloadFormat         string               `json:"payloadFormat"`
-	SubmissionBinding     string               `json:"submissionBinding"`
-	URLSuffix             string               `json:"urlSuffix"`
-	Status                string               `json:"status"`
-	StatusReason          string               `json:"statusReason"`
-	DeferredUntil         *time.Time           `json:"deferredUntil,omitempty"`
-	Metadata              map[string]any       `json:"metadata"`
-	AwaitingAsync         bool                 `json:"awaitingAsync"`
-	Targets               []ExternalTarget     `json:"targets"`
-	Dependencies          []ExternalDependency `json:"dependencies"`
-	CreatedAt             time.Time            `json:"createdAt"`
-	UpdatedAt             time.Time            `json:"updatedAt"`
+	UID                     string               `json:"uid"`
+	SourceSystem            string               `json:"sourceSystem"`
+	DestinationServerUID    string               `json:"destinationServerUid"`
+	DestinationServerCode   string               `json:"destinationServerCode"`
+	DestinationServerName   string               `json:"destinationServerName"`
+	BatchID                 string               `json:"batchId"`
+	CorrelationID           string               `json:"correlationId"`
+	IdempotencyKey          string               `json:"idempotencyKey"`
+	PayloadFormat           string               `json:"payloadFormat"`
+	SubmissionBinding       string               `json:"submissionBinding"`
+	ResponseBodyPersistence string               `json:"responseBodyPersistence"`
+	URLSuffix               string               `json:"urlSuffix"`
+	Status                  string               `json:"status"`
+	StatusReason            string               `json:"statusReason"`
+	DeferredUntil           *time.Time           `json:"deferredUntil,omitempty"`
+	Metadata                map[string]any       `json:"metadata"`
+	AwaitingAsync           bool                 `json:"awaitingAsync"`
+	Targets                 []ExternalTarget     `json:"targets"`
+	Dependencies            []ExternalDependency `json:"dependencies"`
+	CreatedAt               time.Time            `json:"createdAt"`
+	UpdatedAt               time.Time            `json:"updatedAt"`
 }
 
 type ExternalTarget struct {

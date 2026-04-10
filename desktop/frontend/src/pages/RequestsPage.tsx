@@ -26,6 +26,7 @@ const defaultForm: RequestFormState = {
   idempotencyKey: '',
   payloadFormat: 'json',
   submissionBinding: 'body',
+  responseBodyPersistence: '',
   urlSuffix: '',
   payloadText: '{\n  \n}',
   metadataText: '{}',
@@ -96,6 +97,7 @@ function mapValidationFieldErrors(details?: Record<string, string[]>): RequestFo
     idempotencyKey: first('idempotencyKey'),
     payloadFormat: first('payloadFormat'),
     submissionBinding: first('submissionBinding'),
+    responseBodyPersistence: first('responseBodyPersistence'),
     urlSuffix: first('urlSuffix'),
     payload: first('payload'),
     metadata: first('metadata'),
@@ -138,6 +140,9 @@ function validateForm(form: RequestFormState): RequestFormErrors {
   if (!['body', 'query'].includes(form.submissionBinding)) {
     errors.submissionBinding = 'Send As is required.'
   }
+  if (!['', 'filter', 'save', 'discard'].includes(form.responseBodyPersistence)) {
+    errors.responseBodyPersistence = 'Response body policy is required.'
+  }
   const payload = form.payloadFormat === 'text' ? parseTextValue(form.payloadText) : parseJSONValue(form.payloadText)
   if (payload.error) {
     errors.payload = payload.error
@@ -166,6 +171,7 @@ function toRequestPayload(form: RequestFormState) {
     idempotencyKey: form.idempotencyKey.trim(),
     payloadFormat: form.payloadFormat,
     submissionBinding: form.submissionBinding,
+    responseBodyPersistence: form.responseBodyPersistence,
     urlSuffix: form.urlSuffix.trim(),
     payload,
     metadata: parseJSONObject(form.metadataText).parsed ?? {},
@@ -285,6 +291,26 @@ export function RequestsPage() {
     }
   }
 
+  const deleteRequest = async (row: RequestRow) => {
+    try {
+      await apiClient.request(`/api/v1/requests/${row.id}`, {
+        method: 'DELETE',
+      })
+      if (detailRequest?.id === row.id) {
+        setDetailOpen(false)
+        setDetailRequest(null)
+        setDetailEvents([])
+      }
+      if (bodyDialog.open && bodyDialog.title.includes(row.uid)) {
+        setBodyDialog({ open: false, title: 'Request Body', body: null })
+      }
+      refreshGrid()
+      notify.success('Request deleted.')
+    } catch (error) {
+      await handleAppError(error, { fallbackMessage: 'Unable to delete request.' })
+    }
+  }
+
   const columns = React.useMemo<GridColDef<RequestRow>[]>(
     () => [
       { field: 'uid', headerName: 'Request UID', minWidth: 220, flex: 1.2 },
@@ -357,12 +383,24 @@ export function RequestsPage() {
                   })
                 },
               },
+              {
+                id: 'delete',
+                label: 'Delete',
+                icon: 'delete',
+                visible: canWrite,
+                destructive: true,
+                confirmTitle: 'Delete request',
+                confirmMessage: `Delete request ${params.row.uid}? This removes related deliveries, jobs, targets, dependencies, and events.`,
+                onClick: () => {
+                  void deleteRequest(params.row)
+                },
+              },
             ]}
           />
         ),
       },
     ],
-    [],
+    [canWrite, detailRequest, bodyDialog.open, bodyDialog.title],
   )
 
   return (

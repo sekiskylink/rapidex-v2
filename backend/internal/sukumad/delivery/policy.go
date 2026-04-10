@@ -105,3 +105,14 @@ func NormalizeContentType(value string) string {
 	}
 	return strings.ToLower(strings.TrimSpace(mediaType))
 }
+
+func NormalizeResponseBodyPersistence(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case ResponseBodyPersistenceSave:
+		return ResponseBodyPersistenceSave
+	case ResponseBodyPersistenceDiscard:
+		return ResponseBodyPersistenceDiscard
+	default:
+		return ResponseBodyPersistenceFilter
+	}
+}

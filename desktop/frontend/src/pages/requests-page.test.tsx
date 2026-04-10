@@ -409,6 +409,102 @@ describe('desktop requests page', () => {
     expect(screen.queryByRole('button', { name: 'Create Request' })).not.toBeInTheDocument()
   })
 
+  it('deletes a request from row actions after confirmation', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let deleteUrl = ''
+    let deleteMethod = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Staff'],
+              permissions: ['requests.read', 'requests.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/requests?')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 16,
+                  uid: 'req-16',
+                  sourceSystem: 'emr',
+                  destinationServerId: 3,
+                  destinationServerName: 'DHIS2 Uganda',
+                  batchId: 'batch-16',
+                  correlationId: 'corr-16',
+                  idempotencyKey: 'idem-16',
+                  payloadBody: '{"trackedEntity":"delete-me"}',
+                  payloadFormat: 'json',
+                  submissionBinding: 'body',
+                  payload: { trackedEntity: 'delete-me' },
+                  urlSuffix: '/api/data',
+                  status: 'pending',
+                  statusReason: '',
+                  deferredUntil: null,
+                  extras: {},
+                  createdAt: '2026-03-10T09:00:00Z',
+                  updatedAt: '2026-03-10T10:00:00Z',
+                  latestDeliveryUid: 'del-16',
+                  latestDeliveryStatus: 'pending',
+                  latestAsyncTaskUid: '',
+                  latestAsyncState: '',
+                  latestAsyncRemoteJobId: '',
+                  latestAsyncPollUrl: '',
+                  awaitingAsync: false,
+                  targets: [],
+                  dependencies: [],
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/requests/16') && init?.method === 'DELETE') {
+          deleteUrl = url
+          deleteMethod = init.method
+          return new Response('{}', { status: 204, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/requests', store)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for req-16' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete request' })
+    expect(within(dialog).getByText(/related deliveries/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => expect(deleteUrl).toContain('/api/v1/requests/16'))
+    expect(deleteMethod).toBe('DELETE')
+  })
+
   it('opens request body in a formatted dialog from row actions', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

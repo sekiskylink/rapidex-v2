@@ -361,6 +361,70 @@ describe('requests page', () => {
     expect(within(dialog).getByText(/program/)).toBeInTheDocument()
   })
 
+  it('deletes a request from row actions after confirmation', async () => {
+    authenticate(['requests.read', 'requests.write'])
+    let deletePath = ''
+    let deleteMethod = ''
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/requests?')) {
+        return {
+          items: [
+            {
+              id: 15,
+              uid: 'req-15',
+              sourceSystem: 'emr',
+              destinationServerId: 4,
+              destinationServerName: 'DHIS2 Uganda',
+              batchId: 'batch-15',
+              correlationId: 'corr-15',
+              idempotencyKey: 'idem-15',
+              payloadBody: '{"trackedEntity":"delete-me"}',
+              payloadFormat: 'json',
+              submissionBinding: 'body',
+              payload: { trackedEntity: 'delete-me' },
+              urlSuffix: '/api/data',
+              status: 'pending',
+              statusReason: '',
+              deferredUntil: null,
+              extras: {},
+              createdAt: '2026-03-10T09:00:00Z',
+              updatedAt: '2026-03-10T10:00:00Z',
+              latestDeliveryUid: 'del-15',
+              latestDeliveryStatus: 'pending',
+              latestAsyncTaskUid: '',
+              latestAsyncState: '',
+              latestAsyncRemoteJobId: '',
+              latestAsyncPollUrl: '',
+              awaitingAsync: false,
+              targets: [],
+              dependencies: [],
+            },
+          ],
+          totalCount: 1,
+          page: 1,
+          pageSize: 25,
+        }
+      }
+      if (path === '/requests/15' && init?.method === 'DELETE') {
+        deletePath = path
+        deleteMethod = init.method
+        return {}
+      }
+      return {}
+    })
+
+    renderRoute('/requests')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for req-15' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete request' })
+    expect(within(dialog).getByText(/related deliveries/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => expect(deletePath).toBe('/requests/15'))
+    expect(deleteMethod).toBe('DELETE')
+  })
+
   it('hides create button without write permission', async () => {
     authenticate(['requests.read'])
     apiRequestSpy.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 })

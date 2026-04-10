@@ -31,22 +31,23 @@ func NewRepository(db ...*sqlx.DB) Repository {
 }
 
 type recordRow struct {
-	ID             int64           `db:"id"`
-	UID            string          `db:"uid"`
-	Name           string          `db:"name"`
-	Code           string          `db:"code"`
-	SystemType     string          `db:"system_type"`
-	BaseURL        string          `db:"base_url"`
-	EndpointType   string          `db:"endpoint_type"`
-	HTTPMethod     string          `db:"http_method"`
-	UseAsync       bool            `db:"use_async"`
-	ParseResponses bool            `db:"parse_responses"`
-	Headers        json.RawMessage `db:"headers"`
-	URLParams      json.RawMessage `db:"url_params"`
-	Suspended      bool            `db:"suspended"`
-	CreatedAt      time.Time       `db:"created_at"`
-	UpdatedAt      time.Time       `db:"updated_at"`
-	CreatedBy      *int64          `db:"created_by"`
+	ID                      int64           `db:"id"`
+	UID                     string          `db:"uid"`
+	Name                    string          `db:"name"`
+	Code                    string          `db:"code"`
+	SystemType              string          `db:"system_type"`
+	BaseURL                 string          `db:"base_url"`
+	EndpointType            string          `db:"endpoint_type"`
+	HTTPMethod              string          `db:"http_method"`
+	UseAsync                bool            `db:"use_async"`
+	ParseResponses          bool            `db:"parse_responses"`
+	ResponseBodyPersistence string          `db:"response_body_persistence"`
+	Headers                 json.RawMessage `db:"headers"`
+	URLParams               json.RawMessage `db:"url_params"`
+	Suspended               bool            `db:"suspended"`
+	CreatedAt               time.Time       `db:"created_at"`
+	UpdatedAt               time.Time       `db:"updated_at"`
+	CreatedBy               *int64          `db:"created_by"`
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
@@ -100,7 +101,7 @@ func (r *SQLRepository) ListServers(ctx context.Context, query ListQuery) (ListR
 	rows := []recordRow{}
 	selectQuery := `
 		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		       use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 	` + whereClause + fmt.Sprintf(" ORDER BY %s %s", q.SortField, strings.ToUpper(q.SortOrder))
 
@@ -127,7 +128,7 @@ func (r *SQLRepository) GetServerByID(ctx context.Context, id int64) (Record, er
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
 		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		       use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 		WHERE id = $1
 	`, id); err != nil {
@@ -143,7 +144,7 @@ func (r *SQLRepository) GetServerByUID(ctx context.Context, uid string) (Record,
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
 		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		       use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		       use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		FROM integration_servers
 		WHERE uid::text = $1
 	`, strings.TrimSpace(uid)); err != nil {
@@ -169,11 +170,11 @@ func (r *SQLRepository) CreateServer(ctx context.Context, params CreateParams) (
 	if err := r.db.GetContext(ctx, &row, `
 		INSERT INTO integration_servers (
 			uid, name, code, system_type, base_url, endpoint_type, http_method,
-			use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+			use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, NOW(), NOW(), $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, NOW(), NOW(), $14)
 		RETURNING id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		          use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		          use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 	`,
 		params.UID,
 		params.Name,
@@ -184,6 +185,7 @@ func (r *SQLRepository) CreateServer(ctx context.Context, params CreateParams) (
 		params.HTTPMethod,
 		params.UseAsync,
 		params.ParseResponses,
+		normalizeResponseBodyPersistence(params.ResponseBodyPersistence),
 		string(headers),
 		string(urlParams),
 		params.Suspended,
@@ -216,13 +218,14 @@ func (r *SQLRepository) UpdateServer(ctx context.Context, params UpdateParams) (
 		    http_method = $7,
 		    use_async = $8,
 		    parse_responses = $9,
-		    headers = $10::jsonb,
-		    url_params = $11::jsonb,
-		    suspended = $12,
+		    response_body_persistence = $10,
+		    headers = $11::jsonb,
+		    url_params = $12::jsonb,
+		    suspended = $13,
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
-		          use_async, parse_responses, headers, url_params, suspended, created_at, updated_at, created_by
+		          use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
 	`,
 		params.ID,
 		params.Name,
@@ -233,6 +236,7 @@ func (r *SQLRepository) UpdateServer(ctx context.Context, params UpdateParams) (
 		params.HTTPMethod,
 		params.UseAsync,
 		params.ParseResponses,
+		normalizeResponseBodyPersistence(params.ResponseBodyPersistence),
 		string(headers),
 		string(urlParams),
 		params.Suspended,
@@ -284,22 +288,23 @@ func decodeRow(row recordRow) (Record, error) {
 	}
 
 	return Record{
-		ID:             row.ID,
-		UID:            row.UID,
-		Name:           row.Name,
-		Code:           row.Code,
-		SystemType:     row.SystemType,
-		BaseURL:        row.BaseURL,
-		EndpointType:   row.EndpointType,
-		HTTPMethod:     row.HTTPMethod,
-		UseAsync:       row.UseAsync,
-		ParseResponses: row.ParseResponses,
-		Headers:        headers,
-		URLParams:      urlParams,
-		Suspended:      row.Suspended,
-		CreatedAt:      row.CreatedAt,
-		UpdatedAt:      row.UpdatedAt,
-		CreatedBy:      row.CreatedBy,
+		ID:                      row.ID,
+		UID:                     row.UID,
+		Name:                    row.Name,
+		Code:                    row.Code,
+		SystemType:              row.SystemType,
+		BaseURL:                 row.BaseURL,
+		EndpointType:            row.EndpointType,
+		HTTPMethod:              row.HTTPMethod,
+		UseAsync:                row.UseAsync,
+		ParseResponses:          row.ParseResponses,
+		ResponseBodyPersistence: row.ResponseBodyPersistence,
+		Headers:                 headers,
+		URLParams:               urlParams,
+		Suspended:               row.Suspended,
+		CreatedAt:               row.CreatedAt,
+		UpdatedAt:               row.UpdatedAt,
+		CreatedBy:               row.CreatedBy,
 	}, nil
 }
 
@@ -438,22 +443,23 @@ func (r *memoryRepository) CreateServer(_ context.Context, params CreateParams) 
 
 	now := time.Now().UTC()
 	record := Record{
-		ID:             r.nextID,
-		UID:            params.UID,
-		Name:           params.Name,
-		Code:           params.Code,
-		SystemType:     params.SystemType,
-		BaseURL:        params.BaseURL,
-		EndpointType:   params.EndpointType,
-		HTTPMethod:     params.HTTPMethod,
-		UseAsync:       params.UseAsync,
-		ParseResponses: params.ParseResponses,
-		Headers:        cloneStringMap(params.Headers),
-		URLParams:      cloneStringMap(params.URLParams),
-		Suspended:      params.Suspended,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-		CreatedBy:      params.CreatedBy,
+		ID:                      r.nextID,
+		UID:                     params.UID,
+		Name:                    params.Name,
+		Code:                    params.Code,
+		SystemType:              params.SystemType,
+		BaseURL:                 params.BaseURL,
+		EndpointType:            params.EndpointType,
+		HTTPMethod:              params.HTTPMethod,
+		UseAsync:                params.UseAsync,
+		ParseResponses:          params.ParseResponses,
+		ResponseBodyPersistence: normalizeResponseBodyPersistence(params.ResponseBodyPersistence),
+		Headers:                 cloneStringMap(params.Headers),
+		URLParams:               cloneStringMap(params.URLParams),
+		Suspended:               params.Suspended,
+		CreatedAt:               now,
+		UpdatedAt:               now,
+		CreatedBy:               params.CreatedBy,
 	}
 	r.items[record.ID] = record
 	r.nextID++
@@ -482,6 +488,7 @@ func (r *memoryRepository) UpdateServer(_ context.Context, params UpdateParams) 
 	existing.HTTPMethod = params.HTTPMethod
 	existing.UseAsync = params.UseAsync
 	existing.ParseResponses = params.ParseResponses
+	existing.ResponseBodyPersistence = normalizeResponseBodyPersistence(params.ResponseBodyPersistence)
 	existing.Headers = cloneStringMap(params.Headers)
 	existing.URLParams = cloneStringMap(params.URLParams)
 	existing.Suspended = params.Suspended

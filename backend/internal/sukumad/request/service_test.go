@@ -21,6 +21,7 @@ type fakeRepo struct {
 	getBySourceAndIdempotencyFn func(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
 	createFn                    func(ctx context.Context, params CreateParams) (Record, error)
 	updateFn                    func(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
+	deleteFn                    func(ctx context.Context, id int64) error
 }
 
 func (f *fakeRepo) ListRequests(ctx context.Context, query ListQuery) (ListResult, error) {
@@ -68,6 +69,13 @@ func (f *fakeRepo) UpdateRequestStatus(ctx context.Context, id int64, status str
 		return Record{}, sql.ErrNoRows
 	}
 	return f.updateFn(ctx, id, status, reason, deferredUntil)
+}
+
+func (f *fakeRepo) DeleteRequest(ctx context.Context, id int64) error {
+	if f.deleteFn == nil {
+		return nil
+	}
+	return f.deleteFn(ctx, id)
 }
 
 func (f *fakeRepo) CreateTargets(context.Context, int64, []CreateTargetParams) ([]TargetRecord, error) {
@@ -324,6 +332,45 @@ func TestServiceGetRequestNotFound(t *testing.T) {
 
 	if _, err := service.GetRequest(context.Background(), 99); err == nil {
 		t.Fatal("expected not found error")
+	}
+}
+
+func TestServiceDeleteRequestWritesAuditWithoutBodies(t *testing.T) {
+	auditRepo := &fakeAuditRepo{}
+	deleted := int64(0)
+	service := NewService(&fakeRepo{
+		getFn: func(_ context.Context, id int64) (Record, error) {
+			return Record{
+				ID:                    id,
+				UID:                   "req-uid",
+				Status:                StatusProcessing,
+				DestinationServerID:   3,
+				DestinationServerName: "DHIS2 Uganda",
+				CorrelationID:         "corr-1",
+				PayloadBody:           `{"secret":"hidden"}`,
+			}, nil
+		},
+		deleteFn: func(_ context.Context, id int64) error {
+			deleted = id
+			return nil
+		},
+	}, audit.NewService(auditRepo))
+
+	actorID := int64(8)
+	if err := service.DeleteRequest(context.Background(), &actorID, 44); err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	if deleted != 44 {
+		t.Fatalf("expected delete id 44, got %d", deleted)
+	}
+	if len(auditRepo.events) != 1 || auditRepo.events[0].Action != "request.deleted" {
+		t.Fatalf("expected request.deleted audit event, got %+v", auditRepo.events)
+	}
+	if _, ok := auditRepo.events[0].Metadata["payloadBody"]; ok {
+		t.Fatalf("delete audit metadata must not include payload body: %+v", auditRepo.events[0].Metadata)
+	}
+	if _, ok := auditRepo.events[0].Metadata["responseBody"]; ok {
+		t.Fatalf("delete audit metadata must not include response body: %+v", auditRepo.events[0].Metadata)
 	}
 }
 

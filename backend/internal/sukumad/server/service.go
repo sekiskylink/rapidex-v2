@@ -62,19 +62,20 @@ func (s *Service) CreateServer(ctx context.Context, input CreateInput) (Record, 
 	}
 
 	created, err := s.repo.CreateServer(ctx, CreateParams{
-		UID:            newUID(),
-		Name:           normalized.Name,
-		Code:           normalized.Code,
-		SystemType:     normalized.SystemType,
-		BaseURL:        normalized.BaseURL,
-		EndpointType:   normalized.EndpointType,
-		HTTPMethod:     normalized.HTTPMethod,
-		UseAsync:       normalized.UseAsync,
-		ParseResponses: normalized.ParseResponses,
-		Headers:        normalized.Headers,
-		URLParams:      normalized.URLParams,
-		Suspended:      normalized.Suspended,
-		CreatedBy:      input.ActorID,
+		UID:                     newUID(),
+		Name:                    normalized.Name,
+		Code:                    normalized.Code,
+		SystemType:              normalized.SystemType,
+		BaseURL:                 normalized.BaseURL,
+		EndpointType:            normalized.EndpointType,
+		HTTPMethod:              normalized.HTTPMethod,
+		UseAsync:                normalized.UseAsync,
+		ParseResponses:          normalized.ParseResponses,
+		ResponseBodyPersistence: normalized.ResponseBodyPersistence,
+		Headers:                 normalized.Headers,
+		URLParams:               normalized.URLParams,
+		Suspended:               normalized.Suspended,
+		CreatedBy:               input.ActorID,
 	})
 	if err != nil {
 		if mapped := mapConstraintError(err); mapped != nil {
@@ -89,11 +90,12 @@ func (s *Service) CreateServer(ctx context.Context, input CreateInput) (Record, 
 		EntityType:  "server",
 		EntityID:    strPtr(fmt.Sprintf("%d", created.ID)),
 		Metadata: map[string]any{
-			"name":       created.Name,
-			"code":       created.Code,
-			"systemType": created.SystemType,
-			"baseUrl":    created.BaseURL,
-			"suspended":  created.Suspended,
+			"name":                    created.Name,
+			"code":                    created.Code,
+			"systemType":              created.SystemType,
+			"baseUrl":                 created.BaseURL,
+			"suspended":               created.Suspended,
+			"responseBodyPersistence": created.ResponseBodyPersistence,
 		},
 	})
 
@@ -110,35 +112,37 @@ func (s *Service) UpdateServer(ctx context.Context, input UpdateInput) (Record, 
 	}
 
 	normalized, details := normalizeInput(CreateInput{
-		Name:           input.Name,
-		Code:           input.Code,
-		SystemType:     input.SystemType,
-		BaseURL:        input.BaseURL,
-		EndpointType:   input.EndpointType,
-		HTTPMethod:     input.HTTPMethod,
-		UseAsync:       input.UseAsync,
-		ParseResponses: input.ParseResponses,
-		Headers:        input.Headers,
-		URLParams:      input.URLParams,
-		Suspended:      input.Suspended,
+		Name:                    input.Name,
+		Code:                    input.Code,
+		SystemType:              input.SystemType,
+		BaseURL:                 input.BaseURL,
+		EndpointType:            input.EndpointType,
+		HTTPMethod:              input.HTTPMethod,
+		UseAsync:                input.UseAsync,
+		ParseResponses:          input.ParseResponses,
+		ResponseBodyPersistence: input.ResponseBodyPersistence,
+		Headers:                 input.Headers,
+		URLParams:               input.URLParams,
+		Suspended:               input.Suspended,
 	})
 	if len(details) > 0 {
 		return Record{}, apperror.ValidationWithDetails("validation failed", details)
 	}
 
 	updated, err := s.repo.UpdateServer(ctx, UpdateParams{
-		ID:             input.ID,
-		Name:           normalized.Name,
-		Code:           normalized.Code,
-		SystemType:     normalized.SystemType,
-		BaseURL:        normalized.BaseURL,
-		EndpointType:   normalized.EndpointType,
-		HTTPMethod:     normalized.HTTPMethod,
-		UseAsync:       normalized.UseAsync,
-		ParseResponses: normalized.ParseResponses,
-		Headers:        normalized.Headers,
-		URLParams:      normalized.URLParams,
-		Suspended:      normalized.Suspended,
+		ID:                      input.ID,
+		Name:                    normalized.Name,
+		Code:                    normalized.Code,
+		SystemType:              normalized.SystemType,
+		BaseURL:                 normalized.BaseURL,
+		EndpointType:            normalized.EndpointType,
+		HTTPMethod:              normalized.HTTPMethod,
+		UseAsync:                normalized.UseAsync,
+		ParseResponses:          normalized.ParseResponses,
+		ResponseBodyPersistence: normalized.ResponseBodyPersistence,
+		Headers:                 normalized.Headers,
+		URLParams:               normalized.URLParams,
+		Suspended:               normalized.Suspended,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -156,15 +160,16 @@ func (s *Service) UpdateServer(ctx context.Context, input UpdateInput) (Record, 
 		EntityType:  "server",
 		EntityID:    strPtr(fmt.Sprintf("%d", updated.ID)),
 		Metadata: map[string]any{
-			"name":           updated.Name,
-			"code":           updated.Code,
-			"systemType":     updated.SystemType,
-			"baseUrl":        updated.BaseURL,
-			"endpointType":   updated.EndpointType,
-			"httpMethod":     updated.HTTPMethod,
-			"useAsync":       updated.UseAsync,
-			"parseResponses": updated.ParseResponses,
-			"suspended":      updated.Suspended,
+			"name":                    updated.Name,
+			"code":                    updated.Code,
+			"systemType":              updated.SystemType,
+			"baseUrl":                 updated.BaseURL,
+			"endpointType":            updated.EndpointType,
+			"httpMethod":              updated.HTTPMethod,
+			"useAsync":                updated.UseAsync,
+			"parseResponses":          updated.ParseResponses,
+			"responseBodyPersistence": updated.ResponseBodyPersistence,
+			"suspended":               updated.Suspended,
 		},
 	})
 
@@ -218,17 +223,18 @@ func (s *Service) DeleteServer(ctx context.Context, actorID *int64, id int64) er
 
 func normalizeInput(input CreateInput) (CreateInput, map[string]any) {
 	normalized := CreateInput{
-		Name:           strings.TrimSpace(input.Name),
-		Code:           strings.ToLower(strings.TrimSpace(input.Code)),
-		SystemType:     strings.ToLower(strings.TrimSpace(input.SystemType)),
-		BaseURL:        strings.TrimRight(strings.TrimSpace(input.BaseURL), "/"),
-		EndpointType:   strings.ToLower(strings.TrimSpace(input.EndpointType)),
-		HTTPMethod:     strings.ToUpper(strings.TrimSpace(input.HTTPMethod)),
-		UseAsync:       input.UseAsync,
-		ParseResponses: input.ParseResponses,
-		Headers:        sanitizeMap(input.Headers),
-		URLParams:      sanitizeMap(input.URLParams),
-		Suspended:      input.Suspended,
+		Name:                    strings.TrimSpace(input.Name),
+		Code:                    strings.ToLower(strings.TrimSpace(input.Code)),
+		SystemType:              strings.ToLower(strings.TrimSpace(input.SystemType)),
+		BaseURL:                 strings.TrimRight(strings.TrimSpace(input.BaseURL), "/"),
+		EndpointType:            strings.ToLower(strings.TrimSpace(input.EndpointType)),
+		HTTPMethod:              strings.ToUpper(strings.TrimSpace(input.HTTPMethod)),
+		UseAsync:                input.UseAsync,
+		ParseResponses:          input.ParseResponses,
+		ResponseBodyPersistence: normalizeResponseBodyPersistence(input.ResponseBodyPersistence),
+		Headers:                 sanitizeMap(input.Headers),
+		URLParams:               sanitizeMap(input.URLParams),
+		Suspended:               input.Suspended,
 	}
 
 	details := map[string]any{}
@@ -262,8 +268,28 @@ func normalizeInput(input CreateInput) (CreateInput, map[string]any) {
 	if err := validateStringMap(normalized.URLParams); err != nil {
 		details["urlParams"] = []string{err.Error()}
 	}
+	if !isValidResponseBodyPersistence(normalized.ResponseBodyPersistence) {
+		details["responseBodyPersistence"] = []string{"must be one of filter, save, or discard"}
+	}
 
 	return normalized, details
+}
+
+func normalizeResponseBodyPersistence(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return "filter"
+	}
+	return normalized
+}
+
+func isValidResponseBodyPersistence(value string) bool {
+	switch value {
+	case "filter", "save", "discard":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeMap(input map[string]string) map[string]string {

@@ -153,19 +153,20 @@ func (s *Service) CreateExternalRequest(ctx context.Context, input ExternalCreat
 
 func (s *Service) createRequestNormalized(ctx context.Context, normalized CreateInput) (Record, error) {
 	created, err := s.repo.CreateRequest(ctx, CreateParams{
-		UID:                 newUID(),
-		SourceSystem:        normalized.SourceSystem,
-		DestinationServerID: normalized.DestinationServerID,
-		BatchID:             normalized.BatchID,
-		CorrelationID:       normalized.CorrelationID,
-		IdempotencyKey:      normalized.IdempotencyKey,
-		PayloadBody:         string(normalized.Payload.([]byte)),
-		PayloadFormat:       normalized.PayloadFormat,
-		SubmissionBinding:   normalized.SubmissionBinding,
-		URLSuffix:           normalized.URLSuffix,
-		Status:              StatusPending,
-		Extras:              normalized.Extras,
-		CreatedBy:           normalized.ActorID,
+		UID:                     newUID(),
+		SourceSystem:            normalized.SourceSystem,
+		DestinationServerID:     normalized.DestinationServerID,
+		BatchID:                 normalized.BatchID,
+		CorrelationID:           normalized.CorrelationID,
+		IdempotencyKey:          normalized.IdempotencyKey,
+		PayloadBody:             string(normalized.Payload.([]byte)),
+		PayloadFormat:           normalized.PayloadFormat,
+		SubmissionBinding:       normalized.SubmissionBinding,
+		ResponseBodyPersistence: normalized.ResponseBodyPersistence,
+		URLSuffix:               normalized.URLSuffix,
+		Status:                  StatusPending,
+		Extras:                  normalized.Extras,
+		CreatedBy:               normalized.ActorID,
 	})
 	if err != nil {
 		return Record{}, err
@@ -179,12 +180,13 @@ func (s *Service) createRequestNormalized(ctx context.Context, normalized Create
 		Actor:           traceevent.Actor{Type: traceevent.ActorUser, UserID: normalized.ActorID},
 		SourceComponent: "request.service",
 		EventData: map[string]any{
-			"requestUid":            created.UID,
-			"status":                created.Status,
-			"destinationServerId":   created.DestinationServerID,
-			"destinationServerName": created.DestinationServerName,
-			"sourceSystem":          created.SourceSystem,
-			"awaitingAsync":         created.AwaitingAsync,
+			"requestUid":              created.UID,
+			"status":                  created.Status,
+			"destinationServerId":     created.DestinationServerID,
+			"destinationServerName":   created.DestinationServerName,
+			"sourceSystem":            created.SourceSystem,
+			"awaitingAsync":           created.AwaitingAsync,
+			"responseBodyPersistence": created.ResponseBodyPersistence,
 		},
 	})
 
@@ -392,19 +394,20 @@ func (s *Service) normalizeExternalCreateInput(ctx context.Context, input Extern
 	}
 
 	internal := CreateInput{
-		SourceSystem:         normalized.SourceSystem,
-		DestinationServerID:  primaryServer.ID,
-		DestinationServerIDs: destinationIDs,
-		DependencyRequestIDs: dependencyIDs,
-		BatchID:              normalized.BatchID,
-		CorrelationID:        normalized.CorrelationID,
-		IdempotencyKey:       normalized.IdempotencyKey,
-		Payload:              normalized.Payload,
-		PayloadFormat:        normalized.PayloadFormat,
-		SubmissionBinding:    normalized.SubmissionBinding,
-		URLSuffix:            normalized.URLSuffix,
-		Extras:               normalized.Extras,
-		ActorID:              normalized.ActorID,
+		SourceSystem:            normalized.SourceSystem,
+		DestinationServerID:     primaryServer.ID,
+		DestinationServerIDs:    destinationIDs,
+		DependencyRequestIDs:    dependencyIDs,
+		BatchID:                 normalized.BatchID,
+		CorrelationID:           normalized.CorrelationID,
+		IdempotencyKey:          normalized.IdempotencyKey,
+		Payload:                 normalized.Payload,
+		PayloadFormat:           normalized.PayloadFormat,
+		SubmissionBinding:       normalized.SubmissionBinding,
+		ResponseBodyPersistence: normalized.ResponseBodyPersistence,
+		URLSuffix:               normalized.URLSuffix,
+		Extras:                  normalized.Extras,
+		ActorID:                 normalized.ActorID,
 	}
 
 	internal, validationDetails := normalizeCreateInput(internal)
@@ -472,18 +475,19 @@ func (s *Service) SetBlocked(ctx context.Context, requestID int64, reason string
 
 func normalizeCreateInput(input CreateInput) (CreateInput, map[string]any) {
 	normalized := CreateInput{
-		SourceSystem:         strings.TrimSpace(input.SourceSystem),
-		DestinationServerID:  input.DestinationServerID,
-		DestinationServerIDs: append([]int64{}, input.DestinationServerIDs...),
-		DependencyRequestIDs: append([]int64{}, input.DependencyRequestIDs...),
-		BatchID:              strings.TrimSpace(input.BatchID),
-		CorrelationID:        strings.TrimSpace(input.CorrelationID),
-		IdempotencyKey:       strings.TrimSpace(input.IdempotencyKey),
-		PayloadFormat:        normalizePayloadFormat(input.PayloadFormat),
-		SubmissionBinding:    normalizeSubmissionBinding(input.SubmissionBinding),
-		URLSuffix:            strings.TrimSpace(input.URLSuffix),
-		Extras:               cloneExtras(input.Extras),
-		ActorID:              input.ActorID,
+		SourceSystem:            strings.TrimSpace(input.SourceSystem),
+		DestinationServerID:     input.DestinationServerID,
+		DestinationServerIDs:    append([]int64{}, input.DestinationServerIDs...),
+		DependencyRequestIDs:    append([]int64{}, input.DependencyRequestIDs...),
+		BatchID:                 strings.TrimSpace(input.BatchID),
+		CorrelationID:           strings.TrimSpace(input.CorrelationID),
+		IdempotencyKey:          strings.TrimSpace(input.IdempotencyKey),
+		PayloadFormat:           normalizePayloadFormat(input.PayloadFormat),
+		SubmissionBinding:       normalizeSubmissionBinding(input.SubmissionBinding),
+		ResponseBodyPersistence: normalizeResponseBodyPersistence(input.ResponseBodyPersistence, true),
+		URLSuffix:               strings.TrimSpace(input.URLSuffix),
+		Extras:                  cloneExtras(input.Extras),
+		ActorID:                 input.ActorID,
 	}
 
 	details := map[string]any{}
@@ -513,8 +517,38 @@ func normalizeCreateInput(input CreateInput) (CreateInput, map[string]any) {
 	if err := validateExtras(normalized.Extras); err != nil {
 		details["metadata"] = []string{err.Error()}
 	}
+	if !isValidResponseBodyPersistence(normalized.ResponseBodyPersistence, true) {
+		details["responseBodyPersistence"] = []string{"must be one of server default, filter, save, or discard"}
+	}
 
 	return normalized, details
+}
+
+func (s *Service) DeleteRequest(ctx context.Context, actorID *int64, id int64) error {
+	existing, err := s.GetRequest(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.DeleteRequest(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"request not found"}})
+		}
+		return err
+	}
+	s.logAudit(ctx, audit.Event{
+		Action:      "request.deleted",
+		ActorUserID: actorID,
+		EntityType:  "request",
+		EntityID:    strPtr(fmt.Sprintf("%d", id)),
+		Metadata: map[string]any{
+			"uid":                   existing.UID,
+			"status":                existing.Status,
+			"destinationServerId":   existing.DestinationServerID,
+			"destinationServerName": existing.DestinationServerName,
+			"correlationId":         existing.CorrelationID,
+		},
+	})
+	return nil
 }
 
 func normalizePayloadFormat(value string) string {
@@ -536,6 +570,28 @@ func normalizeSubmissionBinding(value string) string {
 		return SubmissionBindingQuery
 	default:
 		return strings.ToLower(strings.TrimSpace(value))
+	}
+}
+
+func normalizeResponseBodyPersistence(value string, allowDefault bool) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "server_default" || normalized == "server-default" || normalized == "default" {
+		return ""
+	}
+	if normalized == "" && !allowDefault {
+		return "filter"
+	}
+	return normalized
+}
+
+func isValidResponseBodyPersistence(value string, allowDefault bool) bool {
+	switch value {
+	case "filter", "save", "discard":
+		return true
+	case "":
+		return allowDefault
+	default:
+		return false
 	}
 }
 

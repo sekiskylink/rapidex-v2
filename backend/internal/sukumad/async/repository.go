@@ -32,25 +32,26 @@ func NewRepository(db ...*sqlx.DB) Repository {
 }
 
 type recordRow struct {
-	ID                 int64           `db:"id"`
-	UID                string          `db:"uid"`
-	DeliveryAttemptID  int64           `db:"delivery_attempt_id"`
-	DeliveryUID        string          `db:"delivery_uid"`
-	RequestID          int64           `db:"request_id"`
-	RequestUID         string          `db:"request_uid"`
-	CorrelationID      string          `db:"correlation_id"`
-	DestinationCode    string          `db:"destination_code"`
-	RemoteJobID        string          `db:"remote_job_id"`
-	PollURL            string          `db:"poll_url"`
-	RemoteStatus       string          `db:"remote_status"`
-	TerminalState      string          `db:"terminal_state"`
-	NextPollAt         *time.Time      `db:"next_poll_at"`
-	CompletedAt        *time.Time      `db:"completed_at"`
-	PollClaimedAt      *time.Time      `db:"poll_claimed_at"`
-	PollClaimedByRunID *int64          `db:"poll_claimed_by_worker_run_id"`
-	RemoteResponse     json.RawMessage `db:"remote_response"`
-	CreatedAt          time.Time       `db:"created_at"`
-	UpdatedAt          time.Time       `db:"updated_at"`
+	ID                      int64           `db:"id"`
+	UID                     string          `db:"uid"`
+	DeliveryAttemptID       int64           `db:"delivery_attempt_id"`
+	DeliveryUID             string          `db:"delivery_uid"`
+	RequestID               int64           `db:"request_id"`
+	RequestUID              string          `db:"request_uid"`
+	CorrelationID           string          `db:"correlation_id"`
+	DestinationCode         string          `db:"destination_code"`
+	ResponseBodyPersistence string          `db:"response_body_persistence"`
+	RemoteJobID             string          `db:"remote_job_id"`
+	PollURL                 string          `db:"poll_url"`
+	RemoteStatus            string          `db:"remote_status"`
+	TerminalState           string          `db:"terminal_state"`
+	NextPollAt              *time.Time      `db:"next_poll_at"`
+	CompletedAt             *time.Time      `db:"completed_at"`
+	PollClaimedAt           *time.Time      `db:"poll_claimed_at"`
+	PollClaimedByRunID      *int64          `db:"poll_claimed_by_worker_run_id"`
+	RemoteResponse          json.RawMessage `db:"remote_response"`
+	CreatedAt               time.Time       `db:"created_at"`
+	UpdatedAt               time.Time       `db:"updated_at"`
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
@@ -132,6 +133,7 @@ func (r *SQLRepository) ListTasks(ctx context.Context, query ListQuery) (ListRes
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(NULLIF(rq.response_body_persistence, ''), s.response_body_persistence, 'filter') AS response_body_persistence,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
@@ -167,6 +169,7 @@ func (r *SQLRepository) GetTaskByID(ctx context.Context, id int64) (Record, erro
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(NULLIF(rq.response_body_persistence, ''), s.response_body_persistence, 'filter') AS response_body_persistence,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
@@ -310,6 +313,7 @@ func (r *SQLRepository) ListDueTasks(ctx context.Context, now time.Time, limit i
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(NULLIF(rq.response_body_persistence, ''), s.response_body_persistence, 'filter') AS response_body_persistence,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
@@ -357,6 +361,7 @@ func (r *SQLRepository) ClaimNextDueTask(ctx context.Context, now time.Time, cla
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(NULLIF(rq.response_body_persistence, ''), s.response_body_persistence, 'filter') AS response_body_persistence,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
@@ -383,6 +388,7 @@ func (r *SQLRepository) ListTerminalTasksForRecovery(ctx context.Context, limit 
 		SELECT a.id, a.uid::text AS uid, a.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       COALESCE(d.request_id, 0) AS request_id, COALESCE(rq.uid::text, '') AS request_uid, COALESCE(rq.correlation_id, '') AS correlation_id,
 		       COALESCE(s.code, '') AS destination_code,
+		       COALESCE(NULLIF(rq.response_body_persistence, ''), s.response_body_persistence, 'filter') AS response_body_persistence,
 		       COALESCE(a.remote_job_id, '') AS remote_job_id, COALESCE(a.poll_url, '') AS poll_url,
 		       COALESCE(a.remote_status, '') AS remote_status, COALESCE(a.terminal_state, '') AS terminal_state,
 		       a.next_poll_at, a.completed_at, a.poll_claimed_at, a.poll_claimed_by_worker_run_id, a.remote_response, a.created_at, a.updated_at
@@ -443,26 +449,27 @@ func decodeRow(row recordRow) (Record, error) {
 		return Record{}, fmt.Errorf("decode async remote response: %w", err)
 	}
 	return Record{
-		ID:                 row.ID,
-		UID:                row.UID,
-		DeliveryAttemptID:  row.DeliveryAttemptID,
-		DeliveryUID:        row.DeliveryUID,
-		RequestID:          row.RequestID,
-		RequestUID:         row.RequestUID,
-		CorrelationID:      row.CorrelationID,
-		DestinationCode:    row.DestinationCode,
-		RemoteJobID:        row.RemoteJobID,
-		PollURL:            row.PollURL,
-		RemoteStatus:       row.RemoteStatus,
-		TerminalState:      row.TerminalState,
-		CurrentState:       deriveCurrentState(row.RemoteStatus, row.TerminalState),
-		NextPollAt:         cloneTimePtr(row.NextPollAt),
-		CompletedAt:        cloneTimePtr(row.CompletedAt),
-		PollClaimedAt:      cloneTimePtr(row.PollClaimedAt),
-		PollClaimedByRunID: cloneInt64Ptr(row.PollClaimedByRunID),
-		RemoteResponse:     response,
-		CreatedAt:          row.CreatedAt,
-		UpdatedAt:          row.UpdatedAt,
+		ID:                      row.ID,
+		UID:                     row.UID,
+		DeliveryAttemptID:       row.DeliveryAttemptID,
+		DeliveryUID:             row.DeliveryUID,
+		RequestID:               row.RequestID,
+		RequestUID:              row.RequestUID,
+		CorrelationID:           row.CorrelationID,
+		DestinationCode:         row.DestinationCode,
+		ResponseBodyPersistence: row.ResponseBodyPersistence,
+		RemoteJobID:             row.RemoteJobID,
+		PollURL:                 row.PollURL,
+		RemoteStatus:            row.RemoteStatus,
+		TerminalState:           row.TerminalState,
+		CurrentState:            deriveCurrentState(row.RemoteStatus, row.TerminalState),
+		NextPollAt:              cloneTimePtr(row.NextPollAt),
+		CompletedAt:             cloneTimePtr(row.CompletedAt),
+		PollClaimedAt:           cloneTimePtr(row.PollClaimedAt),
+		PollClaimedByRunID:      cloneInt64Ptr(row.PollClaimedByRunID),
+		RemoteResponse:          response,
+		CreatedAt:               row.CreatedAt,
+		UpdatedAt:               row.UpdatedAt,
 	}, nil
 }
 
@@ -554,24 +561,25 @@ func (r *memoryRepository) CreateTask(_ context.Context, params CreateParams) (R
 	id := r.nextID
 	r.nextID++
 	record := Record{
-		ID:                 id,
-		UID:                params.UID,
-		DeliveryAttemptID:  params.DeliveryAttemptID,
-		DeliveryUID:        fmt.Sprintf("delivery-%d", params.DeliveryAttemptID),
-		RequestID:          params.DeliveryAttemptID,
-		RequestUID:         fmt.Sprintf("request-%d", params.DeliveryAttemptID),
-		RemoteJobID:        params.RemoteJobID,
-		PollURL:            params.PollURL,
-		RemoteStatus:       params.RemoteStatus,
-		TerminalState:      params.TerminalState,
-		CurrentState:       deriveCurrentState(params.RemoteStatus, params.TerminalState),
-		NextPollAt:         cloneTimePtr(params.NextPollAt),
-		CompletedAt:        cloneTimePtr(params.CompletedAt),
-		PollClaimedAt:      nil,
-		PollClaimedByRunID: nil,
-		RemoteResponse:     cloneJSONMap(params.RemoteResponse),
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		ID:                      id,
+		UID:                     params.UID,
+		DeliveryAttemptID:       params.DeliveryAttemptID,
+		DeliveryUID:             fmt.Sprintf("delivery-%d", params.DeliveryAttemptID),
+		RequestID:               params.DeliveryAttemptID,
+		RequestUID:              fmt.Sprintf("request-%d", params.DeliveryAttemptID),
+		ResponseBodyPersistence: "filter",
+		RemoteJobID:             params.RemoteJobID,
+		PollURL:                 params.PollURL,
+		RemoteStatus:            params.RemoteStatus,
+		TerminalState:           params.TerminalState,
+		CurrentState:            deriveCurrentState(params.RemoteStatus, params.TerminalState),
+		NextPollAt:              cloneTimePtr(params.NextPollAt),
+		CompletedAt:             cloneTimePtr(params.CompletedAt),
+		PollClaimedAt:           nil,
+		PollClaimedByRunID:      nil,
+		RemoteResponse:          cloneJSONMap(params.RemoteResponse),
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil

@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -35,6 +36,7 @@ interface ServerRow {
   httpMethod: string
   useAsync: boolean
   parseResponses: boolean
+  responseBodyPersistence: string
   headers: Record<string, string>
   urlParams: Record<string, string>
   suspended: boolean
@@ -51,6 +53,7 @@ interface ServerFormState {
   httpMethod: string
   useAsync: boolean
   parseResponses: boolean
+  responseBodyPersistence: string
   suspended: boolean
   headersText: string
   urlParamsText: string
@@ -67,6 +70,7 @@ const defaultForm: ServerFormState = {
   httpMethod: 'POST',
   useAsync: false,
   parseResponses: true,
+  responseBodyPersistence: 'filter',
   suspended: false,
   headersText: '{}',
   urlParamsText: '{}',
@@ -108,6 +112,7 @@ function toFormState(row: ServerRow): ServerFormState {
     httpMethod: row.httpMethod,
     useAsync: row.useAsync,
     parseResponses: row.parseResponses,
+    responseBodyPersistence: row.responseBodyPersistence || 'filter',
     suspended: row.suspended,
     headersText: toPrettyJSON(row.headers),
     urlParamsText: toPrettyJSON(row.urlParams),
@@ -171,6 +176,7 @@ function toRequestPayload(form: ServerFormState) {
     httpMethod: form.httpMethod.trim(),
     useAsync: form.useAsync,
     parseResponses: form.parseResponses,
+    responseBodyPersistence: form.responseBodyPersistence,
     suspended: form.suspended,
     headers: parseStringMap(form.headersText, 'headers').parsed ?? {},
     urlParams: parseStringMap(form.urlParamsText, 'urlParams').parsed ?? {},
@@ -285,6 +291,19 @@ function ServerFormDialog({
             />
           </Stack>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              select
+              label="Response Body"
+              value={form.responseBodyPersistence}
+              onChange={(event) => onChange({ responseBodyPersistence: event.target.value })}
+              error={Boolean(errors.responseBodyPersistence)}
+              helperText={errors.responseBodyPersistence || 'Default policy for saving destination response bodies.'}
+              fullWidth
+            >
+              <MenuItem value="filter">Use response filter</MenuItem>
+              <MenuItem value="save">Always save</MenuItem>
+              <MenuItem value="discard">Never save</MenuItem>
+            </TextField>
             <FormControlLabel
               control={<Switch checked={form.useAsync} onChange={(event) => onChange({ useAsync: event.target.checked })} />}
               label="Use async processing"

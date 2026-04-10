@@ -32,35 +32,36 @@ func NewRepository(db ...*sqlx.DB) Repository {
 }
 
 type recordRow struct {
-	ID                     int64           `db:"id"`
-	UID                    string          `db:"uid"`
-	SourceSystem           string          `db:"source_system"`
-	DestinationServerID    int64           `db:"destination_server_id"`
-	DestinationServerUID   string          `db:"destination_server_uid"`
-	DestinationServerName  string          `db:"destination_server_name"`
-	DestinationServerCode  string          `db:"destination_server_code"`
-	BatchID                string          `db:"batch_id"`
-	CorrelationID          string          `db:"correlation_id"`
-	IdempotencyKey         string          `db:"idempotency_key"`
-	PayloadBody            string          `db:"payload_body"`
-	PayloadFormat          string          `db:"payload_format"`
-	SubmissionBinding      string          `db:"submission_binding"`
-	URLSuffix              string          `db:"url_suffix"`
-	Status                 string          `db:"status"`
-	StatusReason           string          `db:"status_reason"`
-	DeferredUntil          *time.Time      `db:"deferred_until"`
-	Extras                 json.RawMessage `db:"extras"`
-	CreatedAt              time.Time       `db:"created_at"`
-	UpdatedAt              time.Time       `db:"updated_at"`
-	CreatedBy              *int64          `db:"created_by"`
-	LatestDeliveryID       *int64          `db:"latest_delivery_id"`
-	LatestDeliveryUID      string          `db:"latest_delivery_uid"`
-	LatestDeliveryStatus   string          `db:"latest_delivery_status"`
-	LatestAsyncTaskID      *int64          `db:"latest_async_task_id"`
-	LatestAsyncTaskUID     string          `db:"latest_async_task_uid"`
-	LatestAsyncState       string          `db:"latest_async_state"`
-	LatestAsyncRemoteJobID string          `db:"latest_async_remote_job_id"`
-	LatestAsyncPollURL     string          `db:"latest_async_poll_url"`
+	ID                      int64           `db:"id"`
+	UID                     string          `db:"uid"`
+	SourceSystem            string          `db:"source_system"`
+	DestinationServerID     int64           `db:"destination_server_id"`
+	DestinationServerUID    string          `db:"destination_server_uid"`
+	DestinationServerName   string          `db:"destination_server_name"`
+	DestinationServerCode   string          `db:"destination_server_code"`
+	BatchID                 string          `db:"batch_id"`
+	CorrelationID           string          `db:"correlation_id"`
+	IdempotencyKey          string          `db:"idempotency_key"`
+	PayloadBody             string          `db:"payload_body"`
+	PayloadFormat           string          `db:"payload_format"`
+	SubmissionBinding       string          `db:"submission_binding"`
+	ResponseBodyPersistence string          `db:"response_body_persistence"`
+	URLSuffix               string          `db:"url_suffix"`
+	Status                  string          `db:"status"`
+	StatusReason            string          `db:"status_reason"`
+	DeferredUntil           *time.Time      `db:"deferred_until"`
+	Extras                  json.RawMessage `db:"extras"`
+	CreatedAt               time.Time       `db:"created_at"`
+	UpdatedAt               time.Time       `db:"updated_at"`
+	CreatedBy               *int64          `db:"created_by"`
+	LatestDeliveryID        *int64          `db:"latest_delivery_id"`
+	LatestDeliveryUID       string          `db:"latest_delivery_uid"`
+	LatestDeliveryStatus    string          `db:"latest_delivery_status"`
+	LatestAsyncTaskID       *int64          `db:"latest_async_task_id"`
+	LatestAsyncTaskUID      string          `db:"latest_async_task_uid"`
+	LatestAsyncState        string          `db:"latest_async_state"`
+	LatestAsyncRemoteJobID  string          `db:"latest_async_remote_job_id"`
+	LatestAsyncPollURL      string          `db:"latest_async_poll_url"`
 }
 
 func normalizeListQuery(query ListQuery) ListQuery {
@@ -154,7 +155,7 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
 		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -221,7 +222,7 @@ func (r *SQLRepository) getRequestByWhere(ctx context.Context, whereClause strin
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
 		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -269,7 +270,7 @@ func (r *SQLRepository) listRequestsByWhere(ctx context.Context, whereClause str
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
 		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -316,9 +317,9 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 	if err := r.db.GetContext(ctx, &id, `
 		INSERT INTO exchange_requests (
 			uid, source_system, destination_server_id, batch_id, correlation_id, idempotency_key,
-			payload_body, payload_format, submission_binding, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
+			payload_body, payload_format, submission_binding, response_body_persistence, url_suffix, status, status_reason, deferred_until, extras, created_at, updated_at, created_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW(), $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, NOW(), NOW(), $16)
 		RETURNING id
 	`,
 		params.UID,
@@ -330,6 +331,7 @@ func (r *SQLRepository) CreateRequest(ctx context.Context, params CreateParams) 
 		params.PayloadBody,
 		params.PayloadFormat,
 		params.SubmissionBinding,
+		params.ResponseBodyPersistence,
 		nullIfEmpty(params.URLSuffix),
 		params.Status,
 		params.StatusReason,
@@ -399,38 +401,94 @@ func decodeRow(row recordRow) (Record, error) {
 		return Record{}, fmt.Errorf("decode exchange request extras: %w", err)
 	}
 	return Record{
-		ID:                     row.ID,
-		UID:                    row.UID,
-		SourceSystem:           row.SourceSystem,
-		DestinationServerID:    row.DestinationServerID,
-		DestinationServerUID:   row.DestinationServerUID,
-		DestinationServerName:  row.DestinationServerName,
-		DestinationServerCode:  row.DestinationServerCode,
-		BatchID:                row.BatchID,
-		CorrelationID:          row.CorrelationID,
-		IdempotencyKey:         row.IdempotencyKey,
-		PayloadBody:            row.PayloadBody,
-		PayloadFormat:          row.PayloadFormat,
-		SubmissionBinding:      row.SubmissionBinding,
-		URLSuffix:              row.URLSuffix,
-		Status:                 row.Status,
-		StatusReason:           row.StatusReason,
-		DeferredUntil:          cloneTimePtr(row.DeferredUntil),
-		Extras:                 extras,
-		CreatedAt:              row.CreatedAt,
-		UpdatedAt:              row.UpdatedAt,
-		CreatedBy:              row.CreatedBy,
-		Payload:                decodePayload(row.PayloadBody, row.PayloadFormat),
-		LatestDeliveryID:       cloneInt64Ptr(row.LatestDeliveryID),
-		LatestDeliveryUID:      row.LatestDeliveryUID,
-		LatestDeliveryStatus:   row.LatestDeliveryStatus,
-		LatestAsyncTaskID:      cloneInt64Ptr(row.LatestAsyncTaskID),
-		LatestAsyncTaskUID:     row.LatestAsyncTaskUID,
-		LatestAsyncState:       row.LatestAsyncState,
-		LatestAsyncRemoteJobID: row.LatestAsyncRemoteJobID,
-		LatestAsyncPollURL:     row.LatestAsyncPollURL,
-		AwaitingAsync:          row.LatestAsyncTaskID != nil && row.LatestAsyncState != "" && row.LatestAsyncState != StatusCompleted && row.LatestAsyncState != StatusFailed,
+		ID:                      row.ID,
+		UID:                     row.UID,
+		SourceSystem:            row.SourceSystem,
+		DestinationServerID:     row.DestinationServerID,
+		DestinationServerUID:    row.DestinationServerUID,
+		DestinationServerName:   row.DestinationServerName,
+		DestinationServerCode:   row.DestinationServerCode,
+		BatchID:                 row.BatchID,
+		CorrelationID:           row.CorrelationID,
+		IdempotencyKey:          row.IdempotencyKey,
+		PayloadBody:             row.PayloadBody,
+		PayloadFormat:           row.PayloadFormat,
+		SubmissionBinding:       row.SubmissionBinding,
+		ResponseBodyPersistence: row.ResponseBodyPersistence,
+		URLSuffix:               row.URLSuffix,
+		Status:                  row.Status,
+		StatusReason:            row.StatusReason,
+		DeferredUntil:           cloneTimePtr(row.DeferredUntil),
+		Extras:                  extras,
+		CreatedAt:               row.CreatedAt,
+		UpdatedAt:               row.UpdatedAt,
+		CreatedBy:               row.CreatedBy,
+		Payload:                 decodePayload(row.PayloadBody, row.PayloadFormat),
+		LatestDeliveryID:        cloneInt64Ptr(row.LatestDeliveryID),
+		LatestDeliveryUID:       row.LatestDeliveryUID,
+		LatestDeliveryStatus:    row.LatestDeliveryStatus,
+		LatestAsyncTaskID:       cloneInt64Ptr(row.LatestAsyncTaskID),
+		LatestAsyncTaskUID:      row.LatestAsyncTaskUID,
+		LatestAsyncState:        row.LatestAsyncState,
+		LatestAsyncRemoteJobID:  row.LatestAsyncRemoteJobID,
+		LatestAsyncPollURL:      row.LatestAsyncPollURL,
+		AwaitingAsync:           row.LatestAsyncTaskID != nil && row.LatestAsyncState != "" && row.LatestAsyncState != StatusCompleted && row.LatestAsyncState != StatusFailed,
 	}, nil
+}
+
+func (r *SQLRepository) DeleteRequest(ctx context.Context, id int64) error {
+	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin delete exchange request transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	steps := []string{
+		`
+			WITH target_async_tasks AS (
+				SELECT a.id
+				FROM async_tasks a
+				JOIN delivery_attempts d ON d.id = a.delivery_attempt_id
+				WHERE d.request_id = $1
+			)
+			DELETE FROM async_task_polls
+			WHERE async_task_id IN (SELECT id FROM target_async_tasks)
+		`,
+		`
+			DELETE FROM async_tasks
+			WHERE delivery_attempt_id IN (
+				SELECT id FROM delivery_attempts WHERE request_id = $1
+			)
+		`,
+		`DELETE FROM request_events WHERE request_id = $1`,
+		`DELETE FROM delivery_attempts WHERE request_id = $1`,
+		`DELETE FROM request_targets WHERE request_id = $1`,
+		`DELETE FROM request_dependencies WHERE request_id = $1 OR depends_on_request_id = $1`,
+	}
+
+	for _, query := range steps {
+		if _, err := tx.ExecContext(ctx, query, id); err != nil {
+			return fmt.Errorf("delete exchange request dependencies: %w", err)
+		}
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM exchange_requests WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete exchange request: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete exchange request rows affected: %w", err)
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete exchange request transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *SQLRepository) hydrateRequests(ctx context.Context, items []Record) error {
@@ -781,31 +839,53 @@ func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams)
 	r.nextID++
 	now := time.Now().UTC()
 	record := Record{
-		ID:                    id,
-		UID:                   params.UID,
-		SourceSystem:          params.SourceSystem,
-		DestinationServerID:   params.DestinationServerID,
-		DestinationServerUID:  fmt.Sprintf("server-uid-%d", params.DestinationServerID),
-		DestinationServerName: fmt.Sprintf("Server #%d", params.DestinationServerID),
-		DestinationServerCode: fmt.Sprintf("server-%d", params.DestinationServerID),
-		BatchID:               params.BatchID,
-		CorrelationID:         params.CorrelationID,
-		IdempotencyKey:        params.IdempotencyKey,
-		PayloadBody:           params.PayloadBody,
-		PayloadFormat:         params.PayloadFormat,
-		SubmissionBinding:     params.SubmissionBinding,
-		URLSuffix:             params.URLSuffix,
-		Status:                params.Status,
-		StatusReason:          params.StatusReason,
-		DeferredUntil:         cloneTimePtr(params.DeferredUntil),
-		Extras:                cloneExtras(params.Extras),
-		CreatedAt:             now,
-		UpdatedAt:             now,
-		CreatedBy:             params.CreatedBy,
-		Payload:               decodePayload(params.PayloadBody, params.PayloadFormat),
+		ID:                      id,
+		UID:                     params.UID,
+		SourceSystem:            params.SourceSystem,
+		DestinationServerID:     params.DestinationServerID,
+		DestinationServerUID:    fmt.Sprintf("server-uid-%d", params.DestinationServerID),
+		DestinationServerName:   fmt.Sprintf("Server #%d", params.DestinationServerID),
+		DestinationServerCode:   fmt.Sprintf("server-%d", params.DestinationServerID),
+		BatchID:                 params.BatchID,
+		CorrelationID:           params.CorrelationID,
+		IdempotencyKey:          params.IdempotencyKey,
+		PayloadBody:             params.PayloadBody,
+		PayloadFormat:           params.PayloadFormat,
+		SubmissionBinding:       params.SubmissionBinding,
+		ResponseBodyPersistence: params.ResponseBodyPersistence,
+		URLSuffix:               params.URLSuffix,
+		Status:                  params.Status,
+		StatusReason:            params.StatusReason,
+		DeferredUntil:           cloneTimePtr(params.DeferredUntil),
+		Extras:                  cloneExtras(params.Extras),
+		CreatedAt:               now,
+		UpdatedAt:               now,
+		CreatedBy:               params.CreatedBy,
+		Payload:                 decodePayload(params.PayloadBody, params.PayloadFormat),
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil
+}
+
+func (r *memoryRepository) DeleteRequest(_ context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.items[id]; !ok {
+		return sql.ErrNoRows
+	}
+	delete(r.items, id)
+	for itemID, item := range r.items {
+		filtered := item.Dependencies[:0]
+		for _, dependency := range item.Dependencies {
+			if dependency.RequestID != id && dependency.DependsOnRequestID != id {
+				filtered = append(filtered, dependency)
+			}
+		}
+		item.Dependencies = filtered
+		r.items[itemID] = item
+	}
+	return nil
 }
 
 func (r *memoryRepository) UpdateRequestStatus(_ context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error) {

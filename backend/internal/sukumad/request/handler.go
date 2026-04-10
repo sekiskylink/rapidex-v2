@@ -20,33 +20,35 @@ func NewHandler(service *Service) *Handler {
 }
 
 type createRequestRequest struct {
-	SourceSystem         string         `json:"sourceSystem"`
-	DestinationServerID  int64          `json:"destinationServerId"`
-	DestinationServerIDs []int64        `json:"destinationServerIds"`
-	DependencyRequestIDs []int64        `json:"dependencyRequestIds"`
-	BatchID              string         `json:"batchId"`
-	CorrelationID        string         `json:"correlationId"`
-	IdempotencyKey       string         `json:"idempotencyKey"`
-	Payload              any            `json:"payload"`
-	PayloadFormat        string         `json:"payloadFormat"`
-	SubmissionBinding    string         `json:"submissionBinding"`
-	URLSuffix            string         `json:"urlSuffix"`
-	Metadata             map[string]any `json:"metadata"`
+	SourceSystem            string         `json:"sourceSystem"`
+	DestinationServerID     int64          `json:"destinationServerId"`
+	DestinationServerIDs    []int64        `json:"destinationServerIds"`
+	DependencyRequestIDs    []int64        `json:"dependencyRequestIds"`
+	BatchID                 string         `json:"batchId"`
+	CorrelationID           string         `json:"correlationId"`
+	IdempotencyKey          string         `json:"idempotencyKey"`
+	Payload                 any            `json:"payload"`
+	PayloadFormat           string         `json:"payloadFormat"`
+	SubmissionBinding       string         `json:"submissionBinding"`
+	ResponseBodyPersistence string         `json:"responseBodyPersistence"`
+	URLSuffix               string         `json:"urlSuffix"`
+	Metadata                map[string]any `json:"metadata"`
 }
 
 type createExternalRequestRequest struct {
-	SourceSystem          string         `json:"sourceSystem"`
-	DestinationServerUID  string         `json:"destinationServerUid"`
-	DestinationServerUIDs []string       `json:"destinationServerUids"`
-	DependencyRequestUIDs []string       `json:"dependencyRequestUids"`
-	BatchID               string         `json:"batchId"`
-	CorrelationID         string         `json:"correlationId"`
-	IdempotencyKey        string         `json:"idempotencyKey"`
-	Payload               any            `json:"payload"`
-	PayloadFormat         string         `json:"payloadFormat"`
-	SubmissionBinding     string         `json:"submissionBinding"`
-	URLSuffix             string         `json:"urlSuffix"`
-	Metadata              map[string]any `json:"metadata"`
+	SourceSystem            string         `json:"sourceSystem"`
+	DestinationServerUID    string         `json:"destinationServerUid"`
+	DestinationServerUIDs   []string       `json:"destinationServerUids"`
+	DependencyRequestUIDs   []string       `json:"dependencyRequestUids"`
+	BatchID                 string         `json:"batchId"`
+	CorrelationID           string         `json:"correlationId"`
+	IdempotencyKey          string         `json:"idempotencyKey"`
+	Payload                 any            `json:"payload"`
+	PayloadFormat           string         `json:"payloadFormat"`
+	SubmissionBinding       string         `json:"submissionBinding"`
+	ResponseBodyPersistence string         `json:"responseBodyPersistence"`
+	URLSuffix               string         `json:"urlSuffix"`
+	Metadata                map[string]any `json:"metadata"`
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -139,19 +141,20 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	created, err := h.service.CreateRequest(c.Request.Context(), CreateInput{
-		SourceSystem:         req.SourceSystem,
-		DestinationServerID:  req.DestinationServerID,
-		DestinationServerIDs: req.DestinationServerIDs,
-		DependencyRequestIDs: req.DependencyRequestIDs,
-		BatchID:              req.BatchID,
-		CorrelationID:        req.CorrelationID,
-		IdempotencyKey:       req.IdempotencyKey,
-		Payload:              req.Payload,
-		PayloadFormat:        req.PayloadFormat,
-		SubmissionBinding:    req.SubmissionBinding,
-		URLSuffix:            req.URLSuffix,
-		Extras:               req.Metadata,
-		ActorID:              actorUserID(principal),
+		SourceSystem:            req.SourceSystem,
+		DestinationServerID:     req.DestinationServerID,
+		DestinationServerIDs:    req.DestinationServerIDs,
+		DependencyRequestIDs:    req.DependencyRequestIDs,
+		BatchID:                 req.BatchID,
+		CorrelationID:           req.CorrelationID,
+		IdempotencyKey:          req.IdempotencyKey,
+		Payload:                 req.Payload,
+		PayloadFormat:           req.PayloadFormat,
+		SubmissionBinding:       req.SubmissionBinding,
+		ResponseBodyPersistence: req.ResponseBodyPersistence,
+		URLSuffix:               req.URLSuffix,
+		Extras:                  req.Metadata,
+		ActorID:                 actorUserID(principal),
 	})
 	if err != nil {
 		apperror.Write(c, err)
@@ -175,19 +178,20 @@ func (h *Handler) CreateExternal(c *gin.Context) {
 	}
 
 	result, err := h.service.CreateExternalRequest(c.Request.Context(), ExternalCreateInput{
-		SourceSystem:          req.SourceSystem,
-		DestinationServerUID:  req.DestinationServerUID,
-		DestinationServerUIDs: req.DestinationServerUIDs,
-		DependencyRequestUIDs: req.DependencyRequestUIDs,
-		BatchID:               req.BatchID,
-		CorrelationID:         req.CorrelationID,
-		IdempotencyKey:        req.IdempotencyKey,
-		Payload:               req.Payload,
-		PayloadFormat:         req.PayloadFormat,
-		SubmissionBinding:     req.SubmissionBinding,
-		URLSuffix:             req.URLSuffix,
-		Extras:                req.Metadata,
-		ActorID:               actorUserID(principal),
+		SourceSystem:            req.SourceSystem,
+		DestinationServerUID:    req.DestinationServerUID,
+		DestinationServerUIDs:   req.DestinationServerUIDs,
+		DependencyRequestUIDs:   req.DependencyRequestUIDs,
+		BatchID:                 req.BatchID,
+		CorrelationID:           req.CorrelationID,
+		IdempotencyKey:          req.IdempotencyKey,
+		Payload:                 req.Payload,
+		PayloadFormat:           req.PayloadFormat,
+		SubmissionBinding:       req.SubmissionBinding,
+		ResponseBodyPersistence: req.ResponseBodyPersistence,
+		URLSuffix:               req.URLSuffix,
+		Extras:                  req.Metadata,
+		ActorID:                 actorUserID(principal),
 	})
 	if err != nil {
 		apperror.Write(c, err)
@@ -247,6 +251,26 @@ func (h *Handler) LookupExternal(c *gin.Context) {
 		response = append(response, toExternalRecord(item))
 	}
 	c.JSON(http.StatusOK, gin.H{"items": response, "totalCount": len(response)})
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid request id"}}))
+		return
+	}
+
+	if err := h.service.DeleteRequest(c.Request.Context(), actorUserID(principal), id); err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func principalFromContext(c *gin.Context) (auth.Principal, bool) {
@@ -315,25 +339,26 @@ func toExternalRecord(record Record) ExternalRecord {
 	}
 
 	return ExternalRecord{
-		UID:                   record.UID,
-		SourceSystem:          record.SourceSystem,
-		DestinationServerUID:  record.DestinationServerUID,
-		DestinationServerCode: record.DestinationServerCode,
-		DestinationServerName: record.DestinationServerName,
-		BatchID:               record.BatchID,
-		CorrelationID:         record.CorrelationID,
-		IdempotencyKey:        record.IdempotencyKey,
-		PayloadFormat:         record.PayloadFormat,
-		SubmissionBinding:     record.SubmissionBinding,
-		URLSuffix:             record.URLSuffix,
-		Status:                record.Status,
-		StatusReason:          record.StatusReason,
-		DeferredUntil:         record.DeferredUntil,
-		Metadata:              record.Extras,
-		AwaitingAsync:         record.AwaitingAsync,
-		Targets:               targets,
-		Dependencies:          dependencies,
-		CreatedAt:             record.CreatedAt,
-		UpdatedAt:             record.UpdatedAt,
+		UID:                     record.UID,
+		SourceSystem:            record.SourceSystem,
+		DestinationServerUID:    record.DestinationServerUID,
+		DestinationServerCode:   record.DestinationServerCode,
+		DestinationServerName:   record.DestinationServerName,
+		BatchID:                 record.BatchID,
+		CorrelationID:           record.CorrelationID,
+		IdempotencyKey:          record.IdempotencyKey,
+		PayloadFormat:           record.PayloadFormat,
+		SubmissionBinding:       record.SubmissionBinding,
+		ResponseBodyPersistence: record.ResponseBodyPersistence,
+		URLSuffix:               record.URLSuffix,
+		Status:                  record.Status,
+		StatusReason:            record.StatusReason,
+		DeferredUntil:           record.DeferredUntil,
+		Metadata:                record.Extras,
+		AwaitingAsync:           record.AwaitingAsync,
+		Targets:                 targets,
+		Dependencies:            dependencies,
+		CreatedAt:               record.CreatedAt,
+		UpdatedAt:               record.UpdatedAt,
 	}
 }

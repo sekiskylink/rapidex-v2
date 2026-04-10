@@ -37,13 +37,7 @@ func (s *Service) Submit(ctx context.Context, input delivery.DispatchInput) (del
 	}
 
 	interpreted := interpretSubmission(response, body, input.Server.UseAsync, input.Server.BaseURL)
-	policy := delivery.ResolveResponseFilter(input.Server.Code)
-	if !delivery.ShouldAllowContentType(policy, interpreted.ResponseContentType) {
-		interpreted.ResponseBodyFiltered = true
-		interpreted.ResponseSummary = summarizeBody(interpreted.ResponseContentType, body)
-		interpreted.ResponseBody = ""
-		interpreted.RemoteResponse = filteredRemoteResponse(interpreted.ResponseContentType, interpreted.HTTPStatus, interpreted.ResponseSummary)
-	}
+	applySubmissionResponsePolicy(&interpreted, input.ResponseBodyPersistence, input.Server.ResponseBodyPersistence, input.Server.Code, body)
 	return delivery.DispatchResult{
 		HTTPStatus:           interpreted.HTTPStatus,
 		ResponseBody:         interpreted.ResponseBody,
@@ -68,13 +62,7 @@ func (s *Service) Poll(ctx context.Context, task asyncjobs.Record) (asyncjobs.Re
 	}
 
 	interpreted := interpretPollResponse(response, body)
-	policy := delivery.ResolveResponseFilter(task.DestinationCode)
-	if !delivery.ShouldAllowContentType(policy, interpreted.ResponseContentType) {
-		interpreted.ResponseBodyFiltered = true
-		interpreted.ResponseSummary = summarizeBody(interpreted.ResponseContentType, body)
-		interpreted.ResponseBody = ""
-		interpreted.RemoteResponse = filteredRemoteResponse(interpreted.ResponseContentType, interpreted.StatusCode, interpreted.ResponseSummary)
-	}
+	applyPollResponsePolicy(&interpreted, task.ResponseBodyPersistence, "", task.DestinationCode, body)
 	return asyncjobs.RemotePollResult{
 		StatusCode:           interpreted.StatusCode,
 		RemoteStatus:         interpreted.RemoteStatus,
@@ -109,6 +97,59 @@ func destinationKeyFromServer(server delivery.ServerSnapshot) string {
 		}
 	}
 	return strings.ToLower(strings.TrimSpace(server.Name))
+}
+
+func applySubmissionResponsePolicy(result *SubmissionResult, requestPolicy string, serverPolicy string, serverCode string, body []byte) {
+	effective := resolveResponseBodyPersistence(requestPolicy, serverPolicy)
+	switch effective {
+	case delivery.ResponseBodyPersistenceSave:
+		result.ResponseBodyFiltered = false
+		return
+	case delivery.ResponseBodyPersistenceDiscard:
+		result.ResponseBodyFiltered = true
+		result.ResponseSummary = summarizeBody(result.ResponseContentType, body)
+		result.ResponseSummary["discarded"] = true
+		result.ResponseBody = ""
+		result.RemoteResponse = filteredRemoteResponse(result.ResponseContentType, result.HTTPStatus, result.ResponseSummary)
+	default:
+		policy := delivery.ResolveResponseFilter(serverCode)
+		if !delivery.ShouldAllowContentType(policy, result.ResponseContentType) {
+			result.ResponseBodyFiltered = true
+			result.ResponseSummary = summarizeBody(result.ResponseContentType, body)
+			result.ResponseBody = ""
+			result.RemoteResponse = filteredRemoteResponse(result.ResponseContentType, result.HTTPStatus, result.ResponseSummary)
+		}
+	}
+}
+
+func applyPollResponsePolicy(result *PollResult, requestPolicy string, serverPolicy string, serverCode string, body []byte) {
+	effective := resolveResponseBodyPersistence(requestPolicy, serverPolicy)
+	switch effective {
+	case delivery.ResponseBodyPersistenceSave:
+		result.ResponseBodyFiltered = false
+		return
+	case delivery.ResponseBodyPersistenceDiscard:
+		result.ResponseBodyFiltered = true
+		result.ResponseSummary = summarizeBody(result.ResponseContentType, body)
+		result.ResponseSummary["discarded"] = true
+		result.ResponseBody = ""
+		result.RemoteResponse = filteredRemoteResponse(result.ResponseContentType, result.StatusCode, result.ResponseSummary)
+	default:
+		policy := delivery.ResolveResponseFilter(serverCode)
+		if !delivery.ShouldAllowContentType(policy, result.ResponseContentType) {
+			result.ResponseBodyFiltered = true
+			result.ResponseSummary = summarizeBody(result.ResponseContentType, body)
+			result.ResponseBody = ""
+			result.RemoteResponse = filteredRemoteResponse(result.ResponseContentType, result.StatusCode, result.ResponseSummary)
+		}
+	}
+}
+
+func resolveResponseBodyPersistence(requestPolicy string, serverPolicy string) string {
+	if strings.TrimSpace(requestPolicy) != "" {
+		return delivery.NormalizeResponseBodyPersistence(requestPolicy)
+	}
+	return delivery.NormalizeResponseBodyPersistence(serverPolicy)
 }
 
 func destinationKeyFromPollURL(pollURL string) string {

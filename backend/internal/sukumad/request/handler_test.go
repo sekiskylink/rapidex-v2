@@ -2,9 +2,11 @@ package request
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"basepro/backend/internal/auth"
@@ -42,6 +44,54 @@ func TestHandlerGetRejectsInvalidID(t *testing.T) {
 	router.GET("/requests/:id", handler.Get)
 
 	req := httptest.NewRequest(http.MethodGet, "/requests/nope", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandlerDeleteReturnsNoContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := NewRepository()
+	service := NewService(repo)
+	created, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		Payload:             []byte(`{"trackedEntity":"123"}`),
+	})
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	handler := NewHandler(service)
+	router := gin.New()
+	router.DELETE("/requests/:id", func(c *gin.Context) {
+		c.Set(auth.PrincipalContextKey, auth.Principal{Type: "user", UserID: 1})
+		handler.Delete(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/requests/"+strconv.FormatInt(created.ID, 10), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := service.GetRequest(context.Background(), created.ID); err == nil {
+		t.Fatal("expected request to be deleted")
+	}
+}
+
+func TestHandlerDeleteRejectsInvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := newTestHandler()
+	router := gin.New()
+	router.DELETE("/requests/:id", func(c *gin.Context) {
+		c.Set(auth.PrincipalContextKey, auth.Principal{Type: "user", UserID: 1})
+		handler.Delete(c)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/requests/nope", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

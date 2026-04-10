@@ -28,6 +28,7 @@ export interface RequestFormState {
   idempotencyKey: string
   payloadFormat: string
   submissionBinding: string
+  responseBodyPersistence: string
   urlSuffix: string
   payloadText: string
   metadataText: string
@@ -200,6 +201,22 @@ export function RequestForm({
               <MenuItem value="body">Request Body</MenuItem>
               <MenuItem value="query">Query Params</MenuItem>
             </TextField>
+            <TextField
+              select
+              label="Response Body"
+              value={form.responseBodyPersistence}
+              onChange={(event) => onChange({ responseBodyPersistence: event.target.value })}
+              error={Boolean(errors.responseBodyPersistence)}
+              helperText={errors.responseBodyPersistence || 'Override the destination response body saving policy.'}
+              fullWidth
+            >
+              <MenuItem value="">Server default</MenuItem>
+              <MenuItem value="filter">Use response filter</MenuItem>
+              <MenuItem value="save">Always save</MenuItem>
+              <MenuItem value="discard">Never save</MenuItem>
+            </TextField>
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField
               label="URL Suffix"
               value={form.urlSuffix}

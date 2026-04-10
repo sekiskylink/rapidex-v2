@@ -19,17 +19,18 @@ func NewHandler(service *Service) *Handler {
 }
 
 type upsertServerRequest struct {
-	Name           string            `json:"name"`
-	Code           string            `json:"code"`
-	SystemType     string            `json:"systemType"`
-	BaseURL        string            `json:"baseUrl"`
-	EndpointType   string            `json:"endpointType"`
-	HTTPMethod     string            `json:"httpMethod"`
-	UseAsync       bool              `json:"useAsync"`
-	ParseResponses bool              `json:"parseResponses"`
-	Headers        map[string]string `json:"headers"`
-	URLParams      map[string]string `json:"urlParams"`
-	Suspended      bool              `json:"suspended"`
+	Name                    string            `json:"name"`
+	Code                    string            `json:"code"`
+	SystemType              string            `json:"systemType"`
+	BaseURL                 string            `json:"baseUrl"`
+	EndpointType            string            `json:"endpointType"`
+	HTTPMethod              string            `json:"httpMethod"`
+	UseAsync                bool              `json:"useAsync"`
+	ParseResponses          bool              `json:"parseResponses"`
+	ResponseBodyPersistence string            `json:"responseBodyPersistence"`
+	Headers                 map[string]string `json:"headers"`
+	URLParams               map[string]string `json:"urlParams"`
+	Suspended               bool              `json:"suspended"`
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -110,18 +111,19 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	created, err := h.service.CreateServer(c.Request.Context(), CreateInput{
-		Name:           req.Name,
-		Code:           req.Code,
-		SystemType:     req.SystemType,
-		BaseURL:        req.BaseURL,
-		EndpointType:   req.EndpointType,
-		HTTPMethod:     req.HTTPMethod,
-		UseAsync:       req.UseAsync,
-		ParseResponses: req.ParseResponses,
-		Headers:        req.Headers,
-		URLParams:      req.URLParams,
-		Suspended:      req.Suspended,
-		ActorID:        actorUserID(principal),
+		Name:                    req.Name,
+		Code:                    req.Code,
+		SystemType:              req.SystemType,
+		BaseURL:                 req.BaseURL,
+		EndpointType:            req.EndpointType,
+		HTTPMethod:              req.HTTPMethod,
+		UseAsync:                req.UseAsync,
+		ParseResponses:          req.ParseResponses,
+		ResponseBodyPersistence: req.ResponseBodyPersistence,
+		Headers:                 req.Headers,
+		URLParams:               req.URLParams,
+		Suspended:               req.Suspended,
+		ActorID:                 actorUserID(principal),
 	})
 	if err != nil {
 		apperror.Write(c, err)
@@ -151,19 +153,20 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	updated, err := h.service.UpdateServer(c.Request.Context(), UpdateInput{
-		ID:             id,
-		Name:           req.Name,
-		Code:           req.Code,
-		SystemType:     req.SystemType,
-		BaseURL:        req.BaseURL,
-		EndpointType:   req.EndpointType,
-		HTTPMethod:     req.HTTPMethod,
-		UseAsync:       req.UseAsync,
-		ParseResponses: req.ParseResponses,
-		Headers:        req.Headers,
-		URLParams:      req.URLParams,
-		Suspended:      req.Suspended,
-		ActorID:        actorUserID(principal),
+		ID:                      id,
+		Name:                    req.Name,
+		Code:                    req.Code,
+		SystemType:              req.SystemType,
+		BaseURL:                 req.BaseURL,
+		EndpointType:            req.EndpointType,
+		HTTPMethod:              req.HTTPMethod,
+		UseAsync:                req.UseAsync,
+		ParseResponses:          req.ParseResponses,
+		ResponseBodyPersistence: req.ResponseBodyPersistence,
+		Headers:                 req.Headers,
+		URLParams:               req.URLParams,
+		Suspended:               req.Suspended,
+		ActorID:                 actorUserID(principal),
 	})
 	if err != nil {
 		apperror.Write(c, err)
