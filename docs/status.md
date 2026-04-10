@@ -1,5 +1,38 @@
 # Status
 
+## Milestone — Worker Processing Logs (Complete)
+
+### What changed
+- Added structured process logs for send/retry delivery workers in [backend/internal/sukumad/worker/executor.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker/executor.go):
+  - pickup, completion, deferral, failed delivery status, and worker-side error logs
+  - safe metadata including worker run, request, delivery, correlation, server, status, HTTP status, attempt, and duration fields
+- Added structured process logs for async polling in [backend/internal/sukumad/async/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/async/service.go):
+  - poll pickup, success, transient poll failure, and worker-side persistence/claim error logs
+  - safe metadata including worker run, request, delivery, async task, correlation, server code, remote job/status, terminal state, and duration fields
+- Kept payload bodies, response bodies, headers, JWTs, refresh tokens, API tokens, passwords, and DSNs out of worker logs.
+- Added worker logging notes in [docs/notes/worker-process-logging.md](/Users/sam/projects/go/sukumadpro/docs/notes/worker-process-logging.md).
+- Saved prompt traceability copy in `docs/prompts/2026-04-10-worker-processing-logging.md` (gitignored).
+- No web or desktop code changes were required because this is backend worker-process observability only and does not change API responses or navigation.
+
+### Added or updated tests
+- Backend:
+  - updated delivery worker executor tests to assert structured pickup/deferred/completed process logs and safe metadata
+  - updated async service tests to assert structured poll pickup/success/failure process logs and safe metadata
+- Web and desktop:
+  - no code changes; existing route/smoke suites were run for milestone parity.
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/worker ./internal/sukumad/async`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- The initial sandboxed backend full-test run failed because local `httptest` listener creation was blocked (`bind: operation not permitted`); rerunning with approved local listener permissions passed.
+- Existing non-blocking MUI/jsdom warnings, desktop `useRouter` warnings, third-party `'use client'` build warnings, and Vite chunk-size warnings remain unchanged.
+
 ## Milestone — Request Create Dialog Validation and Destination Autocomplete (Complete)
 
 ### What changed

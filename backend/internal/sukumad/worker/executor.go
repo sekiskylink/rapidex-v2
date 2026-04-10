@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
@@ -87,16 +89,31 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 			if errors.Is(err, delivery.ErrNoEligibleDelivery) {
 				return nil
 			}
+			logging.ForContext(ctx).Error("delivery_worker_error",
+				slog.Int64("worker_run_id", exec.RunID),
+				slog.String("worker_type", workerType(retry)),
+				slog.String("stage", "claim"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
 		requestRecord, err := e.requestService.GetRequest(ctx, record.RequestID)
 		if err != nil {
+			e.logDeliveryWorker(ctx, "delivery_worker_error", "error", exec, record, retry, nil, 0,
+				slog.String("stage", "load_request"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
 		serverRecord, err := e.serverService.GetServer(ctx, record.ServerID)
 		if err != nil {
+			e.logDeliveryWorker(ctx, "delivery_worker_error", "error", exec, record, retry, nil, 0,
+				slog.String("stage", "load_server"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
+		e.logDeliveryWorker(ctx, "delivery_worker_picked", "info", exec, record, retry, &serverRecord, 0)
 		e.appendWorkerEvent(ctx, exec.RunID, record, retry, "delivery.worker.picked", "info", "Worker picked delivery", map[string]any{
 			"deliveryUid": record.UID,
 			"requestUid":  requestRecord.UID,
@@ -115,6 +132,7 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 			"serverCode":  serverRecord.Code,
 			"workerType":  workerType(retry),
 		})
+		startedAt := time.Now()
 		submitted, err := e.deliveryService.SubmitDHIS2Delivery(ctx, delivery.DispatchInput{
 			DeliveryID:        record.ID,
 			RequestID:         requestRecord.ID,
@@ -137,6 +155,10 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 			},
 		})
 		if err != nil {
+			e.logDeliveryWorker(ctx, "delivery_worker_error", "error", exec, record, retry, &serverRecord, time.Since(startedAt),
+				slog.String("stage", "submit"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
 		eventType := "delivery.submission.completed"
@@ -174,6 +196,15 @@ func (e *DeliveryExecutor) runBatch(ctx context.Context, exec Execution, batchSi
 		if retry {
 			exec.Increment("retries_executed")
 		}
+		logEvent := "delivery_worker_completed"
+		logLevel := "info"
+		if submitted.Status == delivery.StatusFailed {
+			logEvent = "delivery_worker_failed"
+			logLevel = "warn"
+		} else if submitted.Status == delivery.StatusPending && submitted.SubmissionHoldReason != "" {
+			logEvent = "delivery_worker_deferred"
+		}
+		e.logDeliveryWorker(ctx, logEvent, logLevel, exec, submitted, retry, &serverRecord, time.Since(startedAt))
 		e.appendWorkerEvent(ctx, exec.RunID, submitted, retry, eventType, eventLevel, message, data)
 	}
 	return nil
@@ -232,6 +263,57 @@ func (e *DeliveryExecutor) appendWorkerEvent(ctx context.Context, runID int64, r
 		CorrelationID:   record.CorrelationID,
 		EventData:       data,
 	})
+}
+
+func (e *DeliveryExecutor) logDeliveryWorker(ctx context.Context, event string, level string, exec Execution, record delivery.Record, retry bool, serverRecord *server.Record, duration time.Duration, extra ...slog.Attr) {
+	serverID := record.ServerID
+	serverCode := record.ServerCode
+	if serverRecord != nil {
+		serverID = serverRecord.ID
+		serverCode = serverRecord.Code
+	}
+	attrs := []slog.Attr{
+		slog.Int64("worker_run_id", exec.RunID),
+		slog.String("worker_type", workerType(retry)),
+		slog.Int64("request_id", record.RequestID),
+		slog.String("request_uid", record.RequestUID),
+		slog.Int64("delivery_attempt_id", record.ID),
+		slog.String("delivery_uid", record.UID),
+		slog.String("correlation_id", record.CorrelationID),
+		slog.Int64("server_id", serverID),
+		slog.String("server_code", serverCode),
+		slog.Int("attempt_number", record.AttemptNumber),
+		slog.String("status", record.Status),
+		intPtrAttr("http_status", record.HTTPStatus),
+	}
+	if duration > 0 {
+		attrs = append(attrs, slog.Int64("duration_ms", duration.Milliseconds()))
+	}
+	attrs = append(attrs, extra...)
+
+	logger := logging.ForContext(ctx)
+	switch level {
+	case "error":
+		logger.LogAttrs(ctx, slog.LevelError, event, attrs...)
+	case "warn":
+		logger.LogAttrs(ctx, slog.LevelWarn, event, attrs...)
+	default:
+		logger.LogAttrs(ctx, slog.LevelInfo, event, attrs...)
+	}
+}
+
+func intPtrAttr(name string, value *int) slog.Attr {
+	if value == nil {
+		return slog.Any(name, nil)
+	}
+	return slog.Int(name, *value)
+}
+
+func safeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func workerType(retry bool) string {

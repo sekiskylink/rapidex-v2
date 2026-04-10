@@ -1,12 +1,15 @@
 package async
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/logging"
 )
 
 type fakeAuditRepo struct {
@@ -77,6 +80,7 @@ func TestServiceCreateUpdateAndRecordPoll(t *testing.T) {
 }
 
 func TestServicePollDueTasksUpdatesTaskAndHistory(t *testing.T) {
+	logOutput := captureAsyncLogs(t)
 	service := NewService(NewRepository())
 	nextPollAt := time.Now().UTC().Add(-time.Minute)
 	created, err := service.CreateTask(context.Background(), CreateInput{
@@ -120,6 +124,8 @@ func TestServicePollDueTasksUpdatesTaskAndHistory(t *testing.T) {
 	if polls.Total != 1 || len(polls.Items) != 1 {
 		t.Fatalf("expected one poll history row, got %+v", polls)
 	}
+	assertAsyncLogContains(t, logOutput.String(), "async_poll_picked", "async_task_id\":1", "remote_job_id\":\"remote-7")
+	assertAsyncLogContains(t, logOutput.String(), "async_poll_succeeded", "http_status\":202", "remote_status\":\"polling")
 }
 
 type fakeDeliveryUpdater struct {
@@ -198,6 +204,7 @@ func TestServiceUpdateTaskStatusReconcilesTerminalSuccess(t *testing.T) {
 }
 
 func TestServicePollDueTasksKeepsTaskPollingOnTransientError(t *testing.T) {
+	logOutput := captureAsyncLogs(t)
 	requestUpdater := &fakeRequestUpdater{}
 	service := NewService(NewRepository()).WithReconciliation(&fakeDeliveryUpdater{}, requestUpdater)
 	nextPollAt := time.Now().UTC().Add(-time.Minute)
@@ -225,6 +232,8 @@ func TestServicePollDueTasksKeepsTaskPollingOnTransientError(t *testing.T) {
 	if len(requestUpdater.processing) == 0 {
 		t.Fatalf("expected request processing update after transient error")
 	}
+	assertAsyncLogContains(t, logOutput.String(), "async_poll_picked", "remote_job_id\":\"remote-5")
+	assertAsyncLogContains(t, logOutput.String(), "async_poll_failed", "error\":\"network timeout")
 }
 
 func TestServicePollDueTasksClaimsTasksAndClearsClaimState(t *testing.T) {
@@ -313,4 +322,25 @@ func TestServiceReconcileTerminalTasksRecoversMissedReconciliation(t *testing.T)
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func captureAsyncLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	t.Cleanup(func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	})
+	return &logOutput
+}
+
+func assertAsyncLogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("expected logs to contain %q, got:\n%s", fragment, logs)
+		}
+	}
 }

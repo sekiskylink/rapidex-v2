@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/traceevent"
 )
 
@@ -266,9 +268,15 @@ func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit in
 			if errors.Is(err, ErrNoEligibleTask) {
 				return nil
 			}
+			logging.ForContext(ctx).Error("async_poll_error",
+				slog.Int64("worker_run_id", exec.WorkerRunID),
+				slog.String("stage", "claim"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
 		exec.Increment("polls_picked")
+		s.logAsyncPoll(ctx, "async_poll_picked", "info", exec, task, 0)
 		s.appendEvent(ctx, traceevent.WriteInput{
 			RequestID:         &task.RequestID,
 			DeliveryAttemptID: &task.DeliveryAttemptID,
@@ -282,21 +290,35 @@ func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit in
 			SourceComponent:   "async.poller",
 			EventData:         map[string]any{"asyncTaskUid": task.UID, "remoteJobId": task.RemoteJobID},
 		})
+		startedAt := time.Now()
 		result, pollErr := poller.Poll(ctx, task)
 		if pollErr != nil {
 			message := pollErr.Error()
-			_, _ = s.RecordPoll(ctx, RecordPollInput{
+			updatedTask := task
+			if _, recordErr := s.RecordPoll(ctx, RecordPollInput{
 				AsyncTaskID:  task.ID,
 				ErrorMessage: message,
-			})
-			_, _ = s.UpdateTaskStatus(ctx, UpdateStatusInput{
+			}); recordErr != nil {
+				s.logAsyncPoll(ctx, "async_poll_error", "error", exec, task, time.Since(startedAt),
+					slog.String("stage", "record_poll_error"),
+					slog.String("error", safeError(recordErr)),
+				)
+			}
+			if updated, updateErr := s.UpdateTaskStatus(ctx, UpdateStatusInput{
 				ID:           task.ID,
 				RemoteStatus: StatePolling,
 				NextPollAt:   nextRetryPollAt(),
 				RemoteResponse: map[string]any{
 					"error": message,
 				},
-			})
+			}); updateErr != nil {
+				s.logAsyncPoll(ctx, "async_poll_error", "error", exec, task, time.Since(startedAt),
+					slog.String("stage", "update_task_status_after_poll_error"),
+					slog.String("error", safeError(updateErr)),
+				)
+			} else {
+				updatedTask = updated
+			}
 			s.appendEvent(ctx, traceevent.WriteInput{
 				RequestID:         &task.RequestID,
 				DeliveryAttemptID: &task.DeliveryAttemptID,
@@ -311,6 +333,9 @@ func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit in
 				EventData:         map[string]any{"asyncTaskUid": task.UID, "error": message},
 			})
 			exec.Increment("polls_failed")
+			s.logAsyncPoll(ctx, "async_poll_failed", "warn", exec, updatedTask, time.Since(startedAt),
+				slog.String("error", message),
+			)
 			continue
 		}
 		if _, err := s.RecordPoll(ctx, RecordPollInput{
@@ -323,6 +348,10 @@ func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit in
 			ErrorMessage:         result.ErrorMessage,
 			DurationMS:           result.DurationMS,
 		}); err != nil {
+			s.logAsyncPoll(ctx, "async_poll_error", "error", exec, task, time.Since(startedAt),
+				slog.String("stage", "record_poll"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
 		if result.ResponseBodyFiltered {
@@ -344,13 +373,18 @@ func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit in
 				},
 			})
 		}
-		if _, err := s.UpdateTaskStatus(ctx, UpdateStatusInput{
+		updated, err := s.UpdateTaskStatus(ctx, UpdateStatusInput{
 			ID:             task.ID,
 			RemoteStatus:   normalizeState(result.RemoteStatus, StatePolling),
 			TerminalState:  strings.ToLower(strings.TrimSpace(result.TerminalState)),
 			NextPollAt:     cloneTimePtr(result.NextPollAt),
 			RemoteResponse: cloneJSONMap(result.RemoteResponse),
-		}); err != nil {
+		})
+		if err != nil {
+			s.logAsyncPoll(ctx, "async_poll_error", "error", exec, task, time.Since(startedAt),
+				slog.String("stage", "update_task_status"),
+				slog.String("error", safeError(err)),
+			)
 			return err
 		}
 		s.appendEvent(ctx, traceevent.WriteInput{
@@ -371,6 +405,10 @@ func (s *Service) PollDueTasks(ctx context.Context, exec PollExecution, limit in
 			},
 		})
 		exec.Increment("polls_completed")
+		s.logAsyncPoll(ctx, "async_poll_succeeded", "info", exec, updated, time.Since(startedAt),
+			intPtrAttr("http_status", result.StatusCode),
+			intPtrAttr("remote_duration_ms", result.DurationMS),
+		)
 	}
 	return nil
 }
@@ -499,6 +537,53 @@ func (s *Service) appendEvent(ctx context.Context, input traceevent.WriteInput) 
 		return
 	}
 	_ = s.eventWriter.AppendEvent(ctx, input)
+}
+
+func (s *Service) logAsyncPoll(ctx context.Context, event string, level string, exec PollExecution, task Record, duration time.Duration, extra ...slog.Attr) {
+	attrs := []slog.Attr{
+		slog.Int64("worker_run_id", exec.WorkerRunID),
+		slog.String("worker_type", "poll"),
+		slog.Int64("request_id", task.RequestID),
+		slog.String("request_uid", task.RequestUID),
+		slog.Int64("delivery_attempt_id", task.DeliveryAttemptID),
+		slog.String("delivery_uid", task.DeliveryUID),
+		slog.Int64("async_task_id", task.ID),
+		slog.String("async_task_uid", task.UID),
+		slog.String("correlation_id", task.CorrelationID),
+		slog.String("server_code", task.DestinationCode),
+		slog.String("remote_job_id", task.RemoteJobID),
+		slog.String("remote_status", task.RemoteStatus),
+		slog.String("terminal_state", task.TerminalState),
+		slog.String("status", task.CurrentState),
+	}
+	if duration > 0 {
+		attrs = append(attrs, slog.Int64("duration_ms", duration.Milliseconds()))
+	}
+	attrs = append(attrs, extra...)
+
+	logger := logging.ForContext(ctx)
+	switch level {
+	case "error":
+		logger.LogAttrs(ctx, slog.LevelError, event, attrs...)
+	case "warn":
+		logger.LogAttrs(ctx, slog.LevelWarn, event, attrs...)
+	default:
+		logger.LogAttrs(ctx, slog.LevelInfo, event, attrs...)
+	}
+}
+
+func intPtrAttr(name string, value *int) slog.Attr {
+	if value == nil {
+		return slog.Any(name, nil)
+	}
+	return slog.Int(name, *value)
+}
+
+func safeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func workerRunIDPtr(runID int64) *int64 {

@@ -1,11 +1,14 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/server"
@@ -89,6 +92,7 @@ func (f *fakeEventWriter) AppendEvent(_ context.Context, input traceevent.WriteI
 }
 
 func TestDeliveryExecutorRunSendBatchUsesSharedSubmissionPath(t *testing.T) {
+	logOutput := captureWorkerLogs(t)
 	claimRepo := &fakeClaimRepo{
 		pending: []delivery.Record{{
 			ID:            41,
@@ -102,13 +106,13 @@ func TestDeliveryExecutorRunSendBatchUsesSharedSubmissionPath(t *testing.T) {
 	requestService := &fakeRequestService{
 		items: map[int64]requests.Record{
 			7: {
-				ID:            7,
-				UID:           "request-7",
-				CorrelationID: "corr-1",
-				PayloadBody:   `{"trackedEntity":"123"}`,
-				PayloadFormat: requests.PayloadFormatJSON,
+				ID:                7,
+				UID:               "request-7",
+				CorrelationID:     "corr-1",
+				PayloadBody:       `{"trackedEntity":"123"}`,
+				PayloadFormat:     requests.PayloadFormatJSON,
 				SubmissionBinding: requests.SubmissionBindingQuery,
-				URLSuffix:     "/tracker",
+				URLSuffix:         "/tracker",
 			},
 		},
 	}
@@ -154,9 +158,12 @@ func TestDeliveryExecutorRunSendBatchUsesSharedSubmissionPath(t *testing.T) {
 	if got := eventWriter.events[len(eventWriter.events)-1].EventType; got != "delivery.submission.deferred" {
 		t.Fatalf("expected deferred completion event, got %q", got)
 	}
+	assertLogContains(t, logOutput.String(), "delivery_worker_picked", "delivery_uid\":\"delivery-41", "worker_run_id\":99", "server_code\":\"dhis2-ug")
+	assertLogContains(t, logOutput.String(), "delivery_worker_deferred", "delivery_uid\":\"delivery-41", "status\":\"pending")
 }
 
 func TestDeliveryExecutorRunRetryBatchUsesSameSubmissionPath(t *testing.T) {
+	logOutput := captureWorkerLogs(t)
 	claimRepo := &fakeClaimRepo{
 		retries: []delivery.Record{{
 			ID:            51,
@@ -212,5 +219,28 @@ func TestDeliveryExecutorRunRetryBatchUsesSameSubmissionPath(t *testing.T) {
 	}
 	if submitter.inputs[0].PayloadFormat != requests.PayloadFormatText || submitter.inputs[0].SubmissionBinding != requests.SubmissionBindingQuery {
 		t.Fatalf("expected retry transport fields to be forwarded, got %+v", submitter.inputs[0])
+	}
+	assertLogContains(t, logOutput.String(), "delivery_worker_picked", "worker_type\":\"retry", "delivery_uid\":\"delivery-51")
+	assertLogContains(t, logOutput.String(), "delivery_worker_completed", "worker_type\":\"retry", "status\":\"succeeded")
+}
+
+func captureWorkerLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	t.Cleanup(func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	})
+	return &logOutput
+}
+
+func assertLogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("expected logs to contain %q, got:\n%s", fragment, logs)
+		}
 	}
 }
