@@ -217,6 +217,43 @@ func TestServiceCreateRequestAcceptsTextQueryPayload(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRequestDefaultsOptionalMetadataToEmptyStrings(t *testing.T) {
+	service := NewService(&fakeRepo{
+		createFn: func(_ context.Context, params CreateParams) (Record, error) {
+			if params.BatchID != "" || params.CorrelationID != "" || params.IdempotencyKey != "" {
+				t.Fatalf("expected empty optional metadata, got batch=%q correlation=%q idempotency=%q", params.BatchID, params.CorrelationID, params.IdempotencyKey)
+			}
+			return Record{
+				ID:             13,
+				UID:            params.UID,
+				Status:         params.Status,
+				BatchID:        params.BatchID,
+				CorrelationID:  params.CorrelationID,
+				IdempotencyKey: params.IdempotencyKey,
+				PayloadBody:    params.PayloadBody,
+				PayloadFormat:  params.PayloadFormat,
+				Payload:        params.PayloadBody,
+				CreatedAt:      time.Now().UTC(),
+				UpdatedAt:      time.Now().UTC(),
+			}, nil
+		},
+	}, audit.NewService(&fakeAuditRepo{}))
+
+	record, err := service.CreateRequest(context.Background(), CreateInput{
+		DestinationServerID: 3,
+		BatchID:             "   ",
+		CorrelationID:       "\t",
+		IdempotencyKey:      " ",
+		Payload:             []byte(`{"trackedEntity":"123"}`),
+	})
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	if record.BatchID != "" || record.CorrelationID != "" || record.IdempotencyKey != "" {
+		t.Fatalf("expected empty optional metadata on record, got %+v", record)
+	}
+}
+
 func TestServiceCreateRequestRejectsJSONQueryArrayPayload(t *testing.T) {
 	service := NewService(&fakeRepo{}, audit.NewService(&fakeAuditRepo{}))
 

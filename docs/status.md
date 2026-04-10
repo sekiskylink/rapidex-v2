@@ -1,5 +1,34 @@
 # Status
 
+## Milestone — Request Create Dialog Validation and Destination Autocomplete (Complete)
+
+### What changed
+- Added migration `000023_default_request_metadata_empty_strings` to backfill `exchange_requests.batch_id`, `correlation_id`, and `idempotency_key` from `NULL` to `''`, then set empty-string defaults and `NOT NULL` constraints.
+- Updated Sukumad request persistence so new requests store empty strings for blank `batchId`, `correlationId`, and `idempotencyKey`, while request reads coalesce legacy nullable metadata safely.
+- Coalesced nullable `url_suffix` on request reads so create responses remain safe when the create dialog leaves URL Suffix blank.
+- Updated web and desktop request create dialogs to use MUI autocomplete controls for the primary destination server and additional fan-out destination servers.
+- Kept request form validation for required destination, dependency ID list, payload format, send-as mode, payload, and metadata JSON; both clients now submit selected destination IDs and blank optional metadata as empty strings.
+- Saved prompt traceability copy in `docs/prompts/2026-04-10-request-create-dialog-validation-destination-autocomplete.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - updated request repository tests for empty optional metadata persistence and nullable read coalescing
+  - added service coverage for optional metadata normalization to empty strings
+- Web:
+  - updated request page tests for destination autocomplete selection and empty optional metadata payloads
+- Desktop:
+  - updated matching request page tests for destination autocomplete selection and empty optional metadata payloads
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Existing non-blocking MUI `anchorEl`, desktop `useRouter`, third-party `'use client'`, and Vite chunk-size warnings remain in test/build logs.
+
 ## Milestone — Authenticated Markdown Documentation Browser (Complete)
 
 ### What changed

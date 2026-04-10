@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Alert,
+  Autocomplete,
   Button,
   Dialog,
   DialogActions,
@@ -19,7 +20,7 @@ export interface RequestServerOption {
 
 export interface RequestFormState {
   destinationServerId: string
-  destinationServerIdsText: string
+  destinationServerIds: string[]
   dependencyRequestIdsText: string
   sourceSystem: string
   correlationId: string
@@ -66,6 +67,8 @@ export function RequestForm({
   onChange,
 }: RequestFormProps) {
   const payloadLabel = form.payloadFormat === 'text' ? 'Payload Text' : 'Payload JSON'
+  const selectedDestination = servers.find((server) => String(server.id) === form.destinationServerId) ?? null
+  const selectedAdditionalDestinations = servers.filter((server) => form.destinationServerIds.includes(String(server.id)))
   const payloadHelper =
     errors.payload ||
     (form.payloadFormat === 'text'
@@ -83,28 +86,46 @@ export function RequestForm({
         <Stack spacing={2} sx={{ pt: 1 }} data-testid={testId}>
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              select
-              label="Destination Server"
-              value={form.destinationServerId}
-              onChange={(event) => onChange({ destinationServerId: event.target.value })}
-              error={Boolean(errors.destinationServerId)}
-              helperText={errors.destinationServerId || (loadingServers ? 'Loading servers...' : 'Select a target server.')}
+            <Autocomplete
+              options={servers}
+              value={selectedDestination}
+              getOptionLabel={(server) => `${server.name} (${server.code})`}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              onChange={(_event, value) =>
+                onChange({
+                  destinationServerId: value ? String(value.id) : '',
+                  destinationServerIds: form.destinationServerIds.filter((id) => id !== (value ? String(value.id) : '')),
+                })
+              }
               disabled={loadingServers}
+              loading={loadingServers}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Destination Server"
+                  error={Boolean(errors.destinationServerId)}
+                  helperText={errors.destinationServerId || (loadingServers ? 'Loading servers...' : 'Select a target server.')}
+                />
+              )}
               fullWidth
-            >
-              {servers.map((server) => (
-                <MenuItem key={server.id} value={String(server.id)}>
-                  {server.name} ({server.code})
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Additional Destination Server IDs"
-              value={form.destinationServerIdsText}
-              onChange={(event) => onChange({ destinationServerIdsText: event.target.value })}
-              error={Boolean(errors.destinationServerIdsText)}
-              helperText={errors.destinationServerIdsText || 'Optional comma-separated server IDs for fan-out.'}
+            />
+            <Autocomplete
+              multiple
+              options={servers.filter((server) => String(server.id) !== form.destinationServerId)}
+              value={selectedAdditionalDestinations}
+              getOptionLabel={(server) => `${server.name} (${server.code})`}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              onChange={(_event, values) => onChange({ destinationServerIds: values.map((server) => String(server.id)) })}
+              disabled={loadingServers}
+              loading={loadingServers}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Additional Destination Servers"
+                  error={Boolean(errors.destinationServerIds)}
+                  helperText={errors.destinationServerIds || 'Optional fan-out destination servers.'}
+                />
+              )}
               fullWidth
             />
           </Stack>

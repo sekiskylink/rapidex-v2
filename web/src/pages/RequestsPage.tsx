@@ -18,7 +18,7 @@ interface RequestRow extends RequestDetailRecord {}
 
 const defaultForm: RequestFormState = {
   destinationServerId: '',
-  destinationServerIdsText: '',
+  destinationServerIds: [],
   dependencyRequestIdsText: '',
   sourceSystem: '',
   correlationId: '',
@@ -88,7 +88,7 @@ function mapValidationFieldErrors(details?: Record<string, string[]>): RequestFo
   const first = (key: string) => details?.[key]?.[0] ?? ''
   return {
     destinationServerId: first('destinationServerId'),
-    destinationServerIdsText: first('destinationServerIds'),
+    destinationServerIds: first('destinationServerIds'),
     dependencyRequestIdsText: first('dependencyRequestIds'),
     sourceSystem: first('sourceSystem'),
     correlationId: first('correlationId'),
@@ -128,10 +128,6 @@ function validateForm(form: RequestFormState): RequestFormErrors {
   if (!form.destinationServerId.trim()) {
     errors.destinationServerId = 'Destination server is required.'
   }
-  const destinationIDs = parseIDList(form.destinationServerIdsText)
-  if (destinationIDs.error) {
-    errors.destinationServerIdsText = destinationIDs.error
-  }
   const dependencyIDs = parseIDList(form.dependencyRequestIdsText)
   if (dependencyIDs.error) {
     errors.dependencyRequestIdsText = dependencyIDs.error
@@ -162,7 +158,7 @@ function toRequestPayload(form: RequestFormState) {
   const payload = form.payloadFormat === 'text' ? parseTextValue(form.payloadText).parsed : parseJSONValue(form.payloadText).parsed
   return {
     destinationServerId: Number(form.destinationServerId),
-    destinationServerIds: parseIDList(form.destinationServerIdsText).parsed ?? [],
+    destinationServerIds: form.destinationServerIds.map((id) => Number(id)),
     dependencyRequestIds: parseIDList(form.dependencyRequestIdsText).parsed ?? [],
     sourceSystem: form.sourceSystem.trim(),
     correlationId: form.correlationId.trim(),

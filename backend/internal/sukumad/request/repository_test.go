@@ -61,8 +61,8 @@ func TestSQLRepositoryListRequests(t *testing.T) {
 		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
-		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -147,8 +147,8 @@ func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
-		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -202,9 +202,9 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 			"11111111-1111-1111-1111-111111111111",
 			"emr",
 			int64(3),
-			"batch-1",
-			"corr-1",
-			"idem-1",
+			"",
+			"",
+			"",
 			`{"trackedEntity":"123"}`,
 			"json",
 			"body",
@@ -222,8 +222,8 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		       COALESCE(s.uid::text, '') AS destination_server_uid,
 		       COALESCE(s.name, '') AS destination_server_name,
 		       COALESCE(s.code, '') AS destination_server_code,
-		       r.batch_id, r.correlation_id, r.idempotency_key,
-		       r.payload_body, r.payload_format, r.submission_binding, r.url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
 		       r.extras, r.created_at, r.updated_at, r.created_by,
 		       ld.id AS latest_delivery_id,
 		       COALESCE(ld.uid, '') AS latest_delivery_uid,
@@ -253,8 +253,8 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 			"idempotency_key", "payload_body", "payload_format", "submission_binding", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
 			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
 		}).AddRow(
-			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "batch-1", "corr-1",
-			"idem-1", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
+			15, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "", "",
+			"", `{"trackedEntity":"123"}`, "json", "body", "/api/data", "pending", "", nil, []byte(`{"priority":"high"}`), now, now, int64(9),
 			nil, "", "", nil, "", "", "", "",
 		))
 	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").
@@ -273,9 +273,9 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 		UID:                 "11111111-1111-1111-1111-111111111111",
 		SourceSystem:        "emr",
 		DestinationServerID: 3,
-		BatchID:             "batch-1",
-		CorrelationID:       "corr-1",
-		IdempotencyKey:      "idem-1",
+		BatchID:             "",
+		CorrelationID:       "",
+		IdempotencyKey:      "",
 		PayloadBody:         `{"trackedEntity":"123"}`,
 		PayloadFormat:       "json",
 		SubmissionBinding:   "body",
@@ -289,6 +289,9 @@ func TestSQLRepositoryCreateRequest(t *testing.T) {
 	}
 	if record.ID != 15 || record.Status != "pending" {
 		t.Fatalf("unexpected record: %+v", record)
+	}
+	if record.BatchID != "" || record.CorrelationID != "" || record.IdempotencyKey != "" {
+		t.Fatalf("expected empty optional metadata strings, got batch=%q correlation=%q idempotency=%q", record.BatchID, record.CorrelationID, record.IdempotencyKey)
 	}
 }
 

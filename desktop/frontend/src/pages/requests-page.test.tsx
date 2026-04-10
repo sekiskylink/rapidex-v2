@@ -256,8 +256,12 @@ describe('desktop requests page', () => {
       if (url.includes('/api/v1/servers?')) {
         return new Response(
           JSON.stringify({
-            items: [{ id: 3, name: 'DHIS2 Uganda', code: 'dhis2-ug' }],
-            totalCount: 1,
+            items: [
+              { id: 3, name: 'DHIS2 Uganda', code: 'dhis2-ug' },
+              { id: 9, name: 'DHIS2 Mirror A', code: 'mirror-a' },
+              { id: 12, name: 'DHIS2 Mirror B', code: 'mirror-b' },
+            ],
+            totalCount: 3,
             page: 1,
             pageSize: 200,
           }),
@@ -320,7 +324,10 @@ describe('desktop requests page', () => {
     expect(within(dialog).getByTestId('desktop-request-create-form-grid')).toBeInTheDocument()
     fireEvent.mouseDown(within(dialog).getByLabelText('Destination Server'))
     fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Uganda (dhis2-ug)' }))
-    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Additional Destination Server IDs' }), { target: { value: '9, 12' } })
+    fireEvent.mouseDown(within(dialog).getByLabelText('Additional Destination Servers'))
+    fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Mirror A (mirror-a)' }))
+    fireEvent.mouseDown(within(dialog).getByLabelText('Additional Destination Servers'))
+    fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Mirror B (mirror-b)' }))
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Dependency Request IDs' }), { target: { value: '7, 8' } })
     fireEvent.mouseDown(within(dialog).getByLabelText('Payload Format'))
     fireEvent.click(await screen.findByRole('option', { name: 'Text' }))
@@ -336,6 +343,9 @@ describe('desktop requests page', () => {
       destinationServerId: 3,
       destinationServerIds: [9, 12],
       dependencyRequestIds: [7, 8],
+      correlationId: '',
+      batchId: '',
+      idempotencyKey: '',
       payloadFormat: 'text',
       submissionBinding: 'query',
       payload: 'trackedEntity=xyz&orgUnit=ou-7',
