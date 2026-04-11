@@ -30,6 +30,8 @@ import { THEME_MODES, type AppSettings, type ThemeMode } from '../settings/types
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
 
+type RuntimeConfigFormat = 'json' | 'yaml'
+
 const navigationLabelFields = [
   { id: 'dashboard', label: 'Dashboard link' },
   { id: 'settings', label: 'Settings link' },
@@ -89,6 +91,7 @@ export function SettingsPage() {
   const [runtimeConfig, setRuntimeConfig] = React.useState<Record<string, unknown> | null>(null)
   const [runtimeConfigLoading, setRuntimeConfigLoading] = React.useState(false)
   const [runtimeConfigError, setRuntimeConfigError] = React.useState('')
+  const [runtimeConfigFormat, setRuntimeConfigFormat] = React.useState<RuntimeConfigFormat>('json')
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -266,6 +269,11 @@ export function SettingsPage() {
     () => (runtimeConfig ? JSON.stringify(runtimeConfig, null, 2) : ''),
     [runtimeConfig],
   )
+  const runtimeConfigYaml = React.useMemo(
+    () => (runtimeConfig ? toYaml(runtimeConfig) : ''),
+    [runtimeConfig],
+  )
+  const runtimeConfigText = runtimeConfigFormat === 'yaml' ? runtimeConfigYaml : runtimeConfigJson
 
   const onSaveBranding = async () => {
     if (!canWriteBranding) {
@@ -396,12 +404,12 @@ export function SettingsPage() {
   }, [canReadModuleEnablement, loadRuntimeConfig])
 
   const onCopyRuntimeConfig = async () => {
-    if (!runtimeConfigJson) {
+    if (!runtimeConfigText) {
       return
     }
     try {
-      await navigator.clipboard.writeText(runtimeConfigJson)
-      notify.success('Runtime config copied.')
+      await navigator.clipboard.writeText(runtimeConfigText)
+      notify.success(`Runtime config copied as ${runtimeConfigFormat.toUpperCase()}.`)
     } catch {
       notify.error('Unable to copy runtime config.')
     }
@@ -726,13 +734,27 @@ export function SettingsPage() {
                   <Button variant="outlined" onClick={() => void loadRuntimeConfig()} disabled={runtimeConfigLoading}>
                     {runtimeConfigLoading ? 'Refreshing...' : runtimeConfig ? 'Refresh' : 'View Running Config'}
                   </Button>
-                  <Button variant="text" onClick={() => void onCopyRuntimeConfig()} disabled={!runtimeConfigJson}>
-                    Copy JSON
+                  <Button
+                    variant={runtimeConfigFormat === 'json' ? 'contained' : 'outlined'}
+                    onClick={() => setRuntimeConfigFormat('json')}
+                    disabled={!runtimeConfig}
+                  >
+                    JSON
+                  </Button>
+                  <Button
+                    variant={runtimeConfigFormat === 'yaml' ? 'contained' : 'outlined'}
+                    onClick={() => setRuntimeConfigFormat('yaml')}
+                    disabled={!runtimeConfig}
+                  >
+                    YAML
+                  </Button>
+                  <Button variant="text" onClick={() => void onCopyRuntimeConfig()} disabled={!runtimeConfigText}>
+                    {runtimeConfigFormat === 'yaml' ? 'Copy YAML' : 'Copy JSON'}
                   </Button>
                 </Stack>
                 <TextField
-                  label="Sanitized runtime config"
-                  value={runtimeConfigJson}
+                  label={`Sanitized runtime config (${runtimeConfigFormat.toUpperCase()})`}
+                  value={runtimeConfigText}
                   multiline
                   minRows={14}
                   InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
@@ -768,4 +790,62 @@ export function SettingsPage() {
       <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
     </Stack>
   )
+}
+
+function toYaml(value: unknown) {
+  return stringifyYaml(value, 0).trimEnd()
+}
+
+function stringifyYaml(value: unknown, indentLevel: number): string {
+  const indent = '  '.repeat(indentLevel)
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return '[]\n'
+    }
+    return value
+      .map((item) => {
+        if (isScalar(item)) {
+          return `${indent}- ${formatYamlScalar(item)}\n`
+        }
+        const nested = stringifyYaml(item, indentLevel + 1)
+        return `${indent}-\n${nested}`
+      })
+      .join('')
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 0) {
+      return '{}\n'
+    }
+    return entries
+      .map(([key, item]) => {
+        if (isScalar(item)) {
+          return `${indent}${key}: ${formatYamlScalar(item)}\n`
+        }
+        const nested = stringifyYaml(item, indentLevel + 1)
+        return `${indent}${key}:\n${nested}`
+      })
+      .join('')
+  }
+
+  return `${indent}${formatYamlScalar(value)}\n`
+}
+
+function isScalar(value: unknown) {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value)
+}
+
+function formatYamlScalar(value: unknown) {
+  if (value === null) {
+    return 'null'
+  }
+  if (typeof value === 'string') {
+    if (value === '' || /[:#[\]{}&,*?|\-<>=!%@`]/.test(value) || /^\s|\s$/.test(value)) {
+      return JSON.stringify(value)
+    }
+    return value
+  }
+  return String(value)
 }

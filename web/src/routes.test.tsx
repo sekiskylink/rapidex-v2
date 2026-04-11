@@ -732,6 +732,10 @@ describe('web RBAC navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Runtime Config', level: 2 })).toBeInTheDocument()
     expect(await screen.findByDisplayValue(/dbuser:\[masked\]@db\.example\.com/)).toBeInTheDocument()
     expect(screen.getByDisplayValue(/"jwt_signing_key": "\[masked\]"/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'YAML' }))
+    expect(await screen.findByDisplayValue(/database:/)).toBeInTheDocument()
+    expect(screen.getByDisplayValue(/dsn: "postgres:\/\/dbuser:\[masked\]@db\.example\.com:5432\/basepro\?sslmode=disable"/)).toBeInTheDocument()
+    expect(screen.getByDisplayValue(/jwt_signing_key: "\[masked\]"/)).toBeInTheDocument()
   })
 
   it('denies /settings for non-admin users without settings.write', async () => {
