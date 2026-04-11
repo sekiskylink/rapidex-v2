@@ -73,13 +73,13 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	status := ""
-	if filterField == "status" {
+	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	if status == "" && filterField == "status" {
 		status = strings.ToLower(strings.TrimSpace(filterValue))
-		if !isValidStatus(status) {
-			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"status": []string{"must be one of pending, processing, completed, failed"}}))
-			return
-		}
+	}
+	if status != "" && !isValidStatus(status) {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"status": []string{"must be one of pending, blocked, processing, completed, failed"}}))
+		return
 	}
 
 	search := listquery.ResolveSearch(c.Query("q"), filterField, filterValue, map[string]struct{}{

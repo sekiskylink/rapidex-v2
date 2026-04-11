@@ -490,7 +490,7 @@ export function RequestsPage() {
         fetchData={fetchRequests}
         storageKey="sukumad-requests-grid"
         reloadToken={reloadToken}
-        externalQueryKey={search}
+        externalQueryKey={`${search}\u0000${statusFilter}`}
         pinActionsToRight
       />
 

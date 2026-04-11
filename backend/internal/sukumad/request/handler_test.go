@@ -172,6 +172,67 @@ func TestHandlerListReturnsPaginatedPayload(t *testing.T) {
 	}
 }
 
+func TestHandlerListFiltersByStatusQueryParam(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewHandler(NewService(&fakeRepo{
+		listFn: func(_ context.Context, query ListQuery) (ListResult, error) {
+			if query.Status != StatusBlocked {
+				t.Fatalf("expected blocked status query, got %+v", query)
+			}
+			return ListResult{
+				Items: []Record{
+					{ID: 2, UID: "req-2", Status: StatusBlocked},
+				},
+				Total:    1,
+				Page:     query.Page,
+				PageSize: query.PageSize,
+			}, nil
+		},
+	}))
+
+	router := gin.New()
+	router.GET("/requests", handler.List)
+
+	req := httptest.NewRequest(http.MethodGet, "/requests?page=1&pageSize=25&status=blocked", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var payload struct {
+		Items []Record `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected one blocked request, got %d", len(payload.Items))
+	}
+	if payload.Items[0].Status != StatusBlocked {
+		t.Fatalf("expected blocked status, got %+v", payload.Items[0])
+	}
+}
+
+func TestHandlerListRejectsInvalidStatusQueryParam(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := newTestHandler()
+	router := gin.New()
+	router.GET("/requests", handler.List)
+
+	req := httptest.NewRequest(http.MethodGet, "/requests?page=1&pageSize=25&status=nope", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("blocked")) {
+		t.Fatalf("expected validation message to mention blocked status, got %s", w.Body.String())
+	}
+}
+
 func TestHandlerCreateExternalReturnsUIDOnlyContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := NewRepository().(*memoryRepository)
