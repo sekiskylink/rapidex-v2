@@ -1,6 +1,7 @@
 import React from 'react'
-import { Alert, Box, Button, Chip, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { PaginatedResponse } from '../api/pagination'
 import { useApiClient } from '../api/useApiClient'
 import { useSessionPrincipal } from '../auth/hooks'
@@ -11,10 +12,13 @@ import { handleAppError } from '../errors/handleAppError'
 import { notify } from '../notifications/facade'
 import { RequestDetailPage, type RequestDetailRecord } from './RequestDetailPage'
 import { RequestForm, type RequestFormErrors, type RequestFormState, type RequestServerOption } from './RequestForm'
+import type { RequestsRouteSearch } from './listRouteSearch'
 import type { EventRecord } from './traceability'
 import { JsonMetadataDialog } from '../components/admin/JsonMetadataDialog'
 
 interface RequestRow extends RequestDetailRecord {}
+
+const statusOptions = ['', 'pending', 'blocked', 'processing', 'completed', 'failed'] as const
 
 const defaultForm: RequestFormState = {
   destinationServerId: '',
@@ -180,11 +184,14 @@ function toRequestPayload(form: RequestFormState) {
 
 export function RequestsPage() {
   const apiClient = useApiClient()
+  const navigate = useNavigate()
+  const routeSearch = useSearch({ strict: false }) as RequestsRouteSearch
   const principal = useSessionPrincipal()
   const canWrite = Boolean(principal?.permissions.includes('requests.write'))
 
   const [reloadToken, setReloadToken] = React.useState(0)
-  const { searchInput, setSearchInput, search } = useAdminListSearch()
+  const { searchInput, setSearchInput, search } = useAdminListSearch(routeSearch.q ?? '')
+  const [statusFilter, setStatusFilter] = React.useState(routeSearch.status ?? '')
   const [createOpen, setCreateOpen] = React.useState(false)
   const [createForm, setCreateForm] = React.useState<RequestFormState>(defaultForm)
   const [createErrors, setCreateErrors] = React.useState<RequestFormErrors>({})
@@ -203,6 +210,28 @@ export function RequestsPage() {
   })
 
   const refreshGrid = () => setReloadToken((value) => value + 1)
+
+  React.useEffect(() => {
+    setSearchInput(routeSearch.q ?? '')
+  }, [routeSearch.q, setSearchInput])
+
+  React.useEffect(() => {
+    setStatusFilter(routeSearch.status ?? '')
+  }, [routeSearch.status])
+
+  React.useEffect(() => {
+    const nextSearch: RequestsRouteSearch = {
+      q: search || undefined,
+      status: statusFilter || undefined,
+    }
+    if (
+      (routeSearch.q ?? '') === (nextSearch.q ?? '') &&
+      (routeSearch.status ?? '') === (nextSearch.status ?? '')
+    ) {
+      return
+    }
+    void navigate({ to: '/requests', search: nextSearch, replace: true })
+  }, [navigate, routeSearch, search, statusFilter])
 
   const loadServers = React.useCallback(async () => {
     setLoadingServers(true)
@@ -227,14 +256,19 @@ export function RequestsPage() {
 
   const fetchRequests = React.useCallback(
     async (params: AppDataGridFetchParams) => {
-      const query = buildAdminListRequestQuery(params, { search })
+      const query = buildAdminListRequestQuery(params, {
+        search,
+        extra: {
+          status: statusFilter,
+        },
+      })
       const response = await apiClient.request<PaginatedResponse<RequestRow>>(`/api/v1/requests?${query}`)
       return {
         rows: response.items ?? [],
         total: response.totalCount,
       }
     },
-    [apiClient, search],
+    [apiClient, search, statusFilter],
   )
 
   const openCreateDialog = () => {
@@ -428,13 +462,28 @@ export function RequestsPage() {
 
       {detailError ? <Alert severity="error">{detailError}</Alert> : null}
 
-      <TextField
-        label="Search requests"
-        placeholder="Search by UID, server, source, correlation, or batch"
-        value={searchInput}
-        onChange={(event) => setSearchInput(event.target.value)}
-        fullWidth
-      />
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+        <TextField
+          label="Search requests"
+          placeholder="Search by UID, server, source, correlation, or batch"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          fullWidth
+        />
+        <TextField
+          select
+          label="Status"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          sx={{ minWidth: { xs: '100%', md: 180 } }}
+        >
+          {statusOptions.map((status) => (
+            <MenuItem key={status || 'all'} value={status}>
+              {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All statuses'}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Stack>
 
       <AppDataGrid
         columns={columns}

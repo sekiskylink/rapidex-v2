@@ -26,6 +26,7 @@ export interface DashboardSnapshot {
   health: DashboardHealth
   kpis: DashboardKpis
   trends: DashboardTrends
+  processingGraph: DashboardProcessingGraph
   attention: DashboardAttention
   workers: DashboardWorkersSummary
   recentEvents: DashboardEventSummary[]
@@ -70,6 +71,24 @@ export interface DashboardServerCountPoint {
   serverId: number
   serverName: string
   count: number
+}
+
+export interface DashboardProcessingGraph {
+  bucketSizeMinutes: number
+  windowHours: number
+  series: DashboardProcessingGraphPoint[]
+}
+
+export interface DashboardProcessingGraphPoint {
+  bucketStart: string
+  stages: DashboardProcessingGraphStages
+}
+
+export interface DashboardProcessingGraphStages {
+  pending: number
+  processing: number
+  completed: number
+  failed: number
 }
 
 export interface DashboardAttention {

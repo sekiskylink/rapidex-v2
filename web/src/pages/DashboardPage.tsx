@@ -26,6 +26,7 @@ interface DashboardSnapshot {
   health: DashboardHealth
   kpis: DashboardKpis
   trends: DashboardTrends
+  processingGraph: DashboardProcessingGraph
   attention: DashboardAttention
   workers: DashboardWorkersSummary
   recentEvents: DashboardEventSummary[]
@@ -70,6 +71,24 @@ interface DashboardServerCountPoint {
   serverId: number
   serverName: string
   count: number
+}
+
+interface DashboardProcessingGraph {
+  bucketSizeMinutes: number
+  windowHours: number
+  series: DashboardProcessingGraphPoint[]
+}
+
+interface DashboardProcessingGraphPoint {
+  bucketStart: string
+  stages: DashboardProcessingGraphStages
+}
+
+interface DashboardProcessingGraphStages {
+  pending: number
+  processing: number
+  completed: number
+  failed: number
 }
 
 interface DashboardAttention {
@@ -226,6 +245,19 @@ type TrendPanelProps = {
 }
 
 type LiveStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting'
+type ProcessingStageKey = keyof DashboardProcessingGraphStages
+
+const processingStageConfig: Array<{
+  key: ProcessingStageKey
+  label: string
+  color: string
+  requestStatus?: string
+}> = [
+  { key: 'pending', label: 'Pending', color: '#d97706', requestStatus: 'pending' },
+  { key: 'processing', label: 'Processing', color: '#2563eb', requestStatus: 'processing' },
+  { key: 'completed', label: 'Completed', color: '#059669', requestStatus: 'completed' },
+  { key: 'failed', label: 'Failed', color: '#dc2626', requestStatus: 'failed' },
+]
 
 function formatDateTime(value?: string | null) {
   if (!value) {
@@ -367,6 +399,18 @@ function eventKey(event: DashboardEventSummary) {
   return [event.type, event.timestamp, event.entityId ?? '', event.entityUid ?? '', event.summary].join(':')
 }
 
+function totalProcessingStage(series: DashboardProcessingGraphPoint[], key: ProcessingStageKey) {
+  return series.reduce((total, point) => total + Number(point.stages[key] ?? 0), 0)
+}
+
+function formatBucketLabel(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.valueOf())) {
+    return value
+  }
+  return parsed.toLocaleTimeString([], { hour: 'numeric' })
+}
+
 function applyDashboardStreamEvent(snapshot: DashboardSnapshot, event: DashboardStreamEvent): DashboardSnapshot {
   const nextEvent = toRecentEventSummary(event)
   const recentEvents = [nextEvent, ...snapshot.recentEvents.filter((item) => eventKey(item) !== eventKey(nextEvent))].slice(
@@ -501,6 +545,104 @@ function TrendPanel({ title, subtitle, emptyMessage, children }: TrendPanelProps
         )}
       </Box>
     </DashboardSection>
+  )
+}
+
+function ProcessingGraphPanel({
+  graph,
+  actionEnabled,
+  onStageClick,
+}: {
+  graph: DashboardProcessingGraph
+  actionEnabled: boolean
+  onStageClick: (stage: ProcessingStageKey) => void
+}) {
+  const visibleSeries = graph.series.slice(-12)
+  const stageTotals = processingStageConfig.map((stage) => ({
+    ...stage,
+    total: totalProcessingStage(graph.series, stage.key),
+  }))
+
+  return (
+    <TrendPanel
+      title="Request Processing Flow"
+      subtitle="Live request pipeline activity over the recent dashboard window."
+      emptyMessage="No request processing data is available yet."
+    >
+      <Stack spacing={2}>
+        <Typography variant="body2" color="text.secondary">
+          {graph.windowHours} hour window in {graph.bucketSizeMinutes}-minute buckets. Click a stage to open the matching request list.
+        </Typography>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          {stageTotals.map((stage) => (
+            <Button
+              key={stage.key}
+              variant="outlined"
+              onClick={() => onStageClick(stage.key)}
+              disabled={!actionEnabled || !stage.requestStatus}
+              sx={{ borderColor: stage.color, color: stage.color }}
+            >
+              {stage.label}: {stage.total.toLocaleString()}
+            </Button>
+          ))}
+        </Stack>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${Math.max(visibleSeries.length, 1)}, minmax(0, 1fr))`,
+            gap: 1,
+            alignItems: 'end',
+            minHeight: 220,
+          }}
+        >
+          {visibleSeries.map((point) => {
+            const total = processingStageConfig.reduce(
+              (sum, stage) => sum + Number(point.stages[stage.key] ?? 0),
+              0,
+            )
+            const denominator = Math.max(total, 1)
+            return (
+              <Stack key={point.bucketStart} spacing={1} alignItems="center">
+                <Stack
+                  direction="column-reverse"
+                  sx={{
+                    width: '100%',
+                    maxWidth: 36,
+                    height: 160,
+                    borderRadius: 999,
+                    overflow: 'hidden',
+                    bgcolor: 'action.hover',
+                  }}
+                >
+                  {processingStageConfig.map((stage) => {
+                    const value = Number(point.stages[stage.key] ?? 0)
+                    if (value <= 0) {
+                      return null
+                    }
+                    return (
+                      <Box
+                        key={stage.key}
+                        title={`${stage.label}: ${value}`}
+                        sx={{
+                          height: `${(value / denominator) * 100}%`,
+                          bgcolor: stage.color,
+                        }}
+                      />
+                    )
+                  })}
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  {formatBucketLabel(point.bucketStart)}
+                </Typography>
+                <Typography variant="caption" fontWeight={600}>
+                  {total.toLocaleString()}
+                </Typography>
+              </Stack>
+            )
+          })}
+        </Box>
+      </Stack>
+    </TrendPanel>
   )
 }
 
@@ -998,25 +1140,20 @@ export function DashboardPage() {
               },
             }}
           >
-            <TrendPanel
-              title="Request Trend"
-              subtitle="Requests by hour from the snapshot trend window."
-              emptyMessage="No request trend data is available yet."
-            >
-              <Stack spacing={1.25}>
-                <Typography variant="body2" color="text.secondary">
-                  {snapshot.trends.requestsByHour.length} hourly buckets, {requestsTotal.toLocaleString()} total requests.
-                </Typography>
-                {snapshot.trends.requestsByHour.slice(-6).reverse().map((point) => (
-                  <Paper key={point.bucketStart} variant="outlined" sx={{ p: 1.25 }}>
-                    <Stack direction="row" justifyContent="space-between" spacing={2}>
-                      <Typography variant="body2">{formatDateTime(point.bucketStart)}</Typography>
-                      <Typography variant="subtitle2">{point.count.toLocaleString()}</Typography>
-                    </Stack>
-                  </Paper>
-                ))}
-              </Stack>
-            </TrendPanel>
+            <ProcessingGraphPanel
+              graph={snapshot.processingGraph}
+              actionEnabled={canAccessRoute('/requests')}
+              onStageClick={(stage) => {
+                const requestStatus = processingStageConfig.find((item) => item.key === stage)?.requestStatus
+                if (!requestStatus) {
+                  return
+                }
+                void navigate({
+                  to: '/requests',
+                  search: { status: requestStatus },
+                })
+              }}
+            />
 
             <TrendPanel
               title="Deliveries by Status"

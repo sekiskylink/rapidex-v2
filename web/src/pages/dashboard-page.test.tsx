@@ -107,6 +107,20 @@ function buildSnapshot() {
       ],
       failuresByServer: [{ serverId: 3, serverName: 'DHIS2 Uganda', count: 2 }],
     },
+    processingGraph: {
+      bucketSizeMinutes: 60,
+      windowHours: 24,
+      series: [
+        {
+          bucketStart: '2026-03-18T08:00:00Z',
+          stages: { pending: 3, processing: 2, completed: 8, failed: 1 },
+        },
+        {
+          bucketStart: '2026-03-18T09:00:00Z',
+          stages: { pending: 4, processing: 3, completed: 10, failed: 2 },
+        },
+      ],
+    },
     attention: {
       failedDeliveries: {
         total: 2,
@@ -324,13 +338,13 @@ describe('dashboard page', () => {
     })
   })
 
-  it('drills down to filtered deliveries', async () => {
+  it('drills down to filtered requests from the processing graph', async () => {
     authenticate(['requests.read', 'deliveries.read', 'jobs.read', 'observability.read'])
     apiRequestSpy.mockImplementation(async (path: string) => {
       if (path === '/dashboard/operations') {
         return buildSnapshot()
       }
-      if (path.startsWith('/deliveries?')) {
+      if (path.startsWith('/requests?')) {
         return { items: [], totalCount: 0, page: 1, pageSize: 25 }
       }
       return {}
@@ -340,17 +354,17 @@ describe('dashboard page', () => {
 
     expect(await screen.findByText('Requests Today')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open Failed Deliveries' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Processing: 5' }))
 
     await waitFor(() => {
-      expect(apiRequestSpy).toHaveBeenCalledWith(expect.stringContaining('/deliveries?'))
+      expect(apiRequestSpy).toHaveBeenCalledWith(expect.stringContaining('/requests?'))
     })
     expect(
       apiRequestSpy.mock.calls.some(
         ([path]) =>
           typeof path === 'string' &&
-          path.includes('/deliveries?') &&
-          path.includes('status=failed'),
+          path.includes('/requests?') &&
+          path.includes('status=processing'),
       ),
     ).toBe(true)
   })

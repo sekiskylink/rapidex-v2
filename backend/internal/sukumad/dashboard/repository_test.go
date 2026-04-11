@@ -94,6 +94,15 @@ func TestSQLRepositoryGetSnapshot(t *testing.T) {
 			"event_type", "created_at", "event_level", "message", "correlation_id", "request_id", "request_uid", "delivery_attempt_id", "delivery_uid", "async_task_id", "async_task_uid", "worker_run_id", "worker_run_uid",
 		}).AddRow("delivery.failed", now.Add(-5*time.Minute), "error", "Delivery failed", "corr-1", 20, "req-20", 10, "del-10", nil, "", nil, ""))
 
+	mock.ExpectQuery("(?s)FROM request_events e.*WHERE e.created_at >= \\$1.*event_type IN \\('request.created', 'request.status_changed', 'request.completed', 'request.failed'\\).*ORDER BY e.created_at ASC, e.id ASC").
+		WithArgs(now.Add(-trendWindow)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"event_type", "created_at", "event_level", "message", "correlation_id", "request_id", "request_uid", "delivery_attempt_id", "delivery_uid", "async_task_id", "async_task_uid", "worker_run_id", "worker_run_uid",
+		}).
+			AddRow("request.created", now.Add(-2*time.Hour), "info", "Request req-20 created", "corr-1", 20, "req-20", nil, "", nil, "", nil, "").
+			AddRow("request.status_changed", now.Add(-90*time.Minute), "info", "Request req-20 moved from pending to processing", "corr-1", 20, "req-20", nil, "", nil, "", nil, "").
+			AddRow("request.completed", now.Add(-time.Hour), "info", "Request req-20 completed", "corr-1", 20, "req-20", nil, "", nil, "", nil, ""))
+
 	snapshot, err := repo.GetSnapshot(context.Background(), now)
 	if err != nil {
 		t.Fatalf("get snapshot: %v", err)
@@ -109,6 +118,13 @@ func TestSQLRepositoryGetSnapshot(t *testing.T) {
 	}
 	if len(snapshot.RecentEvents) != 1 || snapshot.RecentEvents[0].EntityType != "delivery" {
 		t.Fatalf("expected delivery recent event, got %+v", snapshot.RecentEvents)
+	}
+	if len(snapshot.ProcessingGraph.Series) == 0 {
+		t.Fatalf("expected processing graph series, got %+v", snapshot.ProcessingGraph)
+	}
+	last := snapshot.ProcessingGraph.Series[len(snapshot.ProcessingGraph.Series)-2]
+	if last.Stages.Completed != 1 {
+		t.Fatalf("expected completed stage count in processing graph, got %+v", last)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

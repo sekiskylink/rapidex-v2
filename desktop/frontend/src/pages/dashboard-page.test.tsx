@@ -123,6 +123,20 @@ function buildSnapshot() {
       ],
       failuresByServer: [{ serverId: 3, serverName: 'DHIS2 Uganda', count: 2 }],
     },
+    processingGraph: {
+      bucketSizeMinutes: 60,
+      windowHours: 24,
+      series: [
+        {
+          bucketStart: '2026-03-18T08:00:00Z',
+          stages: { pending: 3, processing: 2, completed: 8, failed: 1 },
+        },
+        {
+          bucketStart: '2026-03-18T09:00:00Z',
+          stages: { pending: 4, processing: 3, completed: 10, failed: 2 },
+        },
+      ],
+    },
     attention: {
       failedDeliveries: {
         total: 2,
@@ -442,7 +456,7 @@ describe('desktop dashboard page', () => {
     })
   })
 
-  it('drills down to filtered deliveries', async () => {
+  it('drills down to filtered requests from the processing graph', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -480,7 +494,7 @@ describe('desktop dashboard page', () => {
           headers: { 'Content-Type': 'application/json' },
         })
       }
-      if (url.includes('/api/v1/deliveries?')) {
+      if (url.includes('/api/v1/requests?')) {
         return new Response(
           JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 25 }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -503,14 +517,14 @@ describe('desktop dashboard page', () => {
 
     expect(await screen.findByText('Requests Today', {}, { timeout: 5000 })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open Failed Deliveries' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Processing: 5' }))
 
     await waitFor(() => {
       expect(
         fetchSpy.mock.calls.some(
           ([input]) =>
-            String(input).includes('/api/v1/deliveries?') &&
-            String(input).includes('status=failed'),
+            String(input).includes('/api/v1/requests?') &&
+            String(input).includes('status=processing'),
         ),
       ).toBe(true)
     })

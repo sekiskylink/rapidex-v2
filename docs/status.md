@@ -1,5 +1,46 @@
 # Status
 
+## Milestone — Dashboard Live Request Processing Graph (Complete)
+
+### What changed
+- Extended the Sukumad dashboard snapshot under [backend/internal/sukumad/dashboard](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/dashboard) with a `processingGraph` payload that buckets request lifecycle movement into pending, processing, completed, and failed stages across the recent dashboard time window.
+- Reused the existing dashboard websocket stream and added `processingGraph` invalidation on request lifecycle events so the live dashboard graph stays aligned with the current operations event source of truth.
+- Replaced the request-trend summary cards on the web dashboard in [web/src/pages/DashboardPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/DashboardPage.tsx) with a live request-processing flow graph and stage totals that deep-link into filtered Requests views.
+- Added the matching live request-processing flow graph to the desktop dashboard in [desktop/frontend/src/pages/DashboardPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/DashboardPage.tsx), keeping web/desktop parity and continuing to use backend APIs only.
+- Added request status route-search support to web and desktop Requests pages so dashboard graph clicks open filtered request lists:
+  - [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx)
+  - [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx)
+  - [web/src/pages/listRouteSearch.ts](/Users/sam/projects/go/sukumadpro/web/src/pages/listRouteSearch.ts)
+  - [desktop/frontend/src/pages/listRouteSearch.ts](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/listRouteSearch.ts)
+  - [web/src/routes.tsx](/Users/sam/projects/go/sukumadpro/web/src/routes.tsx)
+  - [desktop/frontend/src/routes.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/routes.tsx)
+- Saved prompt traceability copy in `docs/prompts/2026-04-11-dashboard-live-request-processing-graph.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - extended dashboard repository coverage for processing-graph aggregation and request-event mapping
+  - verified dashboard websocket handler coverage still passes with the extended stream invalidation contract
+- Web:
+  - updated dashboard coverage for the processing graph and request-list drill-down behavior
+  - updated requests page coverage through the full suite with request-status route search enabled
+- Desktop:
+  - updated matching dashboard coverage for the processing graph and request-list drill-down behavior
+  - updated desktop requests coverage through the full suite with request-status route search enabled
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/dashboard`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test -- --run src/pages/dashboard-page.test.tsx src/pages/requests-page.test.tsx`)
+- Web tests: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test -- --run`)
+- Web build: PASS (`cd web && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test -- --run src/pages/dashboard-page.test.tsx src/pages/requests-page.test.tsx`)
+- Desktop tests: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm test -- --run`)
+- Desktop build: PASS (`cd desktop/frontend && PATH=/Users/sam/.nvm/versions/node/v22.15.1/bin:/usr/local/bin:/usr/bin:/bin npm run build`)
+
+### Known follow-ups
+- The first non-escalated backend dashboard-package test run failed because websocket handler tests need a local `httptest` listener (`bind: operation not permitted`); rerunning with approved local listener permissions passed.
+- Existing non-blocking frontend warnings remain in verification logs: MUI/jsdom `anchorEl` warnings, desktop `useRouter` warnings, third-party `'use client'` build warnings, MUI X `rowCount` warnings in one web route test, and Vite chunk-size warnings.
+
 ## Milestone — Worker Delivery Target Roll-Up Fix (Complete)
 
 ### What changed

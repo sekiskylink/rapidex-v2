@@ -18,6 +18,7 @@ const (
 	recentFailureWindow       = time.Hour
 	trendWindow               = 24 * time.Hour
 	recentIngestFailureWindow = 24 * time.Hour
+	graphBucketMinutes        = 60
 )
 
 type SQLRepository struct {
@@ -181,11 +182,16 @@ func (r *SQLRepository) GetSnapshot(ctx context.Context, now time.Time) (Snapsho
 	if err != nil {
 		return Snapshot{}, err
 	}
+	graphEvents, err := r.loadGraphEvents(ctx, trendStart)
+	if err != nil {
+		return Snapshot{}, err
+	}
 
 	snapshot := Snapshot{
-		GeneratedAt: now,
-		KPIs:        kpis,
-		Trends:      trends,
+		GeneratedAt:     now,
+		KPIs:            kpis,
+		Trends:          trends,
+		ProcessingGraph: loadProcessingGraph(now, trendStart, graphEvents),
 		Attention: Attention{
 			FailedDeliveries:       failedDeliveries,
 			StaleRunningDeliveries: staleDeliveries,
@@ -409,9 +415,73 @@ func (r *SQLRepository) loadTrends(ctx context.Context, trendStart time.Time) (T
 	}, nil
 }
 
+func loadProcessingGraph(now, trendStart time.Time, events []EventSummary) ProcessingGraph {
+	seriesMap := make(map[time.Time]*ProcessingGraphStage)
+	for bucket := trendStart.Truncate(time.Hour); !bucket.After(now); bucket = bucket.Add(time.Hour) {
+		stage := ProcessingGraphStage{}
+		seriesMap[bucket] = &stage
+	}
+
+	for _, event := range events {
+		stageName, ok := stageForEvent(event)
+		if !ok {
+			continue
+		}
+		bucketStart := event.Timestamp.UTC().Truncate(time.Hour)
+		stage, ok := seriesMap[bucketStart]
+		if !ok {
+			continue
+		}
+		switch stageName {
+		case "pending":
+			stage.Pending++
+		case "processing":
+			stage.Processing++
+		case "completed":
+			stage.Completed++
+		case "failed":
+			stage.Failed++
+		}
+	}
+
+	series := make([]ProcessingGraphPoint, 0, len(seriesMap))
+	for bucket := trendStart.Truncate(time.Hour); !bucket.After(now); bucket = bucket.Add(time.Hour) {
+		stage := seriesMap[bucket]
+		series = append(series, ProcessingGraphPoint{
+			BucketStart: bucket,
+			Stages:      *stage,
+		})
+	}
+
+	return ProcessingGraph{
+		BucketSizeMinutes: graphBucketMinutes,
+		WindowHours:       int(trendWindow / time.Hour),
+		Series:            series,
+	}
+}
+
 func (r *SQLRepository) loadRecentEvents(ctx context.Context, limit int) ([]EventSummary, error) {
 	rows := []eventRow{}
-	if err := r.db.SelectContext(ctx, &rows, `
+	if err := r.db.SelectContext(ctx, &rows, recentEventsQuery(limit), limit); err != nil {
+		return nil, fmt.Errorf("load dashboard recent events: %w", err)
+	}
+	return mapEventSummaries(rows), nil
+}
+
+func (r *SQLRepository) loadGraphEvents(ctx context.Context, trendStart time.Time) ([]EventSummary, error) {
+	rows := []eventRow{}
+	if err := r.db.SelectContext(ctx, &rows, recentEventsQuery(0)+`
+		WHERE e.created_at >= $1
+		  AND e.event_type IN ('request.created', 'request.status_changed', 'request.completed', 'request.failed')
+		ORDER BY e.created_at ASC, e.id ASC
+	`, trendStart); err != nil {
+		return nil, fmt.Errorf("load dashboard graph events: %w", err)
+	}
+	return mapEventSummaries(rows), nil
+}
+
+func recentEventsQuery(limit int) string {
+	query := `
 		SELECT e.event_type, e.created_at, e.event_level, COALESCE(e.message, '') AS message, COALESCE(e.correlation_id, '') AS correlation_id,
 		       e.request_id, COALESCE(req.uid::text, '') AS request_uid, e.delivery_attempt_id, COALESCE(d.uid::text, '') AS delivery_uid,
 		       e.async_task_id, COALESCE(a.uid::text, '') AS async_task_uid, e.worker_run_id, COALESCE(w.uid::text, '') AS worker_run_uid
@@ -420,12 +490,17 @@ func (r *SQLRepository) loadRecentEvents(ctx context.Context, limit int) ([]Even
 		LEFT JOIN delivery_attempts d ON d.id = e.delivery_attempt_id
 		LEFT JOIN async_tasks a ON a.id = e.async_task_id
 		LEFT JOIN worker_runs w ON w.id = e.worker_run_id
+	`
+	if limit > 0 {
+		query += `
 		ORDER BY e.created_at DESC, e.id DESC
 		LIMIT $1
-	`, limit); err != nil {
-		return nil, fmt.Errorf("load dashboard recent events: %w", err)
+	`
 	}
+	return query
+}
 
+func mapEventSummaries(rows []eventRow) []EventSummary {
 	items := make([]EventSummary, 0, len(rows))
 	for _, row := range rows {
 		item := EventSummary{
@@ -462,7 +537,31 @@ func (r *SQLRepository) loadRecentEvents(ctx context.Context, limit int) ([]Even
 		}
 		items = append(items, item)
 	}
-	return items, nil
+	return items
+}
+
+func stageForEvent(event EventSummary) (string, bool) {
+	switch event.Type {
+	case "request.created", "request.submitted":
+		return "pending", true
+	case "request.completed":
+		return "completed", true
+	case "request.failed":
+		return "failed", true
+	case "request.status_changed":
+		summary := strings.ToLower(event.Summary)
+		switch {
+		case strings.Contains(summary, " to processing"):
+			return "processing", true
+		case strings.Contains(summary, " to blocked"), strings.Contains(summary, " to pending"):
+			return "pending", true
+		case strings.Contains(summary, " to completed"):
+			return "completed", true
+		case strings.Contains(summary, " to failed"):
+			return "failed", true
+		}
+	}
+	return "", false
 }
 
 func deriveHealth(snapshot Snapshot) Health {

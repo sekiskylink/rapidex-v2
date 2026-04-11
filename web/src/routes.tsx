@@ -31,6 +31,7 @@ import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
 import {
+  normalizeRequestsRouteSearch,
   normalizeDeliveriesRouteSearch,
   normalizeJobsRouteSearch,
   normalizeObservabilityRouteSearch,
@@ -208,6 +209,8 @@ const serversRoute = createRoute({
 const requestsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/requests',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeRequestsRouteSearch(search),
   component: () => {
     const state = getRouteAccessState('/requests', getAuthSnapshot().user)
     if (state === 'allowed') {

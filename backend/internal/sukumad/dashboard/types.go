@@ -3,13 +3,14 @@ package dashboard
 import "time"
 
 type Snapshot struct {
-	GeneratedAt  time.Time      `json:"generatedAt"`
-	Health       Health         `json:"health"`
-	KPIs         KPIs           `json:"kpis"`
-	Trends       Trends         `json:"trends"`
-	Attention    Attention      `json:"attention"`
-	Workers      WorkersSummary `json:"workers"`
-	RecentEvents []EventSummary `json:"recentEvents"`
+	GeneratedAt     time.Time       `json:"generatedAt"`
+	Health          Health          `json:"health"`
+	KPIs            KPIs            `json:"kpis"`
+	Trends          Trends          `json:"trends"`
+	ProcessingGraph ProcessingGraph `json:"processingGraph"`
+	Attention       Attention       `json:"attention"`
+	Workers         WorkersSummary  `json:"workers"`
+	RecentEvents    []EventSummary  `json:"recentEvents"`
 }
 
 type Health struct {
@@ -34,6 +35,24 @@ type Trends struct {
 	DeliveriesByStatus []StatusCountPoint `json:"deliveriesByStatus"`
 	JobsByState        []StatusCountPoint `json:"jobsByState"`
 	FailuresByServer   []ServerCountPoint `json:"failuresByServer"`
+}
+
+type ProcessingGraph struct {
+	BucketSizeMinutes int                    `json:"bucketSizeMinutes"`
+	WindowHours       int                    `json:"windowHours"`
+	Series            []ProcessingGraphPoint `json:"series"`
+}
+
+type ProcessingGraphPoint struct {
+	BucketStart time.Time            `json:"bucketStart"`
+	Stages      ProcessingGraphStage `json:"stages"`
+}
+
+type ProcessingGraphStage struct {
+	Pending    int `json:"pending"`
+	Processing int `json:"processing"`
+	Completed  int `json:"completed"`
+	Failed     int `json:"failed"`
 }
 
 type TimeCountPoint struct {

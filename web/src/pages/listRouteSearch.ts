@@ -1,3 +1,8 @@
+export interface RequestsRouteSearch {
+  q?: string
+  status?: string
+}
+
 export interface DeliveriesRouteSearch {
   q?: string
   status?: string
@@ -37,6 +42,13 @@ export function normalizeDeliveriesRouteSearch(search: Record<string, unknown>):
     status: toOptional(readString(search, 'status')),
     server: toOptional(readString(search, 'server')),
     date: toOptional(readString(search, 'date')),
+  }
+}
+
+export function normalizeRequestsRouteSearch(search: Record<string, unknown>): RequestsRouteSearch {
+  return {
+    q: toOptional(readString(search, 'q')),
+    status: toOptional(readString(search, 'status')),
   }
 }
 

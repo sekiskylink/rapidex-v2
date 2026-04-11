@@ -32,6 +32,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { SetupPage } from './pages/SetupPage'
 import { UsersPage } from './pages/UsersPage'
 import {
+  normalizeRequestsRouteSearch,
   normalizeDeliveriesRouteSearch,
   normalizeJobsRouteSearch,
   normalizeObservabilityRouteSearch,
@@ -500,6 +501,8 @@ const serversRoute = createRoute({
 const requestsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/requests',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeRequestsRouteSearch(search),
   component: RequestsRoutePage,
 })
 

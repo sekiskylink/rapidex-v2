@@ -116,7 +116,7 @@ func patchForEventType(eventType string) *StreamPatch {
 func invalidationsForEventType(eventType string) []string {
 	switch eventType {
 	case "request.created", "request.submitted", "request.completed", "request.failed", "request.status_changed":
-		return []string{"kpis", "recentEvents", "attention.failedDeliveries"}
+		return []string{"kpis", "recentEvents", "processingGraph", "attention.failedDeliveries"}
 	case "delivery.created", "delivery.started", "delivery.succeeded", "delivery.failed", "delivery.retry_scheduled", "delivery.retry_started":
 		return []string{"kpis", "recentEvents", "attention.failedDeliveries", "attention.staleRunningDeliveries", "trends.deliveriesByStatus", "trends.failuresByServer"}
 	case "async.created", "async.poll_started", "async.poll_succeeded", "async.poll_failed", "async.completed", "async.failed":
