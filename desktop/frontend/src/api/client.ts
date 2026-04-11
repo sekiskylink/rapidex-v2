@@ -200,6 +200,10 @@ export interface LoginBrandingResponse {
   loginImageUrl?: string | null
 }
 
+export interface RuntimeConfigResponse {
+  config: Record<string, unknown>
+}
+
 export interface ForgotPasswordRequest {
   identifier: string
   resetUrl?: string
@@ -568,6 +572,12 @@ export function createApiClient(deps: ApiClientDeps) {
 
     async getModuleEnablementSettings() {
       return authorizedRequest<ModuleEnablementApiResponse>('/api/v1/settings/module-enablement', {
+        method: 'GET',
+      })
+    },
+
+    async getRuntimeConfig() {
+      return authorizedRequest<RuntimeConfigResponse>('/api/v1/settings/runtime-config', {
         method: 'GET',
       })
     },

@@ -86,6 +86,9 @@ export function SettingsPage() {
   const [moduleEnablementLoading, setModuleEnablementLoading] = React.useState(true)
   const [moduleEnablementSaving, setModuleEnablementSaving] = React.useState(false)
   const [moduleEnablementError, setModuleEnablementError] = React.useState('')
+  const [runtimeConfig, setRuntimeConfig] = React.useState<Record<string, unknown> | null>(null)
+  const [runtimeConfigLoading, setRuntimeConfigLoading] = React.useState(false)
+  const [runtimeConfigError, setRuntimeConfigError] = React.useState('')
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -259,6 +262,11 @@ export function SettingsPage() {
     }
   }, [brandingImageUrl])
 
+  const runtimeConfigJson = React.useMemo(
+    () => (runtimeConfig ? JSON.stringify(runtimeConfig, null, 2) : ''),
+    [runtimeConfig],
+  )
+
   const onSaveBranding = async () => {
     if (!canWriteBranding) {
       return
@@ -352,6 +360,50 @@ export function SettingsPage() {
       await handleAppError(error, { fallbackMessage: 'Connection failed.' })
     } finally {
       setTesting(false)
+    }
+  }
+
+  const loadRuntimeConfig = React.useCallback(async () => {
+    if (!canReadModuleEnablement) {
+      setRuntimeConfig(null)
+      return
+    }
+
+    setRuntimeConfigLoading(true)
+    setRuntimeConfigError('')
+    try {
+      const payload = await apiClient.getRuntimeConfig()
+      setRuntimeConfig(payload.config ?? null)
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to load runtime configuration.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRuntimeConfigError(`${normalized.message}${requestId}`)
+    } finally {
+      setRuntimeConfigLoading(false)
+    }
+  }, [apiClient, canReadModuleEnablement])
+
+  React.useEffect(() => {
+    if (!canReadModuleEnablement) {
+      setRuntimeConfig(null)
+      setRuntimeConfigLoading(false)
+      return
+    }
+    void loadRuntimeConfig()
+  }, [canReadModuleEnablement, loadRuntimeConfig])
+
+  const onCopyRuntimeConfig = async () => {
+    if (!runtimeConfigJson) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(runtimeConfigJson)
+      notify.success('Runtime config copied.')
+    } catch {
+      notify.error('Unable to copy runtime config.')
     }
   }
 
@@ -655,6 +707,40 @@ export function SettingsPage() {
                 {brandingSaving ? 'Saving...' : 'Save Branding'}
               </Button>
             </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Typography variant="h6">Runtime Config</Typography>
+            <Typography color="text.secondary">
+              Read the active backend configuration snapshot with sensitive values masked before display.
+            </Typography>
+            {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view runtime configuration.</Alert> : null}
+            {runtimeConfigError ? <Alert severity="error">{runtimeConfigError}</Alert> : null}
+            {canReadModuleEnablement ? (
+              <>
+                <Stack direction="row" spacing={1.25} justifyContent="flex-end">
+                  <Button variant="outlined" onClick={() => void loadRuntimeConfig()} disabled={runtimeConfigLoading}>
+                    {runtimeConfigLoading ? 'Refreshing...' : runtimeConfig ? 'Refresh' : 'View Running Config'}
+                  </Button>
+                  <Button variant="text" onClick={() => void onCopyRuntimeConfig()} disabled={!runtimeConfigJson}>
+                    Copy JSON
+                  </Button>
+                </Stack>
+                <TextField
+                  label="Sanitized runtime config"
+                  value={runtimeConfigJson}
+                  multiline
+                  minRows={14}
+                  InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                  placeholder={runtimeConfigLoading ? 'Loading runtime configuration...' : 'No runtime configuration loaded.'}
+                  fullWidth
+                />
+              </>
+            ) : null}
           </Stack>
         </CardContent>
       </Card>

@@ -673,6 +673,67 @@ describe('web RBAC navigation', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 
+  it('renders sanitized runtime config on the settings page', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 12,
+        username: 'platform-admin',
+        roles: ['Admin'],
+        permissions: ['settings.read', 'settings.write'],
+      },
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              modules: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              config: {
+                database: {
+                  dsn: 'postgres://dbuser:[masked]@db.example.com:5432/basepro?sslmode=disable',
+                },
+                auth: {
+                  jwt_signing_key: '[masked]',
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings')
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Runtime Config', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByDisplayValue(/dbuser:\[masked\]@db\.example\.com/)).toBeInTheDocument()
+    expect(screen.getByDisplayValue(/"jwt_signing_key": "\[masked\]"/)).toBeInTheDocument()
+  })
+
   it('denies /settings for non-admin users without settings.write', async () => {
     setAuthSnapshot({
       isAuthenticated: true,

@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,5 +111,65 @@ func TestUpdateLoginBrandingRejectsBadURL(t *testing.T) {
 	}, nil)
 	if err == nil {
 		t.Fatal("expected validation error for bad URL")
+	}
+}
+
+func TestGetRuntimeConfigMasksSensitiveFields(t *testing.T) {
+	service := NewService(newFakeRepo(), nil).WithRuntimeConfigProvider(func() map[string]any {
+		return map[string]any{
+			"database": map[string]any{
+				"dsn": "postgres://dbuser:dbpass@db.example.com:5432/sukumad?sslmode=disable&password=querysecret",
+			},
+			"auth": map[string]any{
+				"jwt_signing_key":       "super-secret-key",
+				"api_token_header_name": "X-API-Token",
+				"api_token_enabled":     true,
+			},
+		}
+	})
+	got, err := service.GetRuntimeConfig(context.Background())
+	if err != nil {
+		t.Fatalf("get runtime config: %v", err)
+	}
+
+	database, ok := got["database"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected database map, got %#v", got["database"])
+	}
+	dsn, ok := database["dsn"].(string)
+	if !ok {
+		t.Fatalf("expected dsn string, got %#v", database["dsn"])
+	}
+	for _, forbidden := range []string{"dbpass", "querysecret"} {
+		if strings.Contains(dsn, forbidden) {
+			t.Fatalf("expected dsn to mask %q, got %q", forbidden, dsn)
+		}
+	}
+	if !strings.Contains(dsn, "db.example.com:5432/sukumad") {
+		t.Fatalf("expected dsn to preserve host/db context, got %q", dsn)
+	}
+
+	authSection, ok := got["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected auth map, got %#v", got["auth"])
+	}
+	if authSection["jwt_signing_key"] != "[masked]" {
+		t.Fatalf("expected jwt_signing_key masked, got %#v", authSection["jwt_signing_key"])
+	}
+	if authSection["api_token_header_name"] != "X-API-Token" {
+		t.Fatalf("expected api_token_header_name preserved, got %#v", authSection["api_token_header_name"])
+	}
+	if authSection["api_token_enabled"] != true {
+		t.Fatalf("expected api_token_enabled preserved, got %#v", authSection["api_token_enabled"])
+	}
+}
+
+func TestMaskDSNReturnsMaskedFallbackForOpaqueValues(t *testing.T) {
+	masked := maskDSN("Server=localhost;User Id=sa;Password=super-secret;Database=basepro")
+	if strings.Contains(masked, "super-secret") {
+		t.Fatalf("expected password masked, got %q", masked)
+	}
+	if !strings.Contains(masked, "Password=[masked]") {
+		t.Fatalf("expected masked password placeholder, got %q", masked)
 	}
 }

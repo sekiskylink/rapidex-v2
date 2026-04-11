@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -130,7 +131,19 @@ func run() error {
 			return moduleenablement.IsModuleEnabled(moduleID, moduleEnablementService.EffectiveOverrideMap(config.Get().Modules.Flags), nil)
 		}),
 	)
-	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService)
+	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService).
+		WithRuntimeConfigProvider(func() map[string]any {
+			cfg := config.Get()
+			payload, err := json.Marshal(cfg)
+			if err != nil {
+				return map[string]any{}
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(payload, &raw); err != nil {
+				return map[string]any{}
+			}
+			return raw
+		})
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	outboundLimiter := outboundratelimit.NewRegistry(func(destinationKey string) outboundratelimit.Policy {
 		cfg := config.Get()

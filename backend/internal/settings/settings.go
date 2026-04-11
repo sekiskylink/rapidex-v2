@@ -86,12 +86,18 @@ type loginBrandingStored struct {
 }
 
 type Service struct {
-	repo         Repository
-	auditService *audit.Service
+	repo                  Repository
+	auditService          *audit.Service
+	runtimeConfigProvider func() map[string]any
 }
 
 func NewService(repo Repository, auditService *audit.Service) *Service {
 	return &Service{repo: repo, auditService: auditService}
+}
+
+func (s *Service) WithRuntimeConfigProvider(provider func() map[string]any) *Service {
+	s.runtimeConfigProvider = provider
+	return s
 }
 
 func (s *Service) GetLoginBranding(ctx context.Context) (LoginBranding, error) {
@@ -118,6 +124,14 @@ func (s *Service) GetLoginBranding(ctx context.Context) (LoginBranding, error) {
 	}
 	result.ImageConfigured = result.LoginImageURL != nil || result.LoginImageAssetPath != nil
 	return result, nil
+}
+
+func (s *Service) GetRuntimeConfig(context.Context) (map[string]any, error) {
+	if s.runtimeConfigProvider == nil {
+		return map[string]any{}, nil
+	}
+
+	return sanitizeRuntimeConfigMap(s.runtimeConfigProvider()), nil
 }
 
 func (s *Service) UpdateLoginBranding(ctx context.Context, input LoginBrandingUpdateInput, actorUserID *int64) (LoginBranding, error) {
@@ -211,4 +225,127 @@ func defaultLoginBranding() LoginBranding {
 
 func strPtr(v string) *string {
 	return &v
+}
+
+var sensitiveConfigKeys = map[string]struct{}{
+	"password":      {},
+	"secret":        {},
+	"token":         {},
+	"jwt":           {},
+	"jwtsigningkey": {},
+	"signingkey":    {},
+	"signing_key":   {},
+	"dsn":           {},
+	"authorization": {},
+}
+
+var sensitiveConfigKeyParts = map[string]struct{}{
+	"password": {},
+	"secret":   {},
+}
+
+func sanitizeRuntimeConfigMap(input map[string]any) map[string]any {
+	return sanitizeConfigValue("", input).(map[string]any)
+}
+
+func sanitizeConfigValue(key string, value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		sanitized := make(map[string]any, len(typed))
+		for childKey, childValue := range typed {
+			if isSensitiveConfigKey(childKey) {
+				if strings.EqualFold(childKey, "dsn") {
+					if text, ok := childValue.(string); ok {
+						sanitized[childKey] = maskDSN(text)
+						continue
+					}
+				}
+				sanitized[childKey] = "[masked]"
+				continue
+			}
+			sanitized[childKey] = sanitizeConfigValue(childKey, childValue)
+		}
+		return sanitized
+	case []any:
+		items := make([]any, 0, len(typed))
+		for _, item := range typed {
+			items = append(items, sanitizeConfigValue(key, item))
+		}
+		return items
+	case string:
+		if strings.EqualFold(key, "dsn") {
+			return maskDSN(typed)
+		}
+		if isSensitiveConfigKey(key) {
+			return "[masked]"
+		}
+		return typed
+	default:
+		return value
+	}
+}
+
+func isSensitiveConfigKey(key string) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(key))
+	normalized := strings.ReplaceAll(strings.ReplaceAll(trimmed, "-", ""), "_", "")
+	if _, ok := sensitiveConfigKeys[normalized]; ok {
+		return true
+	}
+	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+	for _, part := range parts {
+		if _, ok := sensitiveConfigKeyParts[part]; ok {
+			return true
+		}
+	}
+	for sensitiveKey := range sensitiveConfigKeys {
+		candidate := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(sensitiveKey, "-", ""), "_", ""))
+		if normalized == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func maskDSN(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err == nil && parsed.Scheme != "" {
+		if parsed.User != nil {
+			username := parsed.User.Username()
+			if _, hasPassword := parsed.User.Password(); hasPassword {
+				parsed.User = url.UserPassword(username, "[masked]")
+			}
+		}
+		query := parsed.Query()
+		for key := range query {
+			if isSensitiveConfigKey(key) {
+				query.Set(key, "[masked]")
+			}
+		}
+		parsed.RawQuery = query.Encode()
+		return parsed.String()
+	}
+
+	for _, token := range []string{"password=", "passwd=", "pwd=", "token=", "secret="} {
+		index := strings.Index(strings.ToLower(trimmed), token)
+		if index >= 0 {
+			start := index + len(token)
+			end := len(trimmed)
+			for i := start; i < len(trimmed); i++ {
+				if trimmed[i] == ' ' || trimmed[i] == ';' || trimmed[i] == '&' {
+					end = i
+					break
+				}
+			}
+			return trimmed[:start] + "[masked]" + trimmed[end:]
+		}
+	}
+
+	return "[masked]"
 }

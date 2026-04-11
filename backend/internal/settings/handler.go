@@ -40,6 +40,15 @@ func (h *Handler) GetLoginBranding(c *gin.Context) {
 	c.JSON(http.StatusOK, branding)
 }
 
+func (h *Handler) GetRuntimeConfig(c *gin.Context) {
+	config, err := h.service.GetRuntimeConfig(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"config": config})
+}
+
 func (h *Handler) UpdateLoginBranding(c *gin.Context) {
 	principal, ok := principalFromContext(c)
 	if !ok {

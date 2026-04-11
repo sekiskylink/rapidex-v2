@@ -1827,4 +1827,86 @@ describe('app shell routes', () => {
       screen.getByText('You need settings.write permission to change runtime-manageable module flags.'),
     ).toBeInTheDocument()
   })
+
+  it('renders sanitized runtime config on the settings page', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['settings.read', 'settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/version')) {
+          return new Response(
+            JSON.stringify({ version: '1.0.0', commit: 'abc123', buildDate: '2026-03-06T00:00:00Z' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              modules: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              config: {
+                database: {
+                  dsn: 'postgres://dbuser:[masked]@db.example.com:5432/basepro?sslmode=disable',
+                },
+                auth: {
+                  jwt_signing_key: '[masked]',
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings', store)
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Runtime Config', level: 6 })).toBeInTheDocument()
+    expect(await screen.findByDisplayValue(/dbuser:\[masked\]@db\.example\.com/)).toBeInTheDocument()
+    expect(screen.getByDisplayValue(/"jwt_signing_key": "\[masked\]"/)).toBeInTheDocument()
+  })
 })

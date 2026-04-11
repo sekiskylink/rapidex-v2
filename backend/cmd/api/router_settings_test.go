@@ -119,6 +119,63 @@ func TestLoginBrandingUpdateRouteAcceptsAdminWithoutExplicitSettingsWrite(t *tes
 	}
 }
 
+func TestRuntimeConfigRouteRequiresAuth(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	rbacService := rbacServiceWithPermissions(map[int64][]string{})
+	handler := settings.NewHandler(settings.NewService(&fakeSettingsRepo{}, nil))
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/runtime-config", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRuntimeConfigRouteAcceptsSettingsReader(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(101, "reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		101: []string{"settings.read"},
+	})
+	handler := settings.NewHandler(
+		settings.NewService(&fakeSettingsRepo{}, nil).WithRuntimeConfigProvider(func() map[string]any {
+			return map[string]any{
+				"database": map[string]any{
+					"dsn": "postgres://reader:reader-secret@127.0.0.1:5432/basepro?sslmode=disable",
+				},
+			}
+		}),
+	)
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/runtime-config", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"config"`) {
+		t.Fatalf("expected config envelope, got %s", body)
+	}
+	if strings.Contains(body, "reader-secret") {
+		t.Fatalf("expected runtime config to mask dsn credentials, got %s", body)
+	}
+}
+
 func rbacServiceWithPermissions(perms map[int64][]string) *rbac.Service {
 	roleMap := map[int64][]rbac.Role{}
 	permMap := map[int64][]rbac.Permission{}

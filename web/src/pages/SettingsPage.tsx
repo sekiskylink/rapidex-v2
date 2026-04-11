@@ -35,6 +35,10 @@ interface HealthResponse {
   version?: string
 }
 
+interface RuntimeConfigResponse {
+  config: Record<string, unknown>
+}
+
 const navigationLabelFields = [
   { id: 'dashboard', label: 'Dashboard link' },
   { id: 'settings', label: 'Settings link' },
@@ -81,6 +85,9 @@ export function SettingsPage() {
   const [moduleEnablementLoading, setModuleEnablementLoading] = React.useState(true)
   const [moduleEnablementSaving, setModuleEnablementSaving] = React.useState(false)
   const [moduleEnablementError, setModuleEnablementError] = React.useState('')
+  const [runtimeConfig, setRuntimeConfig] = React.useState<Record<string, unknown> | null>(null)
+  const [runtimeConfigLoading, setRuntimeConfigLoading] = React.useState(false)
+  const [runtimeConfigError, setRuntimeConfigError] = React.useState('')
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -113,6 +120,10 @@ export function SettingsPage() {
       canWriteBranding ||
       (auth.user?.permissions ?? []).some((permission) => permission.trim().toLowerCase() === 'settings.read'),
     [auth.user?.permissions, canWriteBranding],
+  )
+  const runtimeConfigJson = React.useMemo(
+    () => (runtimeConfig ? JSON.stringify(runtimeConfig, null, 2) : ''),
+    [runtimeConfig],
   )
 
   React.useEffect(() => {
@@ -286,6 +297,50 @@ export function SettingsPage() {
       setModuleEnablementError(`${normalized.message}${requestId}`)
     } finally {
       setModuleEnablementSaving(false)
+    }
+  }
+
+  const loadRuntimeConfig = React.useCallback(async () => {
+    if (!canReadModuleEnablement) {
+      setRuntimeConfig(null)
+      return
+    }
+
+    setRuntimeConfigLoading(true)
+    setRuntimeConfigError('')
+    try {
+      const payload = await apiRequest<RuntimeConfigResponse>('/settings/runtime-config', { method: 'GET' })
+      setRuntimeConfig(payload.config ?? null)
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to load runtime configuration.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRuntimeConfigError(`${normalized.message}${requestId}`)
+    } finally {
+      setRuntimeConfigLoading(false)
+    }
+  }, [canReadModuleEnablement])
+
+  React.useEffect(() => {
+    if (!canReadModuleEnablement) {
+      setRuntimeConfig(null)
+      setRuntimeConfigLoading(false)
+      return
+    }
+    void loadRuntimeConfig()
+  }, [canReadModuleEnablement, loadRuntimeConfig])
+
+  const handleCopyRuntimeConfig = async () => {
+    if (!runtimeConfigJson) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(runtimeConfigJson)
+      notify.success('Runtime config copied.')
+    } catch {
+      notify.error('Unable to copy runtime config.')
     }
   }
 
@@ -609,6 +664,41 @@ export function SettingsPage() {
               {testingConnection ? 'Testing...' : 'Test Connection'}
             </Button>
           </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper elevation={1} sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2">
+            Runtime Config
+          </Typography>
+          <Divider />
+          <Typography color="text.secondary">
+            Read the active backend configuration snapshot with sensitive fields masked before display.
+          </Typography>
+          {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view runtime configuration.</Alert> : null}
+          {runtimeConfigError ? <Alert severity="error">{runtimeConfigError}</Alert> : null}
+          {canReadModuleEnablement ? (
+            <>
+              <Stack direction="row" spacing={1}>
+                <Button variant="outlined" onClick={() => void loadRuntimeConfig()} disabled={runtimeConfigLoading}>
+                  {runtimeConfigLoading ? 'Refreshing...' : runtimeConfig ? 'Refresh' : 'View Running Config'}
+                </Button>
+                <Button variant="text" onClick={() => void handleCopyRuntimeConfig()} disabled={!runtimeConfigJson}>
+                  Copy JSON
+                </Button>
+              </Stack>
+              <TextField
+                label="Sanitized runtime config"
+                value={runtimeConfigJson}
+                multiline
+                minRows={14}
+                InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                placeholder={runtimeConfigLoading ? 'Loading runtime configuration...' : 'No runtime configuration loaded.'}
+                fullWidth
+              />
+            </>
+          ) : null}
         </Stack>
       </Paper>
 
