@@ -74,6 +74,9 @@ type Config struct {
 		} `mapstructure:"files"`
 	} `mapstructure:"documentation"`
 	Sukumad struct {
+		Requests struct {
+			MetadataColumns []RequestMetadataColumn `mapstructure:"metadata_columns"`
+		} `mapstructure:"requests"`
 		SubmissionWindow struct {
 			Default struct {
 				StartHour int `mapstructure:"start_hour"`
@@ -162,6 +165,14 @@ type Config struct {
 			} `mapstructure:"retention"`
 		} `mapstructure:"workers"`
 	} `mapstructure:"sukumad"`
+}
+
+type RequestMetadataColumn struct {
+	Key              string `mapstructure:"key"`
+	Label            string `mapstructure:"label"`
+	Type             string `mapstructure:"type"`
+	Searchable       bool   `mapstructure:"searchable"`
+	VisibleByDefault bool   `mapstructure:"visible_by_default"`
 }
 
 type Options struct {
@@ -274,6 +285,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("modules.flags", map[string]bool{})
 	v.SetDefault("documentation.root_path", "../docs/notes")
 	v.SetDefault("documentation.files", defaultDocumentationFiles())
+	v.SetDefault("sukumad.requests.metadata_columns", []map[string]any{})
 	v.SetDefault("sukumad.submission_window.default.start_hour", 0)
 	v.SetDefault("sukumad.submission_window.default.end_hour", 0)
 	v.SetDefault("sukumad.submission_window.destinations", map[string]any{})
@@ -351,6 +363,7 @@ func defaultConfig() Config {
 	cfg.Modules.Flags = map[string]bool{}
 	cfg.Documentation.RootPath = "../docs/notes"
 	cfg.Documentation.Files = defaultDocumentationFiles()
+	cfg.Sukumad.Requests.MetadataColumns = []RequestMetadataColumn{}
 	cfg.Sukumad.SubmissionWindow.Default.StartHour = 0
 	cfg.Sukumad.SubmissionWindow.Default.EndHour = 0
 	cfg.Sukumad.SubmissionWindow.Destinations = map[string]struct {
@@ -496,6 +509,25 @@ func validate(cfg Config) error {
 	}
 	if cfg.Sukumad.RateLimit.Default.Burst <= 0 {
 		return errors.New("sukumad.rate_limit.default.burst must be > 0")
+	}
+	seenRequestMetadataKeys := map[string]struct{}{}
+	for index, column := range cfg.Sukumad.Requests.MetadataColumns {
+		key := strings.TrimSpace(column.Key)
+		if key == "" {
+			return fmt.Errorf("sukumad.requests.metadata_columns.%d.key must not be empty", index)
+		}
+		if _, ok := seenRequestMetadataKeys[key]; ok {
+			return fmt.Errorf("sukumad.requests.metadata_columns contains duplicate key %q", key)
+		}
+		seenRequestMetadataKeys[key] = struct{}{}
+		if strings.TrimSpace(column.Label) == "" {
+			return fmt.Errorf("sukumad.requests.metadata_columns.%d.label must not be empty", index)
+		}
+		switch strings.ToLower(strings.TrimSpace(column.Type)) {
+		case "string", "number", "boolean", "datetime":
+		default:
+			return fmt.Errorf("sukumad.requests.metadata_columns.%s.type must be one of string, number, boolean, datetime", key)
+		}
 	}
 	if err := validateWindow(cfg.Sukumad.SubmissionWindow.Default.StartHour, cfg.Sukumad.SubmissionWindow.Default.EndHour, "sukumad.submission_window.default"); err != nil {
 		return err

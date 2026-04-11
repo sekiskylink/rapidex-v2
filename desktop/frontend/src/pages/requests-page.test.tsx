@@ -181,6 +181,91 @@ describe('desktop requests page', () => {
     expect(screen.getByText(/window_closed/)).toBeInTheDocument()
   })
 
+  it('renders configured metadata projection columns from the requests list response', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Staff'],
+              permissions: ['requests.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/requests?')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 21,
+                  uid: 'req-21',
+                  sourceSystem: 'emr',
+                  destinationServerId: 3,
+                  destinationServerName: 'DHIS2 Uganda',
+                  batchId: 'batch-1',
+                  correlationId: 'corr-21',
+                  idempotencyKey: 'idem-21',
+                  payloadBody: '{"trackedEntity":"123"}',
+                  payloadFormat: 'json',
+                  submissionBinding: 'body',
+                  payload: { trackedEntity: '123' },
+                  urlSuffix: '/api/data',
+                  status: 'pending',
+                  statusReason: '',
+                  deferredUntil: null,
+                  extras: { patientId: 'P-100' },
+                  projectedMetadata: { patientId: 'P-100' },
+                  createdAt: '2026-04-11T09:00:00Z',
+                  updatedAt: '2026-04-11T10:00:00Z',
+                  latestDeliveryUid: 'del-21',
+                  latestDeliveryStatus: 'pending',
+                  latestAsyncTaskUid: '',
+                  latestAsyncState: '',
+                  latestAsyncRemoteJobId: '',
+                  latestAsyncPollUrl: '',
+                  awaitingAsync: false,
+                  targets: [],
+                  dependencies: [],
+                },
+              ],
+              metadataColumns: [{ key: 'patientId', label: 'Patient ID', type: 'string', searchable: true, visibleByDefault: true }],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/requests', store)
+
+    expect(await screen.findByText('Patient ID')).toBeInTheDocument()
+    expect(await screen.findByText('P-100')).toBeInTheDocument()
+  })
+
   it('create and detail request flows call backend APIs', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

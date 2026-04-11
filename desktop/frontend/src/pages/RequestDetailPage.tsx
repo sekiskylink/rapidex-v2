@@ -20,6 +20,7 @@ export interface RequestDetailRecord {
   statusReason: string
   deferredUntil?: string | null
   extras: Record<string, unknown>
+  projectedMetadata?: Record<string, unknown>
   createdAt: string
   updatedAt: string
   createdBy?: number | null

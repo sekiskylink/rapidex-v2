@@ -222,6 +222,22 @@ Map keyed by destination key:
 | `sukumad.ingest.directory.scan_interval_seconds` | int | `30` | Directory scan cadence |
 | `sukumad.ingest.directory.batch_size` | int | `10` | Max files processed per scan batch |
 
+### Sukumad Requests
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `sukumad.requests.metadata_columns` | array | `[]` | Optional request metadata projections sourced from `exchange_requests.extras` |
+
+Each metadata column entry supports:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `key` | string | yes | Top-level key inside `exchange_requests.extras`; must be unique and non-empty |
+| `label` | string | yes | Column label shown in web and desktop request grids |
+| `type` | string | yes | One of `string`, `number`, `boolean`, `datetime` |
+| `searchable` | bool | no | When `true`, the Requests quick search includes this metadata key |
+| `visible_by_default` | bool | no | When `false`, the column is hidden initially but remains selectable in the DataGrid column chooser |
+
 ### Sukumad Workers
 
 | Key | Type | Default | Notes |

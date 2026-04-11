@@ -38,6 +38,7 @@ interface AppDataGridProps<R extends GridValidRowModel = GridValidRowModel> {
   columns: GridColDef<R>[]
   fetchData: (params: AppDataGridFetchParams) => Promise<AppDataGridFetchResult<R>>
   storageKey: string
+  defaultColumnVisibilityModel?: GridColumnVisibilityModel
   getRowId?: (row: R) => string | number
   reloadToken?: number
   externalQueryKey?: string
@@ -114,6 +115,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   columns,
   fetchData,
   storageKey,
+  defaultColumnVisibilityModel,
   getRowId,
   reloadToken,
   externalQueryKey,
@@ -152,13 +154,16 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
       page: 0,
       pageSize: PAGE_SIZE_OPTIONS.includes(preferences.pageSize) ? preferences.pageSize : defaultDataGridPreferences.pageSize,
     })
-    setColumnVisibilityModel(preferences.columnVisibility)
+    setColumnVisibilityModel({
+      ...(defaultColumnVisibilityModel ?? {}),
+      ...preferences.columnVisibility,
+    })
     setColumnOrder(preferences.columnOrder)
     setDensity(preferences.density)
     setPinnedColumns(withStickyRightFields(preferences.pinnedColumns, resolvedStickyFields))
     setGridBorderRadius(uiPrefs.dataGridBorderRadius)
     setHydrated(true)
-  }, [columns, pinActionsToRight, storageKey, stickyFieldsKey])
+  }, [columns, defaultColumnVisibilityModel, pinActionsToRight, storageKey, stickyFieldsKey])
 
   React.useEffect(() => {
     if (!hydrated) {

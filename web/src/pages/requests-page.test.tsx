@@ -146,6 +146,62 @@ describe('requests page', () => {
     expect(screen.getByText(/window_closed/)).toBeInTheDocument()
   })
 
+  it('renders configured metadata projection columns from the requests list response', async () => {
+    authenticate(['requests.read'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/requests?')) {
+        return {
+          items: [
+            {
+              id: 21,
+              uid: 'req-21',
+              sourceSystem: 'emr',
+              destinationServerId: 3,
+              destinationServerName: 'DHIS2 Uganda',
+              batchId: 'batch-1',
+              correlationId: 'corr-21',
+              idempotencyKey: 'idem-21',
+              payloadBody: '{"trackedEntity":"123"}',
+              payloadFormat: 'json',
+              submissionBinding: 'body',
+              payload: { trackedEntity: '123' },
+              urlSuffix: '/api/data',
+              status: 'pending',
+              statusReason: '',
+              deferredUntil: null,
+              extras: { patientId: 'P-100' },
+              projectedMetadata: { patientId: 'P-100', submittedAt: '2026-04-11T10:15:00Z' },
+              createdAt: '2026-04-11T09:00:00Z',
+              updatedAt: '2026-04-11T10:00:00Z',
+              latestDeliveryUid: 'del-21',
+              latestDeliveryStatus: 'pending',
+              latestAsyncTaskUid: '',
+              latestAsyncState: '',
+              latestAsyncRemoteJobId: '',
+              latestAsyncPollUrl: '',
+              awaitingAsync: false,
+              targets: [],
+              dependencies: [],
+            },
+          ],
+          metadataColumns: [
+            { key: 'patientId', label: 'Patient ID', type: 'string', searchable: true, visibleByDefault: true },
+            { key: 'submittedAt', label: 'Submitted At', type: 'datetime', searchable: false, visibleByDefault: false },
+          ],
+          totalCount: 1,
+          page: 1,
+          pageSize: 25,
+        }
+      }
+      return {}
+    })
+
+    renderRoute('/requests')
+
+    expect(await screen.findByText('Patient ID')).toBeInTheDocument()
+    expect(await screen.findByText('P-100')).toBeInTheDocument()
+  })
+
   it('create request submits payload through API', async () => {
     authenticate(['requests.read', 'requests.write'])
     let createPayload: Record<string, unknown> | null = null

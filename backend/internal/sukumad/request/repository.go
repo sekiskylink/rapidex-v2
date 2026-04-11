@@ -87,12 +87,13 @@ func normalizeListQuery(query ListQuery) ListQuery {
 	}
 
 	return ListQuery{
-		Page:      page,
-		PageSize:  pageSize,
-		SortField: sortField,
-		SortOrder: sortOrder,
-		Filter:    strings.TrimSpace(query.Filter),
-		Status:    strings.ToLower(strings.TrimSpace(query.Status)),
+		Page:            page,
+		PageSize:        pageSize,
+		SortField:       sortField,
+		SortOrder:       sortOrder,
+		Filter:          strings.TrimSpace(query.Filter),
+		Status:          strings.ToLower(strings.TrimSpace(query.Status)),
+		MetadataColumns: normalizeMetadataColumns(query.MetadataColumns),
 	}
 }
 
@@ -105,16 +106,22 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 	if q.Filter != "" {
 		args = append(args, "%"+q.Filter+"%")
 		needle := fmt.Sprintf("$%d", len(args))
-		conditions = append(conditions, `(
-			r.uid::text ILIKE `+needle+` OR
-			COALESCE(r.source_system, '') ILIKE `+needle+` OR
-			COALESCE(r.correlation_id, '') ILIKE `+needle+` OR
-			COALESCE(r.batch_id, '') ILIKE `+needle+` OR
-			COALESCE(r.idempotency_key, '') ILIKE `+needle+` OR
-			COALESCE(r.url_suffix, '') ILIKE `+needle+` OR
-			COALESCE(s.name, '') ILIKE `+needle+` OR
-			COALESCE(s.code, '') ILIKE `+needle+`
-		)`)
+		filterClauses := []string{
+			`(
+			r.uid::text ILIKE ` + needle + ` OR
+			COALESCE(r.source_system, '') ILIKE ` + needle + ` OR
+			COALESCE(r.correlation_id, '') ILIKE ` + needle + ` OR
+			COALESCE(r.batch_id, '') ILIKE ` + needle + ` OR
+			COALESCE(r.idempotency_key, '') ILIKE ` + needle + ` OR
+			COALESCE(r.url_suffix, '') ILIKE ` + needle + ` OR
+			COALESCE(s.name, '') ILIKE ` + needle + ` OR
+			COALESCE(s.code, '') ILIKE ` + needle + `
+		)`,
+		}
+		for _, column := range searchableMetadataColumns(q.MetadataColumns) {
+			filterClauses = append(filterClauses, fmt.Sprintf("COALESCE(r.extras ->> '%s', '') ILIKE %s", escapeSQLLiteral(column.Key), needle))
+		}
+		conditions = append(conditions, "("+strings.Join(filterClauses, " OR ")+")")
 	}
 	if q.Status != "" {
 		args = append(args, q.Status)
@@ -187,11 +194,16 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 	}
 
 	return ListResult{
-		Items:    items,
-		Total:    total,
-		Page:     q.Page,
-		PageSize: q.PageSize,
+		Items:           items,
+		Total:           total,
+		Page:            q.Page,
+		PageSize:        q.PageSize,
+		MetadataColumns: q.MetadataColumns,
 	}, nil
+}
+
+func escapeSQLLiteral(value string) string {
+	return strings.ReplaceAll(value, "'", "''")
 }
 
 func (r *SQLRepository) GetRequestByID(ctx context.Context, id int64) (Record, error) {

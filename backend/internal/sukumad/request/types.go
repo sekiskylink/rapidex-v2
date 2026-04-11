@@ -51,6 +51,7 @@ type Record struct {
 	StatusReason            string          `db:"status_reason" json:"statusReason"`
 	DeferredUntil           *time.Time      `db:"deferred_until" json:"deferredUntil,omitempty"`
 	Extras                  map[string]any  `json:"extras"`
+	ProjectedMetadata       map[string]any  `json:"projectedMetadata"`
 	CreatedAt               time.Time       `db:"created_at" json:"createdAt"`
 	UpdatedAt               time.Time       `db:"updated_at" json:"updatedAt"`
 	CreatedBy               *int64          `db:"created_by" json:"createdBy,omitempty"`
@@ -69,19 +70,21 @@ type Record struct {
 }
 
 type ListQuery struct {
-	Page      int
-	PageSize  int
-	SortField string
-	SortOrder string
-	Filter    string
-	Status    string
+	Page            int
+	PageSize        int
+	SortField       string
+	SortOrder       string
+	Filter          string
+	Status          string
+	MetadataColumns []MetadataColumn
 }
 
 type ListResult struct {
-	Items    []Record
-	Total    int
-	Page     int
-	PageSize int
+	Items           []Record         `json:"items"`
+	Total           int              `json:"totalCount"`
+	Page            int              `json:"page"`
+	PageSize        int              `json:"pageSize"`
+	MetadataColumns []MetadataColumn `json:"metadataColumns"`
 }
 
 type CreateParams struct {

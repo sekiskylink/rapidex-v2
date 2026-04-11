@@ -51,6 +51,7 @@ interface AppDataGridProps<R extends GridValidRowModel = GridValidRowModel> {
   fetchData: (params: AppDataGridFetchParams) => Promise<AppDataGridFetchResult<R>>
   initialState?: GridInitialState
   storageKey: string
+  defaultColumnVisibilityModel?: GridColumnVisibilityModel
   getRowId?: (row: R) => string | number
   settingsStore?: SettingsStore
   reloadToken?: number
@@ -169,6 +170,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
   fetchData,
   initialState,
   storageKey,
+  defaultColumnVisibilityModel,
   getRowId,
   settingsStore,
   reloadToken,
@@ -218,7 +220,10 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
         page: current.page,
         pageSize: PAGE_SIZE_OPTIONS.includes(persisted.pageSize) ? persisted.pageSize : defaultTablePrefs.pageSize,
       }))
-      setColumnVisibilityModel(persisted.columnVisibility)
+      setColumnVisibilityModel({
+        ...(defaultColumnVisibilityModel ?? {}),
+        ...persisted.columnVisibility,
+      })
       setColumnOrder(persisted.columnOrder)
       setDensity(persisted.density)
       setPinnedColumns(withStickyRightFields(persisted.pinnedColumns, resolvedStickyFields))
@@ -229,7 +234,7 @@ export function AppDataGrid<R extends GridValidRowModel = GridValidRowModel>({
     return () => {
       active = false
     }
-  }, [columns, pinActionsToRight, storageKey, store, stickyFieldsKey])
+  }, [columns, defaultColumnVisibilityModel, pinActionsToRight, storageKey, store, stickyFieldsKey])
 
   const persistTablePrefs = React.useCallback(
     async (updater: (current: TablePrefsV1) => TablePrefsV1) => {

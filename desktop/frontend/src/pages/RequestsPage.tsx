@@ -17,6 +17,16 @@ import type { EventRecord } from './traceability'
 import { JsonMetadataDialog } from '../components/admin/JsonMetadataDialog'
 
 interface RequestRow extends RequestDetailRecord {}
+interface RequestMetadataColumn {
+  key: string
+  label: string
+  type: 'string' | 'number' | 'boolean' | 'datetime'
+  searchable: boolean
+  visibleByDefault: boolean
+}
+interface RequestsListResponse extends PaginatedResponse<RequestRow> {
+  metadataColumns?: RequestMetadataColumn[]
+}
 
 const statusOptions = ['', 'pending', 'blocked', 'processing', 'completed', 'failed'] as const
 
@@ -42,6 +52,36 @@ function formatDate(value: string) {
     return value
   }
   return parsed.toLocaleString()
+}
+
+function metadataColumnsEqual(a: RequestMetadataColumn[], b: RequestMetadataColumn[]) {
+  if (a.length !== b.length) {
+    return false
+  }
+  return a.every((column, index) => {
+    const candidate = b[index]
+    return (
+      column.key === candidate?.key &&
+      column.label === candidate?.label &&
+      column.type === candidate?.type &&
+      column.searchable === candidate?.searchable &&
+      column.visibleByDefault === candidate?.visibleByDefault
+    )
+  })
+}
+
+function formatProjectedMetadataValue(column: RequestMetadataColumn, row: RequestRow) {
+  const value = row.projectedMetadata?.[column.key]
+  if (value === undefined || value === null || value === '') {
+    return '-'
+  }
+  if (column.type === 'boolean') {
+    return value ? 'Yes' : 'No'
+  }
+  if (column.type === 'datetime' && typeof value === 'string') {
+    return formatDate(value)
+  }
+  return String(value)
 }
 
 function statusColor(status: string): 'default' | 'warning' | 'success' | 'error' | 'info' {
@@ -208,6 +248,7 @@ export function RequestsPage() {
     title: 'Request Body',
     body: null,
   })
+  const [metadataColumns, setMetadataColumns] = React.useState<RequestMetadataColumn[]>([])
 
   const refreshGrid = () => setReloadToken((value) => value + 1)
 
@@ -262,7 +303,11 @@ export function RequestsPage() {
           status: statusFilter,
         },
       })
-      const response = await apiClient.request<PaginatedResponse<RequestRow>>(`/api/v1/requests?${query}`)
+      const response = await apiClient.request<RequestsListResponse>(`/api/v1/requests?${query}`)
+      setMetadataColumns((current) => {
+        const next = Array.isArray(response.metadataColumns) ? response.metadataColumns : []
+        return metadataColumnsEqual(current, next) ? current : next
+      })
       return {
         rows: response.items ?? [],
         total: response.totalCount,
@@ -345,8 +390,18 @@ export function RequestsPage() {
     }
   }
 
-  const columns = React.useMemo<GridColDef<RequestRow>[]>(
-    () => [
+  const columns = React.useMemo<GridColDef<RequestRow>[]>(() => {
+    const projectedColumns: GridColDef<RequestRow>[] = metadataColumns.map((column) => ({
+      field: `projectedMetadata.${column.key}`,
+      headerName: column.label,
+      minWidth: 180,
+      flex: 1,
+      sortable: false,
+      filterable: false,
+      valueGetter: (_value, row) => formatProjectedMetadataValue(column, row),
+    }))
+
+    return [
       { field: 'uid', headerName: 'Request UID', minWidth: 220, flex: 1.2 },
       { field: 'destinationServerName', headerName: 'Destination Server', minWidth: 180, flex: 1 },
       {
@@ -387,6 +442,7 @@ export function RequestsPage() {
         flex: 1,
         valueGetter: (_value, row) => formatDate(row.createdAt),
       },
+      ...projectedColumns,
       {
         field: 'actions',
         headerName: 'Actions',
@@ -433,8 +489,18 @@ export function RequestsPage() {
           />
         ),
       },
-    ],
-    [canWrite, detailRequest, bodyDialog.open, bodyDialog.title],
+    ]
+  }, [bodyDialog.open, bodyDialog.title, canWrite, metadataColumns])
+
+  const defaultColumnVisibilityModel = React.useMemo(
+    () =>
+      metadataColumns.reduce<Record<string, boolean>>((model, column) => {
+        if (!column.visibleByDefault) {
+          model[`projectedMetadata.${column.key}`] = false
+        }
+        return model
+      }, {}),
+    [metadataColumns],
   )
 
   return (
@@ -489,6 +555,7 @@ export function RequestsPage() {
         columns={columns}
         fetchData={fetchRequests}
         storageKey="sukumad-requests-grid"
+        defaultColumnVisibilityModel={defaultColumnVisibilityModel}
         reloadToken={reloadToken}
         externalQueryKey={`${search}\u0000${statusFilter}`}
         pinActionsToRight

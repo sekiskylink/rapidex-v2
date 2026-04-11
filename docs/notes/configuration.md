@@ -114,6 +114,45 @@ modules:
 
 ## Sukumad
 
+### Requests
+
+Configured request metadata columns project selected `exchange_requests.extras` keys into the Requests table in both web and desktop.
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `sukumad.requests.metadata_columns` | array | `[]` | Optional list of metadata projections for request list tables and quick search. |
+
+Entry shape:
+
+```yaml
+sukumad:
+  requests:
+    metadata_columns:
+      - key: "patientId"
+        label: "Patient ID"
+        type: "string"
+        searchable: true
+        visible_by_default: true
+      - key: "submittedAt"
+        label: "Submitted At"
+        type: "datetime"
+        searchable: false
+        visible_by_default: false
+```
+
+Allowed `type` values:
+
+- `string`
+- `number`
+- `boolean`
+- `datetime`
+
+Notes:
+
+- `key` maps to a top-level key in `exchange_requests.extras`.
+- `searchable: true` includes that metadata key in the Requests page quick search (`q`).
+- `visible_by_default: false` keeps the column available in the grid column chooser but hidden on first load.
+
 ### Submission Window
 
 Submission windows control when deliveries may be sent. If both `start_hour` and `end_hour` are `0`, the window is disabled.

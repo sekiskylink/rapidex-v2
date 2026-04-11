@@ -262,6 +262,50 @@ func TestServiceCreateRequestDefaultsOptionalMetadataToEmptyStrings(t *testing.T
 	}
 }
 
+func TestServiceListRequestsProjectsConfiguredMetadataColumns(t *testing.T) {
+	service := NewService(&fakeRepo{
+		listFn: func(_ context.Context, query ListQuery) (ListResult, error) {
+			return ListResult{
+				Items: []Record{
+					{
+						ID:     1,
+						UID:    "req-1",
+						Extras: map[string]any{"patientId": "P-100", "retries": 2, "submittedAt": "2026-04-11T10:00:00Z"},
+					},
+				},
+				Total:    1,
+				Page:     query.Page,
+				PageSize: query.PageSize,
+			}, nil
+		},
+	})
+
+	result, err := service.ListRequests(context.Background(), ListQuery{
+		Page:     1,
+		PageSize: 25,
+		MetadataColumns: []MetadataColumn{
+			{Key: "patientId", Label: "Patient ID", Type: MetadataColumnTypeString, Searchable: true, VisibleByDefault: true},
+			{Key: "retries", Label: "Retries", Type: MetadataColumnTypeNumber, Searchable: false, VisibleByDefault: true},
+			{Key: "submittedAt", Label: "Submitted", Type: MetadataColumnTypeDateTime, Searchable: false, VisibleByDefault: false},
+		},
+	})
+	if err != nil {
+		t.Fatalf("list requests: %v", err)
+	}
+	if len(result.MetadataColumns) != 3 {
+		t.Fatalf("expected projected metadata columns, got %+v", result.MetadataColumns)
+	}
+	if got := result.Items[0].ProjectedMetadata["patientId"]; got != "P-100" {
+		t.Fatalf("expected patientId projection, got %#v", got)
+	}
+	if got := result.Items[0].ProjectedMetadata["retries"]; got != int64(2) && got != 2 && got != float64(2) {
+		t.Fatalf("expected numeric projection, got %#v", got)
+	}
+	if got := result.Items[0].ProjectedMetadata["submittedAt"]; got != "2026-04-11T10:00:00Z" {
+		t.Fatalf("expected datetime projection, got %#v", got)
+	}
+}
+
 func TestServiceCreateRequestRejectsJSONQueryArrayPayload(t *testing.T) {
 	service := NewService(&fakeRepo{}, audit.NewService(&fakeAuditRepo{}))
 

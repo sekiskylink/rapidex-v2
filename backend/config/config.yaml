@@ -157,6 +157,18 @@ documentation:
       order: 230
 
 sukumad:
+  requests:
+    metadata_columns:
+      - key: "patientId"
+        label: "Patient ID"
+        type: "string"
+        searchable: true
+        visible_by_default: true
+      - key: "submittedAt"
+        label: "Submitted At"
+        type: "datetime"
+        searchable: false
+        visible_by_default: false
   submission_window:
     default:
       start_hour: 0
@@ -204,7 +216,7 @@ sukumad:
   workers:
     heartbeat_seconds: 10
     outbound_logging:
-      enabled: false
+      enabled: true
       body_preview_bytes: 256
     recovery:
       stale_delivery_after_seconds: 300

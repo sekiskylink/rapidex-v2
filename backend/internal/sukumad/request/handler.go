@@ -7,6 +7,7 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/auth"
+	"basepro/backend/internal/config"
 	"basepro/backend/internal/listquery"
 	"github.com/gin-gonic/gin"
 )
@@ -52,6 +53,7 @@ type createExternalRequestRequest struct {
 }
 
 func (h *Handler) List(c *gin.Context) {
+	metadataColumns := currentMetadataColumns()
 	page, err := listquery.ParseInt(c.Query("page"), 1, 1, 100000, "page")
 	if err != nil {
 		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"page": []string{err.Error()}}))
@@ -91,24 +93,19 @@ func (h *Handler) List(c *gin.Context) {
 	})
 
 	list, err := h.service.ListRequests(c.Request.Context(), ListQuery{
-		Page:      page,
-		PageSize:  pageSize,
-		SortField: sortField,
-		SortOrder: sortOrder,
-		Filter:    search,
-		Status:    status,
+		Page:            page,
+		PageSize:        pageSize,
+		SortField:       sortField,
+		SortOrder:       sortOrder,
+		Filter:          search,
+		Status:          status,
+		MetadataColumns: metadataColumns,
 	})
 	if err != nil {
 		apperror.Write(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"items":      list.Items,
-		"totalCount": list.Total,
-		"page":       list.Page,
-		"pageSize":   list.PageSize,
-	})
+	c.JSON(http.StatusOK, list)
 }
 
 func (h *Handler) Get(c *gin.Context) {
@@ -125,6 +122,21 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, item)
+}
+
+func currentMetadataColumns() []MetadataColumn {
+	cfg := config.Get()
+	columns := make([]MetadataColumn, 0, len(cfg.Sukumad.Requests.MetadataColumns))
+	for _, column := range cfg.Sukumad.Requests.MetadataColumns {
+		columns = append(columns, MetadataColumn{
+			Key:              column.Key,
+			Label:            column.Label,
+			Type:             column.Type,
+			Searchable:       column.Searchable,
+			VisibleByDefault: column.VisibleByDefault,
+		})
+	}
+	return normalizeMetadataColumns(columns)
 }
 
 func (h *Handler) Create(c *gin.Context) {

@@ -254,6 +254,47 @@ sukumad:
 	}
 }
 
+func TestValidateSukumadRequestMetadataColumns(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Sukumad.Requests.MetadataColumns = []RequestMetadataColumn{
+		{Key: "patientId", Label: "Patient ID", Type: "string", Searchable: true, VisibleByDefault: true},
+		{Key: "submittedAt", Label: "Submitted", Type: "datetime", Searchable: false, VisibleByDefault: false},
+	}
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected valid request metadata columns config: %v", err)
+	}
+
+	cfg.Sukumad.Requests.MetadataColumns = []RequestMetadataColumn{
+		{Key: "", Label: "Missing", Type: "string"},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected empty metadata key to fail validation")
+	}
+
+	cfg = defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Sukumad.Requests.MetadataColumns = []RequestMetadataColumn{
+		{Key: "patientId", Label: "Patient ID", Type: "string"},
+		{Key: "patientId", Label: "Duplicate", Type: "string"},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected duplicate metadata key to fail validation")
+	}
+
+	cfg = defaultConfig()
+	cfg.Database.DSN = "postgres://basepro:basepro@127.0.0.1:5432/basepro_dev?sslmode=disable"
+	cfg.Auth.JWTSigningKey = "test-signing-key"
+	cfg.Sukumad.Requests.MetadataColumns = []RequestMetadataColumn{
+		{Key: "patientId", Label: "Patient ID", Type: "json"},
+	}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected invalid metadata column type to fail validation")
+	}
+}
+
 func TestLoadInvalidConfigFails(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "invalid-config.yaml")

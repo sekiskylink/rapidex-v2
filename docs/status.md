@@ -1,5 +1,43 @@
 # Status
 
+## Milestone — Request Metadata Projection Columns (Complete)
+
+### What changed
+- Added config-driven request metadata projection support so selected `exchange_requests.extras` keys can be surfaced as first-class columns in the Requests list for both web and desktop.
+- Extended backend config under [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go) and [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml) with `sukumad.requests.metadata_columns`, including validation for unique keys and allowed types.
+- Extended the Sukumad request list contract under [backend/internal/sukumad/request](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request) so:
+  - list responses return `metadataColumns`
+  - each request row includes `projectedMetadata`
+  - quick search can match configured metadata columns where `searchable=true`
+- Updated Requests grids in [web/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/RequestsPage.tsx) and [desktop/frontend/src/pages/RequestsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/RequestsPage.tsx) to append configured metadata columns dynamically and honor `visibleByDefault` through shared DataGrid defaults.
+- Extended shared DataGrid wrappers in [web/src/components/datagrid/AppDataGrid.tsx](/Users/sam/projects/go/sukumadpro/web/src/components/datagrid/AppDataGrid.tsx) and [desktop/frontend/src/components/datagrid/AppDataGrid.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/components/datagrid/AppDataGrid.tsx) with default column visibility support so new metadata columns can start hidden without overriding saved user preferences.
+- Documented the new configuration in [docs/notes/configuration.md](/Users/sam/projects/go/sukumadpro/docs/notes/configuration.md) and [docs/notes/configuration-reference.md](/Users/sam/projects/go/sukumadpro/docs/notes/configuration-reference.md).
+- Saved prompt traceability copy in `docs/prompts/2026-04-11-request-metadata-projection-columns.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added config validation coverage for request metadata column definitions
+  - added request service coverage for projected metadata values
+  - added request repository coverage for metadata-backed quick search
+- Web:
+  - added requests page coverage for configured metadata projection columns from the list response
+- Desktop:
+  - added matching requests page coverage for configured metadata projection columns from the list response
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/config ./internal/sukumad/request`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/requests-page.test.tsx`)
+- Web tests: PASS (`cd web && npm test`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/requests-page.test.tsx`)
+- Desktop tests: PASS (`cd desktop/frontend && npm test`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Projected metadata columns currently read top-level `extras` keys only; nested JSON paths are not supported yet.
+- Metadata-backed request quick search is supported for configured searchable columns, but projected metadata columns are not yet server-sortable.
+
 ## Milestone — Dashboard Live Request Processing Graph (Complete)
 
 ### What changed

@@ -59,7 +59,13 @@ func (s *Service) WithEventWriter(eventWriter traceevent.Writer) *Service {
 }
 
 func (s *Service) ListRequests(ctx context.Context, query ListQuery) (ListResult, error) {
-	return s.repo.ListRequests(ctx, query)
+	result, err := s.repo.ListRequests(ctx, query)
+	if err != nil {
+		return ListResult{}, err
+	}
+	result.MetadataColumns = normalizeMetadataColumns(query.MetadataColumns)
+	applyMetadataColumns(result.Items, result.MetadataColumns)
+	return result, nil
 }
 
 func (s *Service) GetRequest(ctx context.Context, id int64) (Record, error) {
