@@ -34,25 +34,62 @@ type upsertServerRequest struct {
 }
 
 func (h *Handler) List(c *gin.Context) {
+	list, err := h.listServers(c)
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":      list.Items,
+		"totalCount": list.Total,
+		"page":       list.Page,
+		"pageSize":   list.PageSize,
+	})
+}
+
+func (h *Handler) ListExternal(c *gin.Context) {
+	list, err := h.listServers(c)
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+
+	items := make([]ExternalRecord, 0, len(list.Items))
+	for _, item := range list.Items {
+		items = append(items, ExternalRecord{
+			UID:        item.UID,
+			Code:       item.Code,
+			Name:       item.Name,
+			SystemType: item.SystemType,
+			Suspended:  item.Suspended,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":      items,
+		"totalCount": list.Total,
+		"page":       list.Page,
+		"pageSize":   list.PageSize,
+	})
+}
+
+func (h *Handler) listServers(c *gin.Context) (ListResult, error) {
 	page, err := listquery.ParseInt(c.Query("page"), 1, 1, 100000, "page")
 	if err != nil {
-		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"page": []string{err.Error()}}))
-		return
+		return ListResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"page": []string{err.Error()}})
 	}
 	pageSize, err := listquery.ParseInt(c.Query("pageSize"), 25, 1, 200, "pageSize")
 	if err != nil {
-		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"pageSize": []string{err.Error()}}))
-		return
+		return ListResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"pageSize": []string{err.Error()}})
 	}
 	sortField, sortOrder, err := listquery.ParseSort(c.Query("sort"))
 	if err != nil {
-		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"sort": []string{err.Error()}}))
-		return
+		return ListResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"sort": []string{err.Error()}})
 	}
 	filterField, filterValue, err := listquery.ParseFilter(c.Query("filter"))
 	if err != nil {
-		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"filter": []string{err.Error()}}))
-		return
+		return ListResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"filter": []string{err.Error()}})
 	}
 	search := listquery.ResolveSearch(c.Query("q"), filterField, filterValue, map[string]struct{}{
 		"name":       {},
@@ -69,16 +106,10 @@ func (h *Handler) List(c *gin.Context) {
 		Filter:    search,
 	})
 	if err != nil {
-		apperror.Write(c, err)
-		return
+		return ListResult{}, err
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"items":      list.Items,
-		"totalCount": list.Total,
-		"page":       list.Page,
-		"pageSize":   list.PageSize,
-	})
+	return list, nil
 }
 
 func (h *Handler) Get(c *gin.Context) {

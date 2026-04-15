@@ -60,6 +60,88 @@ func (r *dashboardTestRepository) GetSnapshot(_ context.Context, _ time.Time) (d
 	return r.snapshot, nil
 }
 
+type apiTokenRepo struct {
+	tokens      map[string]*auth.APIToken
+	permissions map[int64][]auth.APITokenPermission
+}
+
+func newAPITokenRepo() *apiTokenRepo {
+	return &apiTokenRepo{
+		tokens:      map[string]*auth.APIToken{},
+		permissions: map[int64][]auth.APITokenPermission{},
+	}
+}
+
+func (r *apiTokenRepo) GetUserByUsername(context.Context, string) (*auth.User, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) GetUserByID(context.Context, int64) (*auth.User, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) GetActiveUserByIdentifier(context.Context, string) (*auth.User, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) GetRefreshTokenByHash(context.Context, string) (*auth.RefreshToken, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) CreateRefreshToken(context.Context, auth.RefreshToken) (*auth.RefreshToken, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) RevokeRefreshToken(context.Context, int64, *int64, time.Time) error {
+	return nil
+}
+func (r *apiTokenRepo) RevokeAllActiveRefreshTokensForUser(context.Context, int64, time.Time) error {
+	return nil
+}
+func (r *apiTokenRepo) UpdateUserLastLoginAt(context.Context, int64, time.Time) error { return nil }
+func (r *apiTokenRepo) CreatePasswordResetToken(context.Context, auth.PasswordResetToken) (*auth.PasswordResetToken, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) GetPasswordResetTokenByHash(context.Context, string) (*auth.PasswordResetToken, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) InvalidateActivePasswordResetTokensForUser(context.Context, int64, time.Time) error {
+	return nil
+}
+func (r *apiTokenRepo) MarkPasswordResetTokenUsed(context.Context, int64, time.Time, *string, *string) error {
+	return auth.ErrNotFound
+}
+func (r *apiTokenRepo) UpdateUserPasswordHash(context.Context, int64, string, time.Time) error {
+	return auth.ErrNotFound
+}
+func (r *apiTokenRepo) CreateAPIToken(context.Context, auth.APIToken, []string, *string) (*auth.APIToken, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) ListAPITokens(context.Context) ([]auth.APIToken, error) { return nil, nil }
+func (r *apiTokenRepo) GetAPITokenByID(context.Context, int64) (*auth.APIToken, error) {
+	return nil, auth.ErrNotFound
+}
+func (r *apiTokenRepo) GetAPITokenByHash(_ context.Context, hash string) (*auth.APIToken, error) {
+	token, ok := r.tokens[hash]
+	if !ok {
+		return nil, auth.ErrNotFound
+	}
+	copy := *token
+	return &copy, nil
+}
+func (r *apiTokenRepo) GetAPITokenPermissions(_ context.Context, tokenID int64) ([]auth.APITokenPermission, error) {
+	return append([]auth.APITokenPermission{}, r.permissions[tokenID]...), nil
+}
+func (r *apiTokenRepo) RevokeAPIToken(context.Context, int64, time.Time) error { return nil }
+func (r *apiTokenRepo) UpdateAPITokenLastUsed(_ context.Context, tokenID int64, now time.Time) error {
+	for _, token := range r.tokens {
+		if token.ID == tokenID {
+			copyNow := now
+			token.LastUsedAt = &copyNow
+			return nil
+		}
+	}
+	return auth.ErrNotFound
+}
+func (r *apiTokenRepo) EnsureUser(context.Context, string, string, bool) (*auth.User, error) {
+	return nil, auth.ErrNotFound
+}
+
 func TestDashboardOperationsEventsRequiresObservabilityRead(t *testing.T) {
 	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
 	token, _, _ := jwt.GenerateAccessToken(111, "dashboard-reader", time.Now().UTC())
@@ -280,6 +362,145 @@ func TestServerRoutesCRUD(t *testing.T) {
 	router.ServeHTTP(deleteW, deleteReq)
 	if deleteW.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 from delete, got %d body=%s", deleteW.Code, deleteW.Body.String())
+	}
+}
+
+func TestExternalServerListRouteAcceptsAPITokenAndReturnsSafeFields(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		91: {
+			rbac.PermissionServersRead,
+			rbac.PermissionServersWrite,
+		},
+	})
+	serverHandler := server.NewHandler(server.NewService(server.NewRepository(), audit.NewService(&fakeAuditRepo{})))
+
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.ServerHandler = serverHandler
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_serversread"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        21,
+		Name:      "server-reader",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[21] = []auth.APITokenPermission{{APITokenID: 21, Permission: rbac.PermissionServersRead}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	router := newRouter(deps)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader([]byte(`{
+		"name":"DHIS2 Production",
+		"code":"dhis2-prod",
+		"systemType":"dhis2",
+		"baseUrl":"https://dhis.example.com",
+		"endpointType":"http",
+		"httpMethod":"post",
+		"useAsync":true,
+		"parseResponses":true,
+		"headers":{"Authorization":"Bearer masked"},
+		"urlParams":{"orgUnit":"OU_123"},
+		"suspended":false
+	}`)))
+	userToken, _, _ := jwt.GenerateAccessToken(91, "sukumad-reader", time.Now().UTC())
+	createReq.Header.Set("Authorization", "Bearer "+userToken)
+	createReq.Header.Set("Content-Type", "application/json")
+	createW := httptest.NewRecorder()
+	router.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating server, got %d body=%s", createW.Code, createW.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/external/servers?page=1&pageSize=25", nil)
+	req.Header.Set("X-API-Token", plain)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("expected 1 item, got %+v", body.Items)
+	}
+	item := body.Items[0]
+	if item["uid"] == "" || item["code"] != "dhis2-prod" || item["name"] != "DHIS2 Production" {
+		t.Fatalf("unexpected item payload: %+v", item)
+	}
+	if _, ok := item["id"]; ok {
+		t.Fatalf("expected external payload to omit id: %+v", item)
+	}
+	if _, ok := item["baseUrl"]; ok {
+		t.Fatalf("expected external payload to omit baseUrl: %+v", item)
+	}
+	if _, ok := item["headers"]; ok {
+		t.Fatalf("expected external payload to omit headers: %+v", item)
+	}
+}
+
+func TestExternalServerListRouteRejectsTokenWithoutServersRead(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	rbacService := rbacServiceWithPermissions(nil)
+
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.ServerHandler = server.NewHandler(server.NewService(server.NewRepository(), audit.NewService(&fakeAuditRepo{})))
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_noserversread"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        22,
+		Name:      "denied-reader",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[22] = []auth.APITokenPermission{{APITokenID: 22, Permission: rbac.PermissionRequestsRead}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/external/servers", nil)
+	req.Header.Set("X-API-Token", plain)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestExternalServerListRouteRequiresAuthentication(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	rbacService := rbacServiceWithPermissions(nil)
+
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.ServerHandler = server.NewHandler(server.NewService(server.NewRepository(), audit.NewService(&fakeAuditRepo{})))
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/external/servers", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

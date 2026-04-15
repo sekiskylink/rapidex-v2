@@ -60,6 +60,14 @@ func registerServerRoutes(
 	group.POST("", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Create)
 	group.PUT("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Update)
 	group.DELETE("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersWrite), handler.Delete)
+
+	externalGroup := api.Group("/external/servers")
+	externalGroup.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "servers"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+	)
+	externalGroup.GET("", middleware.RequirePermission(rbacService, rbac.PermissionServersRead), handler.ListExternal)
 }
 
 func registerRequestRoutes(

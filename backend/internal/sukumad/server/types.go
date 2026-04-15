@@ -40,6 +40,14 @@ type ListResult struct {
 	PageSize int
 }
 
+type ExternalRecord struct {
+	UID        string `json:"uid"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
+	SystemType string `json:"systemType"`
+	Suspended  bool   `json:"suspended"`
+}
+
 type CreateParams struct {
 	UID                     string
 	Name                    string
