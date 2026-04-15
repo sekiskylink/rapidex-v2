@@ -12,13 +12,15 @@ import {
   FormControl,
   FormControlLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
   Switch,
   TextField,
   Typography,
 } from '@mui/material'
-import { useNavigate, useRouter } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { createApiClient } from '../api/client'
 import { useSessionPrincipal } from '../auth/hooks'
 import { handleAppError } from '../errors/handleAppError'
@@ -51,7 +53,6 @@ const navigationLabelFields = [
 
 export function SettingsPage() {
   const router = useRouter()
-  const navigate = useNavigate()
   const settingsStore = router.options.context.settingsStore
   const {
     prefs,
@@ -67,6 +68,14 @@ export function SettingsPage() {
   const principal = useSessionPrincipal()
   const canWriteBranding = hasPermission(principal, 'settings.write')
   const canReadModuleEnablement = hasPermission(principal, 'settings.read') || canWriteBranding
+  const canManageApiTokens = hasPermission(principal, 'api_tokens.write')
+  const currentPermissions = React.useMemo(
+    () =>
+      Array.from(
+        new Set((principal?.permissions ?? []).map((permission) => permission.trim()).filter((permission) => permission)),
+      ),
+    [principal?.permissions],
+  )
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -92,6 +101,10 @@ export function SettingsPage() {
   const [runtimeConfigLoading, setRuntimeConfigLoading] = React.useState(false)
   const [runtimeConfigError, setRuntimeConfigError] = React.useState('')
   const [runtimeConfigFormat, setRuntimeConfigFormat] = React.useState<RuntimeConfigFormat>('json')
+  const [tokenName, setTokenName] = React.useState('Desktop API token')
+  const [createdApiToken, setCreatedApiToken] = React.useState('')
+  const [apiAccessError, setApiAccessError] = React.useState('')
+  const [apiTokenCreating, setApiTokenCreating] = React.useState(false)
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -341,6 +354,8 @@ export function SettingsPage() {
     try {
       const saved = await settingsStore.saveSettings({
         apiBaseUrl: settings.apiBaseUrl,
+        authMode: settings.authMode,
+        apiToken: settings.authMode === 'api_token' ? settings.apiToken ?? '' : '',
         requestTimeoutSeconds: settings.requestTimeoutSeconds,
       })
       setSettings(saved)
@@ -355,6 +370,49 @@ export function SettingsPage() {
       setConnectionErrorMessage(`${normalized.message}${requestId}`)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const onCreateApiToken = async () => {
+    if (!settings || !canManageApiTokens || !tokenName.trim()) {
+      return
+    }
+
+    setApiTokenCreating(true)
+    setApiAccessError('')
+    try {
+      const token = await apiClient.createApiToken({
+        name: tokenName.trim(),
+        permissions: currentPermissions,
+      })
+      setCreatedApiToken(token.token)
+      const saved = await settingsStore.saveSettings({
+        authMode: 'api_token',
+        apiToken: token.token,
+      })
+      setSettings(saved)
+      notify.success('API token created. Copy it now.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to create API token.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setApiAccessError(`${normalized.message}${requestId}`)
+    } finally {
+      setApiTokenCreating(false)
+    }
+  }
+
+  const onCopyCreatedToken = async () => {
+    if (!createdApiToken.trim()) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(createdApiToken)
+      notify.success('API token copied.')
+    } catch {
+      notify.error('Unable to copy API token.')
     }
   }
 
@@ -460,15 +518,39 @@ export function SettingsPage() {
               inputProps={{ min: 1, max: 300 }}
               fullWidth
             />
-            <Box>
-              <Typography variant="subtitle2">Auth mode</Typography>
-              <Typography color="text.secondary" sx={{ mb: 1 }}>
-                {settings.authMode === 'api_token' ? 'API Token' : 'Username / Password'}
-              </Typography>
-              <Button variant="text" onClick={() => void navigate({ to: '/setup' })}>
-                Change in Setup
-              </Button>
-            </Box>
+            <Divider />
+            <Typography variant="subtitle2">API Access</Typography>
+            <Typography color="text.secondary">
+              Choose whether this profile uses the current session or an API token for backend requests.
+            </Typography>
+            <FormControl>
+                <RadioGroup
+                  value={settings.authMode}
+                  onChange={(event) =>
+                    setSettings((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            authMode: event.target.value as AppSettings['authMode'],
+                          }
+                        : prev,
+                    )
+                  }
+              >
+                <FormControlLabel value="password" control={<Radio />} label="Username / Password" />
+                <FormControlLabel value="api_token" control={<Radio />} label="API Token" />
+              </RadioGroup>
+            </FormControl>
+            <TextField
+              label="API Token"
+              type="password"
+              value={settings.apiToken ?? ''}
+              onChange={(event) =>
+                setSettings((prev) => (prev ? { ...prev, apiToken: event.target.value } : prev))
+              }
+              helperText="Stored locally for backend API requests."
+              fullWidth
+            />
             <Stack direction="row" spacing={1.25} justifyContent="flex-end">
               <Button variant="outlined" onClick={onTestConnection} disabled={testing || saving}>
                 {testing ? 'Testing...' : 'Test Connection'}
@@ -478,6 +560,59 @@ export function SettingsPage() {
               </Button>
             </Stack>
             {connectionErrorMessage ? <Alert severity="error">{connectionErrorMessage}</Alert> : null}
+            {canManageApiTokens ? (
+              <>
+                <Divider />
+                <Typography variant="subtitle2">Create API Token</Typography>
+                <Typography color="text.secondary">
+                  The token inherits the current permissions and is shown once after creation.
+                </Typography>
+                <TextField
+                  label="Token Name"
+                  value={tokenName}
+                  onChange={(event) => setTokenName(event.target.value)}
+                  fullWidth
+                />
+                <Stack direction="row" spacing={1.25} justifyContent="flex-end">
+                  <Button
+                    variant="contained"
+                    onClick={() => void onCreateApiToken()}
+                    disabled={apiTokenCreating || !tokenName.trim()}
+                  >
+                    {apiTokenCreating ? 'Creating...' : 'Create Token'}
+                  </Button>
+                </Stack>
+              </>
+            ) : (
+              <Alert severity="info">You need api_tokens.write permission to create API tokens here.</Alert>
+            )}
+            {apiAccessError ? <Alert severity="error">{apiAccessError}</Alert> : null}
+            {createdApiToken ? (
+              <Box
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  p: 2,
+                }}
+              >
+                <Stack spacing={1.25}>
+                  <Typography variant="subtitle2">Plaintext token</Typography>
+                  <TextField
+                    value={createdApiToken}
+                    multiline
+                    minRows={2}
+                    InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                    fullWidth
+                  />
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Button variant="outlined" onClick={() => void onCopyCreatedToken()}>
+                      Copy Token
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            ) : null}
           </Stack>
         </CardContent>
       </Card>

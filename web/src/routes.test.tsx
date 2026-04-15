@@ -824,7 +824,7 @@ describe('web RBAC navigation', () => {
 })
 
 describe('web settings page', () => {
-  function authenticateForSettings() {
+  function authenticateForSettings(permissions: string[] = ['settings.read']) {
     setAuthSnapshot({
       isAuthenticated: true,
       accessToken: 'access-token',
@@ -833,7 +833,7 @@ describe('web settings page', () => {
         id: 99,
         username: 'settings-user',
         roles: ['Admin'],
-        permissions: ['settings.read'],
+        permissions,
       },
     })
   }
@@ -857,6 +857,38 @@ describe('web settings page', () => {
         showFooter: false,
       }),
     )
+  })
+
+  it('creates and reveals an API token in settings', async () => {
+    authenticateForSettings(['settings.read', 'api_tokens.write'])
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/admin/api-tokens') && init?.method === 'POST') {
+          return new Response(
+            JSON.stringify({
+              id: 7,
+              name: 'Web API token',
+              prefix: 'bpt_abc',
+              token: 'plaintext-api-token',
+              permissions: ['settings.read'],
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings')
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Token Name'), { target: { value: 'Web API token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Token' }))
+
+    expect(await screen.findByText('plaintext-api-token')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy Token' })).toBeInTheDocument()
   })
 
   it('changing mode persists after reload', async () => {

@@ -1,5 +1,31 @@
 # Status
 
+## Milestone — API Token Settings UI (Complete)
+
+### What changed
+- Added an API Access section to the authenticated Settings page in both web and desktop.
+- Users can choose between `Username/Password` and `API Token` auth mode, persist the choice locally, and store an API token for regular backend API requests.
+- Users with `api_tokens.write` can create a token from Settings, view the plaintext token once, and copy it immediately after creation.
+- Updated the web and desktop API clients so regular backend requests prefer the saved API token in API-token mode, while auth/session endpoints continue to use the JWT-based flow.
+- Saved prompt traceability copy in `docs/prompts/2026-04-14-api-token-settings-ui.md` (gitignored).
+
+### Added or updated tests
+- Web:
+  - added API token preference coverage to `web/src/lib/api.test.ts`
+  - added Settings-page token creation and reveal coverage to `web/src/routes.test.tsx`
+- Desktop:
+  - added API token request and token-creation coverage to `desktop/frontend/src/api/client.test.ts`
+  - added Settings-page token creation and reveal coverage to `desktop/frontend/src/routes.test.tsx`
+
+### Verification summary
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/lib/api.test.ts src/routes.test.tsx`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/api/client.test.ts src/routes.test.tsx`)
+
+### Known follow-ups
+- The token plaintext is shown only once at creation time; there is no secret-retrieval endpoint.
+- Existing MUI/jsdom and Data Grid warnings still appear in test logs, but they do not fail the suite.
+
 ## Milestone — Request Metadata Projection Columns (Complete)
 
 ### What changed

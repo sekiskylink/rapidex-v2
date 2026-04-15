@@ -1,4 +1,5 @@
 import { resolveApiBaseUrl } from './apiBaseUrl'
+import { loadAuthSettings } from './authSettings'
 
 export type ApiError = {
   status?: number
@@ -22,6 +23,7 @@ interface ConfigureApiClientOptions {
 interface ApiRequestOptions {
   withAuth?: boolean
   retryOnUnauthorized?: boolean
+  preferApiToken?: boolean
 }
 
 interface ApiErrorEnvelope {
@@ -98,15 +100,19 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, option
 
   const withAuth = options.withAuth ?? true
   const retryOnUnauthorized = options.retryOnUnauthorized ?? true
+  const preferApiToken = options.preferApiToken ?? true
   const headers = new Headers(init.headers)
+  let usedApiToken = false
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
   if (withAuth) {
-    const accessToken = getAccessToken()
-    if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`)
+    const apiSettings = preferApiToken ? loadAuthSettings() : { authMode: 'password' as const, apiToken: '' }
+    const token = apiSettings.authMode === 'api_token' && apiSettings.apiToken ? apiSettings.apiToken : getAccessToken()
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+      usedApiToken = apiSettings.authMode === 'api_token' && Boolean(apiSettings.apiToken)
     }
   }
 
@@ -122,7 +128,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, option
     headers,
   })
 
-  if (response.status === 401 && retryOnUnauthorized && onUnauthorized) {
+  if (response.status === 401 && retryOnUnauthorized && onUnauthorized && !usedApiToken) {
     const refreshed = await onUnauthorized()
     if (refreshed) {
       return apiRequest<T>(path, init, {

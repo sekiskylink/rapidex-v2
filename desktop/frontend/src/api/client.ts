@@ -204,6 +204,22 @@ export interface RuntimeConfigResponse {
   config: Record<string, unknown>
 }
 
+interface CreateAPITokenRequest {
+  name: string
+  expiresInSeconds?: number
+  permissions: string[]
+  moduleScope?: string
+}
+
+interface CreateAPITokenResponse {
+  id: number
+  name: string
+  prefix: string
+  token: string
+  expiresAt?: string | null
+  permissions: string[]
+}
+
 export interface ForgotPasswordRequest {
   identifier: string
   resetUrl?: string
@@ -363,7 +379,12 @@ export function createApiClient(deps: ApiClientDeps) {
     return refreshPromise
   }
 
-  async function authorizedRequest<T>(path: string, init: RequestInit = {}, allowRetry = true): Promise<T> {
+  async function authorizedRequest<T>(
+    path: string,
+    init: RequestInit = {},
+    allowRetry = true,
+    preferApiToken = true,
+  ): Promise<T> {
     const settings = await deps.getSettings()
     const baseUrl = normalizeBaseUrl(settings.apiBaseUrl)
     if (!baseUrl) {
@@ -374,13 +395,15 @@ export function createApiClient(deps: ApiClientDeps) {
       await refreshPromise
     }
 
+    const apiToken = preferApiToken && settings.authMode === 'api_token' ? settings.apiToken?.trim() ?? '' : ''
+    const useApiToken = Boolean(apiToken)
     const accessToken = getAccessToken()
     const expiresAt = getAccessTokenExpiresAt() ?? 0
-    if (accessToken && expiresAt > 0 && expiresAt <= Date.now()) {
+    if (!useApiToken && accessToken && expiresAt > 0 && expiresAt <= Date.now()) {
       await refreshSession(settings)
     }
 
-    const token = getAccessToken()
+    const token = useApiToken ? apiToken : getAccessToken()
     const headers = new Headers(init.headers)
     if (!headers.has('Content-Type') && init.body) {
       headers.set('Content-Type', 'application/json')
@@ -399,10 +422,10 @@ export function createApiClient(deps: ApiClientDeps) {
       throw error
     }
 
-    if (response.status === 401 && allowRetry) {
+    if (response.status === 401 && allowRetry && !useApiToken) {
       const refreshed = await refreshSession(settings)
       if (refreshed) {
-        return authorizedRequest<T>(path, init, false)
+        return authorizedRequest<T>(path, init, false, preferApiToken)
       }
       throw new ApiError(401, 'Session expired', 'AUTH_EXPIRED')
     }
@@ -457,7 +480,7 @@ export function createApiClient(deps: ApiClientDeps) {
     async me() {
       return authorizedRequest<MeResponse>('/api/v1/auth/me', {
         method: 'GET',
-      })
+      }, true, false)
     },
 
     async version() {
@@ -585,6 +608,13 @@ export function createApiClient(deps: ApiClientDeps) {
     async updateModuleEnablementSettings(payload: ModuleEnablementUpdateRequest) {
       return authorizedRequest<ModuleEnablementApiResponse>('/api/v1/settings/module-enablement', {
         method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+    },
+
+    async createApiToken(payload: CreateAPITokenRequest) {
+      return authorizedRequest<CreateAPITokenResponse>('/api/v1/admin/api-tokens', {
+        method: 'POST',
         body: JSON.stringify(payload),
       })
     },

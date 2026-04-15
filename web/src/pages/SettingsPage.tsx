@@ -10,6 +10,8 @@ import {
   FormControlLabel,
   MenuItem,
   Paper,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
   Switch,
@@ -21,7 +23,9 @@ import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
 import { appName } from '../lib/env'
 import { getApiBaseUrlOverride, setApiBaseUrlOverride } from '../lib/apiBaseUrl'
+import { loadAuthSettings, saveAuthSettings, type AuthMode } from '../lib/authSettings'
 import { useAppNotify } from '../notifications/facade'
+import { hasPermission } from '../rbac/permissions'
 import type { ModuleEffectiveConfig } from '../registry/moduleEnablement'
 import { moduleRegistry } from '../registry/modules'
 import { type UiThemeMode } from '../ui/preferences'
@@ -37,6 +41,15 @@ interface HealthResponse {
 
 interface RuntimeConfigResponse {
   config: Record<string, unknown>
+}
+
+interface CreateAPITokenResponse {
+  id: number
+  name: string
+  prefix: string
+  token: string
+  expiresAt?: string | null
+  permissions: string[]
 }
 
 type RuntimeConfigFormat = 'json' | 'yaml'
@@ -83,6 +96,13 @@ export function SettingsPage() {
   const [brandingSaving, setBrandingSaving] = React.useState(false)
   const [brandingPreviewBroken, setBrandingPreviewBroken] = React.useState(false)
   const [brandingErrorMessage, setBrandingErrorMessage] = React.useState('')
+  const [authMode, setAuthMode] = React.useState<AuthMode>(() => loadAuthSettings().authMode)
+  const [apiToken, setApiToken] = React.useState(() => loadAuthSettings().apiToken)
+  const [tokenName, setTokenName] = React.useState('Web API token')
+  const [createdApiToken, setCreatedApiToken] = React.useState('')
+  const [apiAccessSaving, setApiAccessSaving] = React.useState(false)
+  const [apiAccessError, setApiAccessError] = React.useState('')
+  const [apiTokenCreating, setApiTokenCreating] = React.useState(false)
   const [moduleEnablement, setModuleEnablement] = React.useState<ModuleEffectiveConfig[]>([])
   const [moduleEnablementLoading, setModuleEnablementLoading] = React.useState(true)
   const [moduleEnablementSaving, setModuleEnablementSaving] = React.useState(false)
@@ -123,6 +143,17 @@ export function SettingsPage() {
       canWriteBranding ||
       (auth.user?.permissions ?? []).some((permission) => permission.trim().toLowerCase() === 'settings.read'),
     [auth.user?.permissions, canWriteBranding],
+  )
+  const canManageApiTokens = React.useMemo(
+    () => hasPermission('api_tokens.write'),
+    [],
+  )
+  const currentPermissions = React.useMemo(
+    () =>
+      Array.from(
+        new Set((auth.user?.permissions ?? []).map((permission) => permission.trim()).filter((permission) => permission)),
+      ),
+    [auth.user?.permissions],
   )
   const runtimeConfigJson = React.useMemo(
     () => (runtimeConfig ? JSON.stringify(runtimeConfig, null, 2) : ''),
@@ -228,6 +259,19 @@ export function SettingsPage() {
     )
   }
 
+  const handleSaveApiAccess = () => {
+    setApiAccessSaving(true)
+    setApiAccessError('')
+    const saved = saveAuthSettings({
+      authMode,
+      apiToken: authMode === 'api_token' ? apiToken : '',
+    })
+    setAuthMode(saved.authMode)
+    setApiToken(saved.apiToken)
+    setApiAccessSaving(false)
+    notify.success('API access settings saved.')
+  }
+
   const handleTestConnection = async () => {
     setTestingConnection(true)
     try {
@@ -305,6 +349,53 @@ export function SettingsPage() {
       setModuleEnablementError(`${normalized.message}${requestId}`)
     } finally {
       setModuleEnablementSaving(false)
+    }
+  }
+
+  const handleCreateApiToken = async () => {
+    if (!canManageApiTokens || !tokenName.trim()) {
+      return
+    }
+
+    setApiTokenCreating(true)
+    setApiAccessError('')
+    try {
+      const token = await apiRequest<CreateAPITokenResponse>('/admin/api-tokens', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: tokenName.trim(),
+          permissions: currentPermissions,
+        }),
+      })
+      setCreatedApiToken(token.token)
+      const saved = saveAuthSettings({
+        authMode: 'api_token',
+        apiToken: token.token,
+      })
+      setAuthMode(saved.authMode)
+      setApiToken(saved.apiToken)
+      notify.success('API token created. Copy it now.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to create API token.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setApiAccessError(`${normalized.message}${requestId}`)
+    } finally {
+      setApiTokenCreating(false)
+    }
+  }
+
+  const handleCopyCreatedToken = async () => {
+    if (!createdApiToken.trim()) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(createdApiToken)
+      notify.success('API token copied.')
+    } catch {
+      notify.error('Unable to copy API token.')
     }
   }
 
@@ -672,6 +763,89 @@ export function SettingsPage() {
               {testingConnection ? 'Testing...' : 'Test Connection'}
             </Button>
           </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper elevation={1} sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2">
+            API Access
+          </Typography>
+          <Divider />
+          <Typography color="text.secondary">
+            Choose whether this browser profile uses the current session or a saved API token for backend requests.
+          </Typography>
+          <FormControl>
+            <RadioGroup
+              value={authMode}
+              onChange={(event) => setAuthMode(event.target.value as AuthMode)}
+            >
+              <FormControlLabel value="password" control={<Radio />} label="Username / Password" />
+              <FormControlLabel value="api_token" control={<Radio />} label="API Token" />
+            </RadioGroup>
+          </FormControl>
+          <TextField
+            label="API Token"
+            type="password"
+            value={apiToken}
+            onChange={(event) => setApiToken(event.target.value)}
+            helperText="Stored locally and used for backend API requests when API token mode is selected."
+            fullWidth
+          />
+          <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Button variant="contained" onClick={handleSaveApiAccess} disabled={apiAccessSaving}>
+              {apiAccessSaving ? 'Saving...' : 'Save API Access'}
+            </Button>
+          </Stack>
+          {canManageApiTokens ? (
+            <>
+              <Divider />
+              <Typography variant="subtitle2">Create API Token</Typography>
+              <Typography color="text.secondary">
+                Tokens inherit the current permissions and are shown once after creation.
+              </Typography>
+              <TextField
+                label="Token Name"
+                value={tokenName}
+                onChange={(event) => setTokenName(event.target.value)}
+                fullWidth
+              />
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button variant="contained" onClick={() => void handleCreateApiToken()} disabled={apiTokenCreating || !tokenName.trim()}>
+                  {apiTokenCreating ? 'Creating...' : 'Create Token'}
+                </Button>
+              </Stack>
+            </>
+          ) : (
+            <Alert severity="info">You need api_tokens.write permission to create API tokens here.</Alert>
+          )}
+          {apiAccessError ? <Alert severity="error">{apiAccessError}</Alert> : null}
+          {createdApiToken ? (
+            <Box
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 2,
+                p: 2,
+              }}
+            >
+              <Stack spacing={1.25}>
+                <Typography variant="subtitle2">Plaintext token</Typography>
+                <TextField
+                  value={createdApiToken}
+                  multiline
+                  minRows={2}
+                  InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                  fullWidth
+                />
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button variant="outlined" onClick={() => void handleCopyCreatedToken()}>
+                    Copy Token
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
+          ) : null}
         </Stack>
       </Paper>
 

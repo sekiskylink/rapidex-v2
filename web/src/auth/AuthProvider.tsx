@@ -105,12 +105,16 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
             method: 'POST',
             body: JSON.stringify({ refreshToken }),
           },
-          { withAuth: false, retryOnUnauthorized: false },
+          { withAuth: false, retryOnUnauthorized: false, preferApiToken: false },
         )
 
         applySession(tokens, getAuthSnapshot().user)
         let user: AuthUser | null = null
-        const bootstrap = await apiRequest<BootstrapPayload>('/bootstrap', { method: 'GET' }, { retryOnUnauthorized: false }).catch(() => null)
+        const bootstrap = await apiRequest<BootstrapPayload>(
+          '/bootstrap',
+          { method: 'GET' },
+          { retryOnUnauthorized: false, preferApiToken: false },
+        ).catch(() => null)
         if (bootstrap) {
           applyBootstrap(bootstrap, 'live')
           user = toAuthUserFromBootstrap(bootstrap)
@@ -118,7 +122,11 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
           hydrateBootstrapFromCache()
         }
         if (!user) {
-          const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' }, { retryOnUnauthorized: false })
+          const me = await apiRequest<MeResponse>(
+            '/auth/me',
+            { method: 'GET' },
+            { retryOnUnauthorized: false, preferApiToken: false },
+          )
           user = toAuthUser(me)
         }
         applySession(tokens, user)
@@ -166,20 +174,24 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
             password,
           }),
         },
-        { withAuth: false, retryOnUnauthorized: false },
+        { withAuth: false, retryOnUnauthorized: false, preferApiToken: false },
       )
 
       applySession(tokens, null)
 
       try {
         let user: AuthUser | null = null
-        const bootstrap = await apiRequest<BootstrapPayload>('/bootstrap', { method: 'GET' }, { retryOnUnauthorized: false }).catch(() => null)
+        const bootstrap = await apiRequest<BootstrapPayload>(
+          '/bootstrap',
+          { method: 'GET' },
+          { retryOnUnauthorized: false, preferApiToken: false },
+        ).catch(() => null)
         if (bootstrap) {
           applyBootstrap(bootstrap, 'live')
           user = toAuthUserFromBootstrap(bootstrap)
         }
         if (!user) {
-          const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' })
+          const me = await apiRequest<MeResponse>('/auth/me', { method: 'GET' }, { preferApiToken: false })
           user = toAuthUser(me)
         }
         setAuthSnapshot({

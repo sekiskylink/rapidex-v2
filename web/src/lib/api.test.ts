@@ -19,10 +19,12 @@ describe('apiRequest', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080/api/v1')
     vi.stubGlobal('fetch', vi.fn())
+    window.localStorage.clear()
     configureApiClient({})
   })
 
   afterEach(() => {
+    window.localStorage.clear()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -115,5 +117,21 @@ describe('apiRequest', () => {
     const requestInit = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit
     const headers = requestInit.headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer access-token')
+  })
+
+  it('prefers a saved API token when auth mode is api_token', async () => {
+    window.localStorage.setItem('basepro.web.auth_mode', 'api_token')
+    window.localStorage.setItem('basepro.web.api_token', 'saved-api-token')
+    configureApiClient({
+      getAccessToken: () => 'session-token',
+    })
+
+    vi.mocked(fetch).mockResolvedValueOnce(mockJsonResponse(200, { ok: true }))
+
+    await apiRequest<{ ok: boolean }>('/users/1')
+
+    const requestInit = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit
+    const headers = requestInit.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer saved-api-token')
   })
 })
