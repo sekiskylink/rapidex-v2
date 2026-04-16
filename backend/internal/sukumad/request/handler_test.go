@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"basepro/backend/internal/auth"
 	"github.com/gin-gonic/gin"
@@ -269,5 +270,75 @@ func TestHandlerCreateExternalReturnsUIDOnlyContract(t *testing.T) {
 	}
 	if payload["uid"] == "" || payload["destinationServerUid"] != "server-uid-3" {
 		t.Fatalf("unexpected external payload %+v", payload)
+	}
+}
+
+func TestHandlerSummaryExternalReturnsServerStatusCounts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := NewRepository().(*memoryRepository)
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+
+	repo.items[1] = Record{
+		ID:        1,
+		UID:       "req-1",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Targets: []TargetRecord{
+			{RequestID: 1, ServerID: 3, Status: TargetStatusPending, CreatedAt: now, UpdatedAt: now},
+			{RequestID: 1, ServerID: 4, Status: TargetStatusFailed, CreatedAt: now, UpdatedAt: now},
+		},
+	}
+	repo.items[2] = Record{
+		ID:        2,
+		UID:       "req-2",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Targets: []TargetRecord{
+			{RequestID: 2, ServerID: 3, Status: TargetStatusSucceeded, CreatedAt: now, UpdatedAt: now},
+			{RequestID: 2, ServerID: 3, Status: TargetStatusProcessing, CreatedAt: now, UpdatedAt: now},
+		},
+	}
+
+	handler := NewHandler(NewService(repo).
+		WithServerService(&fakeServerResolver{items: map[string]int64{"srv-primary": 3}}))
+	router := gin.New()
+	router.GET("/external/requests/summary", handler.SummaryExternal)
+
+	req := httptest.NewRequest(http.MethodGet, "/external/requests/summary?destinationServerUid=srv-primary&startDate=2026-04-01&endDate=2026-04-15", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var payload ExternalSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.DestinationServer.UID != "srv-primary" {
+		t.Fatalf("unexpected server payload %+v", payload.DestinationServer)
+	}
+	if payload.Summary.Total != 3 || payload.Summary.Pending != 1 || payload.Summary.Succeeded != 1 || payload.Summary.Processing != 1 {
+		t.Fatalf("unexpected summary %+v", payload.Summary)
+	}
+}
+
+func TestHandlerSummaryExternalRejectsInvalidDateRange(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewHandler(NewService(NewRepository()).
+		WithServerService(&fakeServerResolver{items: map[string]int64{"srv-primary": 3}}))
+	router := gin.New()
+	router.GET("/external/requests/summary", handler.SummaryExternal)
+
+	req := httptest.NewRequest(http.MethodGet, "/external/requests/summary?destinationServerUid=srv-primary&startDate=2026-04-15&endDate=2026-04-01", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("startDate")) && !bytes.Contains(w.Body.Bytes(), []byte("endDate")) {
+		t.Fatalf("expected validation details in body, got %s", w.Body.String())
 	}
 }

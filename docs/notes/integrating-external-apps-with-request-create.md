@@ -305,6 +305,41 @@ curl -sS \
   -H "X-API-Token: <token>"
 ```
 
+### Summary by destination server and period
+
+```bash
+curl -sS \
+  "http://127.0.0.1:8080/api/v1/external/requests/summary?destinationServerUid=srv-primary&startDate=2026-04-01&endDate=2026-04-15" \
+  -H "X-API-Token: <token>"
+```
+
+This endpoint returns a server-specific target-status summary for the requested UTC date window.
+
+Response shape:
+
+- `destinationServer`
+  - `uid`
+  - `code`
+  - `name`
+- `period`
+  - `startDate`
+  - `endDate`
+  - `timeBasis` = `createdAt`
+  - `timezone` = `UTC`
+- `summary`
+  - `total`
+  - `pending`
+  - `blocked`
+  - `processing`
+  - `succeeded`
+  - `failed`
+
+Notes:
+
+- counts are scoped to the requested destination server, not the multi-target request roll-up
+- the period is inclusive and uses `YYYY-MM-DD`
+- `succeeded` is the per-target terminal success state for destination delivery
+
 ## Example JavaScript
 
 ```js

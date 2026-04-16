@@ -104,6 +104,7 @@ func registerRequestRoutes(
 		middleware.RequireAuth(),
 	)
 	externalGroup.GET("/lookup", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.LookupExternal)
+	externalGroup.GET("/summary", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.SummaryExternal)
 	externalGroup.GET("/:uid", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.GetExternal)
 	externalGroup.POST("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsWrite), handler.CreateExternal)
 }

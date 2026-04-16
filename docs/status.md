@@ -3831,6 +3831,50 @@ Verification for this update:
 - Existing Vite build warnings about ignored `'use client'` directives and chunk-size thresholds remain unchanged.
 - The new external contract is intentionally parallel to the existing internal `/api/v1/requests` routes so current web and desktop request pages can continue using numeric-ID-backed internal APIs until a later parity decision is made.
 
+## Milestone: External Exchange Summary API
+
+### What changed
+- Added a new external request summary route at `GET /api/v1/external/requests/summary`.
+- The summary accepts:
+  - `destinationServerUid`
+  - `startDate`
+  - `endDate`
+- The response returns server identity, requested period metadata, and server-specific target status counts for:
+  - `total`
+  - `pending`
+  - `blocked`
+  - `processing`
+  - `succeeded`
+  - `failed`
+- Implemented the summary vertically across the backend request module in:
+  - [backend/internal/sukumad/request/types.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/types.go)
+  - [backend/internal/sukumad/request/handler.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/handler.go)
+  - [backend/internal/sukumad/request/service.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/service.go)
+  - [backend/internal/sukumad/request/repository.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/request/repository.go)
+- Registered the route ahead of `/:uid` in [backend/internal/sukumad/routes.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/routes.go) so `summary` is not treated as a request UID.
+- Extended the OpenAPI source spec in [api/openapi.yaml](/Users/sam/projects/go/sukumadpro/api/openapi.yaml) and regenerated [backend/internal/openapi/generated/openapi.gen.go](/Users/sam/projects/go/sukumadpro/backend/internal/openapi/generated/openapi.gen.go).
+- Added integration documentation for the new endpoint in [docs/notes/integrating-external-apps-with-request-create.md](/Users/sam/projects/go/sukumadpro/docs/notes/integrating-external-apps-with-request-create.md).
+- Saved the prompt traceability copy in `docs/prompts/2026-04-16-external-request-summary-api.md` (gitignored, not committed).
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `cd web && npm test`
+- `cd web && npm run build`
+- `cd desktop/frontend && npm test`
+- `cd desktop/frontend && npm run build`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && npm test`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop tests: PASS (`cd desktop/frontend && npm test`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+- OpenAPI generation: PASS (`make generate-openapi`)
+
+### Known follow-ups
+- `make check-openapi` is a dirty-tree drift check, so it reports the intentional generated diff until the updated OpenAPI artifacts are committed.
+- Existing frontend warnings about MUI anchor elements, ignored `'use client'` directives, and large Vite chunks remain unchanged by this milestone.
+
 ## Planned Milestone — Shared Administration UX + Parity (Upcoming)
 
 ### Planned scope

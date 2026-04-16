@@ -602,6 +602,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListEnvelope'
+  /external/requests/summary:
+    get:
+      tags: [Requests]
+      operationId: getExternalRequestSummary
+      summary: Get server-specific exchange summary counts for a date range
+      security:
+        - bearerAuth: []
+        - apiTokenAuth: []
+      parameters:
+        - name: destinationServerUid
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: External request summary response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalRequestSummaryResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /deliveries:
     get:
       tags: [Deliveries]
@@ -987,6 +1022,56 @@ components:
           type: object
           additionalProperties:
             type: boolean
+    ExternalRequestSummaryServer:
+      type: object
+      required: [uid, code, name]
+      properties:
+        uid:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+    ExternalRequestSummaryPeriod:
+      type: object
+      required: [startDate, endDate, timeBasis, timezone]
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        timeBasis:
+          type: string
+          example: createdAt
+        timezone:
+          type: string
+          example: UTC
+    ExternalRequestSummaryCounts:
+      type: object
+      required: [total, pending, blocked, processing, succeeded, failed]
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        blocked:
+          type: integer
+        processing:
+          type: integer
+        succeeded:
+          type: integer
+        failed:
+          type: integer
+    ExternalRequestSummaryResponse:
+      type: object
+      required: [destinationServer, period, summary]
+      properties:
+        destinationServer:
+          $ref: '#/components/schemas/ExternalRequestSummaryServer'
+        period:
+          $ref: '#/components/schemas/ExternalRequestSummaryPeriod'
+        summary:
+          $ref: '#/components/schemas/ExternalRequestSummaryCounts'
     ApiTokenCreateRequest:
       type: object
       additionalProperties: true

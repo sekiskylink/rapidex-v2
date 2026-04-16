@@ -19,6 +19,7 @@ type fakeRepo struct {
 	listByBatchFn               func(ctx context.Context, batchID string) ([]Record, error)
 	listByCorrelationFn         func(ctx context.Context, correlationID string) ([]Record, error)
 	getBySourceAndIdempotencyFn func(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
+	summaryFn                   func(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error)
 	createFn                    func(ctx context.Context, params CreateParams) (Record, error)
 	updateFn                    func(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
 	deleteFn                    func(ctx context.Context, id int64) error
@@ -58,6 +59,13 @@ func (f *fakeRepo) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context
 		return Record{}, sql.ErrNoRows
 	}
 	return f.getBySourceAndIdempotencyFn(ctx, sourceSystem, idempotencyKey)
+}
+
+func (f *fakeRepo) GetTargetStatusSummary(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {
+	if f.summaryFn == nil {
+		return TargetStatusSummary{}, nil
+	}
+	return f.summaryFn(ctx, query)
 }
 
 func (f *fakeRepo) CreateRequest(ctx context.Context, params CreateParams) (Record, error) {
@@ -479,6 +487,47 @@ func TestServiceCreateExternalRequestReturnsExistingByIdempotencyKey(t *testing.
 	}
 	if second.Record.UID != first.Record.UID {
 		t.Fatalf("expected same request uid on replay, got first=%s second=%s", first.Record.UID, second.Record.UID)
+	}
+}
+
+func TestServiceGetExternalSummaryReturnsServerScopedCounts(t *testing.T) {
+	service := NewService(&fakeRepo{
+		summaryFn: func(_ context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {
+			if query.ServerID != 3 {
+				t.Fatalf("expected server id 3, got %+v", query)
+			}
+			return TargetStatusSummary{
+				Total:      12,
+				Pending:    2,
+				Blocked:    1,
+				Processing: 3,
+				Succeeded:  5,
+				Failed:     1,
+			}, nil
+		},
+	}, audit.NewService(&fakeAuditRepo{})).
+		WithServerService(&fakeServerResolver{items: map[string]int64{"srv-primary": 3}})
+
+	startDate := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2026, 4, 15, 23, 59, 59, 0, time.UTC)
+	summary, err := service.GetExternalSummary(context.Background(), "srv-primary", startDate, endDate)
+	if err != nil {
+		t.Fatalf("get external summary: %v", err)
+	}
+	if summary.DestinationServer.UID != "srv-primary" || summary.Summary.Total != 12 {
+		t.Fatalf("unexpected summary payload %+v", summary)
+	}
+	if summary.Period.StartDate != "2026-04-01" || summary.Period.EndDate != "2026-04-15" {
+		t.Fatalf("unexpected period %+v", summary.Period)
+	}
+}
+
+func TestServiceGetExternalSummaryReturnsValidationForUnknownServer(t *testing.T) {
+	service := NewService(&fakeRepo{}, audit.NewService(&fakeAuditRepo{})).
+		WithServerService(&fakeServerResolver{items: map[string]int64{}})
+
+	if _, err := service.GetExternalSummary(context.Background(), "missing", time.Now().UTC(), time.Now().UTC()); err == nil {
+		t.Fatal("expected validation error")
 	}
 }
 

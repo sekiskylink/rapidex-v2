@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/auth"
@@ -265,6 +266,25 @@ func (h *Handler) LookupExternal(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": response, "totalCount": len(response)})
 }
 
+func (h *Handler) SummaryExternal(c *gin.Context) {
+	destinationServerUID := strings.TrimSpace(c.Query("destinationServerUid"))
+	startDate, endDate, details := parseExternalSummaryRange(c.Query("startDate"), c.Query("endDate"))
+	if destinationServerUID == "" {
+		details["destinationServerUid"] = []string{"is required"}
+	}
+	if len(details) > 0 {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", details))
+		return
+	}
+
+	summary, err := h.service.GetExternalSummary(c.Request.Context(), destinationServerUID, startDate, endDate)
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
 func (h *Handler) Delete(c *gin.Context) {
 	principal, ok := principalFromContext(c)
 	if !ok {
@@ -299,6 +319,30 @@ func actorUserID(principal auth.Principal) *int64 {
 		return nil
 	}
 	return &principal.UserID
+}
+
+func parseExternalSummaryRange(startValue, endValue string) (time.Time, time.Time, map[string]any) {
+	details := map[string]any{}
+
+	startDate, err := time.Parse(time.DateOnly, strings.TrimSpace(startValue))
+	if err != nil {
+		details["startDate"] = []string{"must be a valid date in YYYY-MM-DD format"}
+	}
+	endDate, err := time.Parse(time.DateOnly, strings.TrimSpace(endValue))
+	if err != nil {
+		details["endDate"] = []string{"must be a valid date in YYYY-MM-DD format"}
+	}
+	if len(details) > 0 {
+		return time.Time{}, time.Time{}, details
+	}
+
+	startDate = startDate.UTC()
+	endDate = endDate.UTC().Add(24*time.Hour - time.Nanosecond)
+	if endDate.Before(startDate) {
+		details["endDate"] = []string{"must be on or after startDate"}
+	}
+
+	return startDate, endDate, details
 }
 
 func isValidStatus(value string) bool {

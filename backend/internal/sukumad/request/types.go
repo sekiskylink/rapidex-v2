@@ -153,6 +153,7 @@ type Repository interface {
 	ListRequestsByBatchID(ctx context.Context, batchID string) ([]Record, error)
 	ListRequestsByCorrelationID(ctx context.Context, correlationID string) ([]Record, error)
 	GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
+	GetTargetStatusSummary(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error)
 	CreateRequest(ctx context.Context, params CreateParams) (Record, error)
 	UpdateRequestStatus(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
 	DeleteRequest(ctx context.Context, id int64) error
@@ -228,6 +229,21 @@ type UpdateTargetParams struct {
 	LastReleasedAt *time.Time
 }
 
+type TargetStatusSummaryQuery struct {
+	ServerID  int64
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+type TargetStatusSummary struct {
+	Total      int `json:"total"`
+	Pending    int `json:"pending"`
+	Blocked    int `json:"blocked"`
+	Processing int `json:"processing"`
+	Succeeded  int `json:"succeeded"`
+	Failed     int `json:"failed"`
+}
+
 type ExternalRecord struct {
 	UID                     string               `json:"uid"`
 	SourceSystem            string               `json:"sourceSystem"`
@@ -287,4 +303,23 @@ type ExternalDependency struct {
 	StatusReason          string     `json:"statusReason"`
 	DeferredUntil         *time.Time `json:"deferredUntil,omitempty"`
 	DestinationServerName string     `json:"destinationServerName"`
+}
+
+type ExternalSummary struct {
+	DestinationServer ExternalSummaryServer `json:"destinationServer"`
+	Period            ExternalSummaryPeriod `json:"period"`
+	Summary           TargetStatusSummary   `json:"summary"`
+}
+
+type ExternalSummaryServer struct {
+	UID  string `json:"uid"`
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+type ExternalSummaryPeriod struct {
+	StartDate string `json:"startDate"`
+	EndDate   string `json:"endDate"`
+	TimeBasis string `json:"timeBasis"`
+	Timezone  string `json:"timezone"`
 }

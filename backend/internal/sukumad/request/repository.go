@@ -226,6 +226,26 @@ func (r *SQLRepository) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Co
 	return r.getRequestByWhere(ctx, "r.source_system = $1 AND r.idempotency_key = $2", strings.TrimSpace(sourceSystem), strings.TrimSpace(idempotencyKey))
 }
 
+func (r *SQLRepository) GetTargetStatusSummary(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {
+	var summary TargetStatusSummary
+	if err := r.db.GetContext(ctx, &summary, `
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE t.status = 'pending') AS pending,
+			COUNT(*) FILTER (WHERE t.status = 'blocked') AS blocked,
+			COUNT(*) FILTER (WHERE t.status = 'processing') AS processing,
+			COUNT(*) FILTER (WHERE t.status = 'succeeded') AS succeeded,
+			COUNT(*) FILTER (WHERE t.status = 'failed') AS failed
+		FROM request_targets t
+		WHERE t.server_id = $1
+		  AND t.created_at >= $2
+		  AND t.created_at <= $3
+	`, query.ServerID, query.StartTime.UTC(), query.EndTime.UTC()); err != nil {
+		return TargetStatusSummary{}, fmt.Errorf("get target status summary: %w", err)
+	}
+	return summary, nil
+}
+
 func (r *SQLRepository) getRequestByWhere(ctx context.Context, whereClause string, args ...any) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
@@ -835,6 +855,40 @@ func (r *memoryRepository) GetRequestBySourceSystemAndIdempotencyKey(_ context.C
 		}
 	}
 	return Record{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) GetTargetStatusSummary(_ context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	startTime := query.StartTime.UTC()
+	endTime := query.EndTime.UTC()
+	summary := TargetStatusSummary{}
+	for _, item := range r.items {
+		for _, target := range item.Targets {
+			if target.ServerID != query.ServerID {
+				continue
+			}
+			createdAt := target.CreatedAt.UTC()
+			if createdAt.Before(startTime) || createdAt.After(endTime) {
+				continue
+			}
+			summary.Total++
+			switch target.Status {
+			case TargetStatusPending:
+				summary.Pending++
+			case TargetStatusBlocked:
+				summary.Blocked++
+			case TargetStatusProcessing:
+				summary.Processing++
+			case TargetStatusSucceeded:
+				summary.Succeeded++
+			case TargetStatusFailed:
+				summary.Failed++
+			}
+		}
+	}
+	return summary, nil
 }
 
 func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams) (Record, error) {

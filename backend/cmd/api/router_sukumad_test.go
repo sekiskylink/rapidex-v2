@@ -504,6 +504,32 @@ func TestExternalServerListRouteRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestExternalRequestSummaryRouteUsesSummaryHandlerPath(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, err := jwt.GenerateAccessToken(11, "summary-reader", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("generate access token: %v", err)
+	}
+
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(map[int64][]string{
+		11: {rbac.PermissionRequestsRead},
+	}))
+	deps.RequestHandler = requests.NewHandler(requests.NewService(requests.NewRepository()))
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/external/requests/summary", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 from summary handler validation, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("destinationServerUid")) {
+		t.Fatalf("expected summary validation details, got %s", w.Body.String())
+	}
+}
+
 func TestRequestRoutesCreateListAndGet(t *testing.T) {
 	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
 	token, _, _ := jwt.GenerateAccessToken(95, "request-writer", time.Now().UTC())

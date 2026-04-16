@@ -109,6 +109,44 @@ func (s *Service) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context,
 	return record, nil
 }
 
+func (s *Service) GetExternalSummary(ctx context.Context, destinationServerUID string, startDate, endDate time.Time) (ExternalSummary, error) {
+	if s.serverSvc == nil {
+		return ExternalSummary{}, fmt.Errorf("request service requires server service for external summary")
+	}
+
+	serverRecord, err := s.serverSvc.GetServerByUID(ctx, strings.TrimSpace(destinationServerUID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ExternalSummary{}, apperror.ValidationWithDetails("validation failed", map[string]any{"destinationServerUid": []string{"server not found"}})
+		}
+		return ExternalSummary{}, err
+	}
+
+	summary, err := s.repo.GetTargetStatusSummary(ctx, TargetStatusSummaryQuery{
+		ServerID:  serverRecord.ID,
+		StartTime: startDate.UTC(),
+		EndTime:   endDate.UTC(),
+	})
+	if err != nil {
+		return ExternalSummary{}, err
+	}
+
+	return ExternalSummary{
+		DestinationServer: ExternalSummaryServer{
+			UID:  serverRecord.UID,
+			Code: serverRecord.Code,
+			Name: serverRecord.Name,
+		},
+		Period: ExternalSummaryPeriod{
+			StartDate: startDate.UTC().Format(time.DateOnly),
+			EndDate:   endDate.UTC().Format(time.DateOnly),
+			TimeBasis: "createdAt",
+			Timezone:  "UTC",
+		},
+		Summary: summary,
+	}, nil
+}
+
 func (s *Service) CreateRequest(ctx context.Context, input CreateInput) (Record, error) {
 	normalized, details := normalizeCreateInput(input)
 	if len(details) > 0 {

@@ -188,6 +188,46 @@ func TestSQLRepositoryListRequestsSearchesConfiguredMetadataColumns(t *testing.T
 	}
 }
 
+func TestSQLRepositoryGetTargetStatusSummary(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
+	startTime := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2026, 4, 15, 23, 59, 59, 0, time.UTC)
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE t.status = 'pending') AS pending,
+			COUNT(*) FILTER (WHERE t.status = 'blocked') AS blocked,
+			COUNT(*) FILTER (WHERE t.status = 'processing') AS processing,
+			COUNT(*) FILTER (WHERE t.status = 'succeeded') AS succeeded,
+			COUNT(*) FILTER (WHERE t.status = 'failed') AS failed
+		FROM request_targets t
+		WHERE t.server_id = $1
+		  AND t.created_at >= $2
+		  AND t.created_at <= $3
+	`)).
+		WithArgs(int64(3), startTime, endTime).
+		WillReturnRows(sqlmock.NewRows([]string{"total", "pending", "blocked", "processing", "succeeded", "failed"}).AddRow(7, 1, 2, 1, 2, 1))
+
+	summary, err := repo.GetTargetStatusSummary(context.Background(), TargetStatusSummaryQuery{
+		ServerID:  3,
+		StartTime: startTime,
+		EndTime:   endTime,
+	})
+	if err != nil {
+		t.Fatalf("get target status summary: %v", err)
+	}
+	if summary.Total != 7 || summary.Blocked != 2 || summary.Succeeded != 2 {
+		t.Fatalf("unexpected summary %+v", summary)
+	}
+}
+
 func TestSQLRepositoryGetRequestByIDNotFound(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	if err != nil {
