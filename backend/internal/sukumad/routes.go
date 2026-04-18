@@ -10,6 +10,7 @@ import (
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
+	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +21,7 @@ type RouteDeps struct {
 	ModuleFlagsProvider  func() map[string]bool
 	ServerHandler        *server.Handler
 	RequestHandler       *requests.Handler
+	SchedulerHandler     *scheduler.Handler
 	DeliveryHandler      *delivery.Handler
 	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
@@ -30,6 +32,7 @@ type RouteDeps struct {
 func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerServerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ServerHandler)
 	registerRequestRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.RequestHandler, deps.ObservabilityHandler)
+	registerSchedulerRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.SchedulerHandler)
 	registerDeliveryRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.DeliveryHandler, deps.ObservabilityHandler)
 	registerAsyncRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.AsyncHandler, deps.ObservabilityHandler)
 	registerObservabilityRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ObservabilityHandler)
@@ -161,6 +164,35 @@ func registerDeliveryRoutes(
 		group.GET("/:id/events", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), observabilityHandler.ListDeliveryEvents)
 	}
 	group.POST("/:id/retry", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesWrite), handler.Retry)
+}
+
+func registerSchedulerRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *scheduler.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("/scheduler")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "scheduler"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("/jobs", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerRead), handler.ListJobs)
+	group.POST("/jobs", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.CreateJob)
+	group.GET("/jobs/:id", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerRead), handler.GetJob)
+	group.PUT("/jobs/:id", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.UpdateJob)
+	group.POST("/jobs/:id/enable", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.EnableJob)
+	group.POST("/jobs/:id/disable", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.DisableJob)
+	group.POST("/jobs/:id/run-now", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.RunNow)
+	group.GET("/jobs/:id/runs", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerRead), handler.ListRuns)
+	group.GET("/runs/:id", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerRead), handler.GetRun)
 }
 
 func registerObservabilityRoutes(

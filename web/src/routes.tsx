@@ -24,6 +24,9 @@ import { PermissionsPage } from './pages/PermissionsPage'
 import { DeliveriesPage } from './pages/DeliveriesPage'
 import { JobsPage } from './pages/JobsPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { SchedulerJobFormPage } from './pages/SchedulerJobFormPage'
+import { SchedulerJobsPage } from './pages/SchedulerJobsPage'
+import { SchedulerJobRunsPage } from './pages/SchedulerJobRunsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { RolesPage } from './pages/RolesPage'
 import { RouteErrorPage } from './pages/RouteErrorPage'
@@ -34,6 +37,7 @@ import {
   normalizeRequestsRouteSearch,
   normalizeDeliveriesRouteSearch,
   normalizeJobsRouteSearch,
+  normalizeSchedulerRouteSearch,
   normalizeObservabilityRouteSearch,
 } from './pages/listRouteSearch'
 import { getModuleLabelForPath } from './registry/moduleEnablement'
@@ -257,6 +261,68 @@ const jobsRoute = createRoute({
   },
 })
 
+const schedulerRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeSchedulerRouteSearch(search),
+  component: () => {
+    const state = getRouteAccessState('/scheduler', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SchedulerJobsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const schedulerCreateRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler/new',
+  component: () => {
+    const state = getRouteAccessState('/scheduler', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SchedulerJobFormPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const schedulerEditRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler/$jobId',
+  component: () => {
+    const state = getRouteAccessState('/scheduler', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SchedulerJobFormPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const schedulerRunsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler/$jobId/runs',
+  component: () => {
+    const state = getRouteAccessState('/scheduler', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SchedulerJobRunsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
 const observabilityRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/observability',
@@ -304,6 +370,10 @@ const routeTree = rootRoute.addChildren([
     requestsRoute,
     deliveriesRoute,
     jobsRoute,
+    schedulerRoute,
+    schedulerCreateRoute,
+    schedulerEditRoute,
+    schedulerRunsRoute,
     observabilityRoute,
     documentationRoute,
     settingsRoute,

@@ -1,0 +1,555 @@
+package scheduler
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"basepro/backend/internal/apperror"
+	"basepro/backend/internal/audit"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+var schedulerCodePattern = regexp.MustCompile(`^[a-z0-9._-]+$`)
+
+type Service struct {
+	repo         Repository
+	auditService *audit.Service
+	clock        func() time.Time
+}
+
+func NewService(repository Repository, auditService ...*audit.Service) *Service {
+	var auditSvc *audit.Service
+	if len(auditService) > 0 {
+		auditSvc = auditService[0]
+	}
+	return &Service{
+		repo:         repository,
+		auditService: auditSvc,
+		clock: func() time.Time {
+			return time.Now().UTC()
+		},
+	}
+}
+
+func (s *Service) WithClock(clock func() time.Time) *Service {
+	if clock != nil {
+		s.clock = clock
+	}
+	return s
+}
+
+func (s *Service) ListScheduledJobs(ctx context.Context, query ListQuery) (ListResult, error) {
+	return s.repo.ListScheduledJobs(ctx, query)
+}
+
+func (s *Service) GetScheduledJob(ctx context.Context, id int64) (Record, error) {
+	record, err := s.repo.GetScheduledJobByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"scheduled job not found"}})
+		}
+		return Record{}, err
+	}
+	return record, nil
+}
+
+func (s *Service) CreateScheduledJob(ctx context.Context, input CreateInput) (Record, error) {
+	normalized, nextRunAt, details := s.normalizeInput(input)
+	if len(details) > 0 {
+		return Record{}, apperror.ValidationWithDetails("validation failed", details)
+	}
+
+	created, err := s.repo.CreateScheduledJob(ctx, CreateParams{
+		UID:                 newUID(),
+		Code:                normalized.Code,
+		Name:                normalized.Name,
+		Description:         normalized.Description,
+		JobCategory:         normalized.JobCategory,
+		JobType:             normalized.JobType,
+		ScheduleType:        normalized.ScheduleType,
+		ScheduleExpr:        normalized.ScheduleExpr,
+		Timezone:            normalized.Timezone,
+		Enabled:             normalized.Enabled,
+		AllowConcurrentRuns: normalized.AllowConcurrentRuns,
+		Config:              normalized.Config,
+		NextRunAt:           nextRunAt,
+	})
+	if err != nil {
+		if mapped := mapConstraintError(err); mapped != nil {
+			return Record{}, mapped
+		}
+		return Record{}, err
+	}
+
+	s.logAudit(ctx, audit.Event{
+		Action:      "scheduler.job.created",
+		ActorUserID: input.ActorID,
+		EntityType:  "scheduled_job",
+		EntityID:    strPtr(fmt.Sprintf("%d", created.ID)),
+		Metadata: map[string]any{
+			"code":         created.Code,
+			"name":         created.Name,
+			"jobCategory":  created.JobCategory,
+			"jobType":      created.JobType,
+			"scheduleType": created.ScheduleType,
+			"enabled":      created.Enabled,
+		},
+	})
+
+	return created, nil
+}
+
+func (s *Service) UpdateScheduledJob(ctx context.Context, input UpdateInput) (Record, error) {
+	if _, err := s.GetScheduledJob(ctx, input.ID); err != nil {
+		return Record{}, err
+	}
+
+	normalized, nextRunAt, details := s.normalizeInput(CreateInput{
+		Code:                input.Code,
+		Name:                input.Name,
+		Description:         input.Description,
+		JobCategory:         input.JobCategory,
+		JobType:             input.JobType,
+		ScheduleType:        input.ScheduleType,
+		ScheduleExpr:        input.ScheduleExpr,
+		Timezone:            input.Timezone,
+		Enabled:             input.Enabled,
+		AllowConcurrentRuns: input.AllowConcurrentRuns,
+		Config:              input.Config,
+	})
+	if len(details) > 0 {
+		return Record{}, apperror.ValidationWithDetails("validation failed", details)
+	}
+
+	updated, err := s.repo.UpdateScheduledJob(ctx, UpdateParams{
+		ID:                  input.ID,
+		Code:                normalized.Code,
+		Name:                normalized.Name,
+		Description:         normalized.Description,
+		JobCategory:         normalized.JobCategory,
+		JobType:             normalized.JobType,
+		ScheduleType:        normalized.ScheduleType,
+		ScheduleExpr:        normalized.ScheduleExpr,
+		Timezone:            normalized.Timezone,
+		Enabled:             normalized.Enabled,
+		AllowConcurrentRuns: normalized.AllowConcurrentRuns,
+		Config:              normalized.Config,
+		NextRunAt:           nextRunAt,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"scheduled job not found"}})
+		}
+		if mapped := mapConstraintError(err); mapped != nil {
+			return Record{}, mapped
+		}
+		return Record{}, err
+	}
+
+	s.logAudit(ctx, audit.Event{
+		Action:      "scheduler.job.updated",
+		ActorUserID: input.ActorID,
+		EntityType:  "scheduled_job",
+		EntityID:    strPtr(fmt.Sprintf("%d", updated.ID)),
+		Metadata: map[string]any{
+			"code":         updated.Code,
+			"name":         updated.Name,
+			"jobCategory":  updated.JobCategory,
+			"jobType":      updated.JobType,
+			"scheduleType": updated.ScheduleType,
+			"enabled":      updated.Enabled,
+		},
+	})
+
+	return updated, nil
+}
+
+func (s *Service) SetScheduledJobEnabled(ctx context.Context, actorID *int64, id int64, enabled bool) (Record, error) {
+	existing, err := s.GetScheduledJob(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+
+	var nextRunAt *time.Time
+	if enabled {
+		if nextRunAt, err = s.CalculateNextRun(existing.ScheduleType, existing.ScheduleExpr, existing.Timezone, s.clock()); err != nil {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"scheduleExpr": []string{err.Error()}})
+		}
+	}
+
+	record, err := s.repo.SetScheduledJobEnabled(ctx, SetEnabledParams{
+		ID:        id,
+		Enabled:   enabled,
+		NextRunAt: nextRunAt,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"scheduled job not found"}})
+		}
+		return Record{}, err
+	}
+
+	action := "scheduler.job.disabled"
+	if enabled {
+		action = "scheduler.job.enabled"
+	}
+	s.logAudit(ctx, audit.Event{
+		Action:      action,
+		ActorUserID: actorID,
+		EntityType:  "scheduled_job",
+		EntityID:    strPtr(fmt.Sprintf("%d", record.ID)),
+		Metadata: map[string]any{
+			"code":    record.Code,
+			"enabled": record.Enabled,
+		},
+	})
+
+	return record, nil
+}
+
+func (s *Service) RunNow(ctx context.Context, actorID *int64, id int64) (RunRecord, error) {
+	job, err := s.GetScheduledJob(ctx, id)
+	if err != nil {
+		return RunRecord{}, err
+	}
+
+	now := s.clock()
+	record, err := s.repo.CreateJobRun(ctx, CreateRunParams{
+		UID:            newUID(),
+		ScheduledJobID: job.ID,
+		TriggerMode:    TriggerModeManual,
+		ScheduledFor:   now,
+		Status:         RunStatusPending,
+		ResultSummary: map[string]any{
+			"message": "Manual run queued by scheduler API",
+		},
+	})
+	if err != nil {
+		return RunRecord{}, err
+	}
+
+	s.logAudit(ctx, audit.Event{
+		Action:      "scheduler.job.run_now",
+		ActorUserID: actorID,
+		EntityType:  "scheduled_job",
+		EntityID:    strPtr(fmt.Sprintf("%d", job.ID)),
+		Metadata: map[string]any{
+			"code":      job.Code,
+			"runId":     record.ID,
+			"runUid":    record.UID,
+			"trigger":   record.TriggerMode,
+			"scheduled": record.ScheduledFor,
+		},
+	})
+
+	return record, nil
+}
+
+func (s *Service) ListJobRuns(ctx context.Context, jobID int64, query RunListQuery) (RunListResult, error) {
+	if _, err := s.GetScheduledJob(ctx, jobID); err != nil {
+		return RunListResult{}, err
+	}
+	return s.repo.ListJobRuns(ctx, jobID, query)
+}
+
+func (s *Service) GetRun(ctx context.Context, id int64) (RunRecord, error) {
+	record, err := s.repo.GetRunByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return RunRecord{}, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"scheduled job run not found"}})
+		}
+		return RunRecord{}, err
+	}
+	return record, nil
+}
+
+func (s *Service) CalculateNextRun(scheduleType string, scheduleExpr string, timezone string, reference time.Time) (*time.Time, error) {
+	location, err := time.LoadLocation(strings.TrimSpace(timezone))
+	if err != nil {
+		return nil, fmt.Errorf("timezone must be valid")
+	}
+
+	switch strings.ToLower(strings.TrimSpace(scheduleType)) {
+	case ScheduleTypeInterval:
+		duration, err := parseIntervalExpr(scheduleExpr)
+		if err != nil {
+			return nil, err
+		}
+		next := reference.In(location).Add(duration)
+		nextUTC := next.UTC()
+		return &nextUTC, nil
+	case ScheduleTypeCron:
+		next, err := nextCronTime(scheduleExpr, reference.In(location))
+		if err != nil {
+			return nil, err
+		}
+		nextUTC := next.UTC()
+		return &nextUTC, nil
+	default:
+		return nil, fmt.Errorf("scheduleType must be one of cron or interval")
+	}
+}
+
+func (s *Service) normalizeInput(input CreateInput) (CreateInput, *time.Time, map[string]any) {
+	normalized := CreateInput{
+		Code:                strings.ToLower(strings.TrimSpace(input.Code)),
+		Name:                strings.TrimSpace(input.Name),
+		Description:         strings.TrimSpace(input.Description),
+		JobCategory:         strings.ToLower(strings.TrimSpace(input.JobCategory)),
+		JobType:             strings.TrimSpace(input.JobType),
+		ScheduleType:        strings.ToLower(strings.TrimSpace(input.ScheduleType)),
+		ScheduleExpr:        strings.TrimSpace(input.ScheduleExpr),
+		Timezone:            strings.TrimSpace(input.Timezone),
+		Enabled:             input.Enabled,
+		AllowConcurrentRuns: input.AllowConcurrentRuns,
+		Config:              cloneJSONMap(input.Config),
+	}
+	if normalized.Timezone == "" {
+		normalized.Timezone = "UTC"
+	}
+
+	details := map[string]any{}
+	if normalized.Code == "" {
+		details["code"] = []string{"is required"}
+	} else if !schedulerCodePattern.MatchString(normalized.Code) {
+		details["code"] = []string{"must contain only lowercase letters, numbers, dots, underscores, or hyphens"}
+	}
+	if normalized.Name == "" {
+		details["name"] = []string{"is required"}
+	}
+	if normalized.JobCategory != JobCategoryIntegration && normalized.JobCategory != JobCategoryMaintenance {
+		details["jobCategory"] = []string{"must be one of integration or maintenance"}
+	}
+	if normalized.JobType == "" {
+		details["jobType"] = []string{"is required"}
+	}
+	if normalized.ScheduleType != ScheduleTypeCron && normalized.ScheduleType != ScheduleTypeInterval {
+		details["scheduleType"] = []string{"must be one of cron or interval"}
+	}
+	if normalized.ScheduleExpr == "" {
+		details["scheduleExpr"] = []string{"is required"}
+	}
+	if _, err := time.LoadLocation(normalized.Timezone); err != nil {
+		details["timezone"] = []string{"must be a valid IANA timezone"}
+	}
+
+	var nextRunAt *time.Time
+	if len(details) == 0 {
+		next, err := s.CalculateNextRun(normalized.ScheduleType, normalized.ScheduleExpr, normalized.Timezone, s.clock())
+		if err != nil {
+			details["scheduleExpr"] = []string{err.Error()}
+		} else if normalized.Enabled {
+			nextRunAt = next
+		}
+	}
+
+	return normalized, nextRunAt, details
+}
+
+func parseIntervalExpr(expr string) (time.Duration, error) {
+	value := strings.ToLower(strings.TrimSpace(expr))
+	if value == "" {
+		return 0, fmt.Errorf("interval expression is required")
+	}
+	if duration, err := time.ParseDuration(value); err == nil {
+		if duration <= 0 {
+			return 0, fmt.Errorf("interval must be greater than zero")
+		}
+		return duration, nil
+	}
+
+	if strings.HasPrefix(value, "every ") {
+		value = strings.TrimSpace(strings.TrimPrefix(value, "every "))
+	}
+	parts := strings.Fields(value)
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("interval must use a Go duration like 15m or a simple form like '5 minutes'")
+	}
+
+	amount, err := strconv.Atoi(parts[0])
+	if err != nil || amount <= 0 {
+		return 0, fmt.Errorf("interval amount must be a positive integer")
+	}
+
+	unit := strings.TrimSuffix(parts[1], "s")
+	switch unit {
+	case "second":
+		return time.Duration(amount) * time.Second, nil
+	case "minute":
+		return time.Duration(amount) * time.Minute, nil
+	case "hour":
+		return time.Duration(amount) * time.Hour, nil
+	case "day":
+		return time.Duration(amount) * 24 * time.Hour, nil
+	default:
+		return 0, fmt.Errorf("interval unit must be seconds, minutes, hours, or days")
+	}
+}
+
+type cronField struct {
+	allowed map[int]struct{}
+}
+
+func newCronField() cronField {
+	return cronField{allowed: make(map[int]struct{})}
+}
+
+func (f cronField) matches(value int) bool {
+	_, ok := f.allowed[value]
+	return ok
+}
+
+func nextCronTime(expr string, reference time.Time) (time.Time, error) {
+	fields := strings.Fields(strings.TrimSpace(expr))
+	if len(fields) != 5 {
+		return time.Time{}, fmt.Errorf("cron must have 5 fields: minute hour day month weekday")
+	}
+
+	minutes, err := parseCronField(fields[0], 0, 59)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid minute field")
+	}
+	hours, err := parseCronField(fields[1], 0, 23)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid hour field")
+	}
+	days, err := parseCronField(fields[2], 1, 31)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid day field")
+	}
+	months, err := parseCronField(fields[3], 1, 12)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid month field")
+	}
+	weekdays, err := parseCronField(fields[4], 0, 6)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid weekday field")
+	}
+
+	candidate := reference.Truncate(time.Minute).Add(time.Minute)
+	limit := candidate.Add(366 * 24 * time.Hour)
+	for !candidate.After(limit) {
+		if minutes.matches(candidate.Minute()) &&
+			hours.matches(candidate.Hour()) &&
+			days.matches(candidate.Day()) &&
+			months.matches(int(candidate.Month())) &&
+			weekdays.matches(int(candidate.Weekday())) {
+			return candidate, nil
+		}
+		candidate = candidate.Add(time.Minute)
+	}
+	return time.Time{}, fmt.Errorf("unable to resolve next cron run within one year")
+}
+
+func parseCronField(expr string, min int, max int) (cronField, error) {
+	field := newCronField()
+	for _, part := range strings.Split(strings.TrimSpace(expr), ",") {
+		if err := addCronPart(field.allowed, strings.TrimSpace(part), min, max); err != nil {
+			return cronField{}, err
+		}
+	}
+	if len(field.allowed) == 0 {
+		return cronField{}, fmt.Errorf("empty field")
+	}
+	return field, nil
+}
+
+func addCronPart(target map[int]struct{}, expr string, min int, max int) error {
+	if expr == "" {
+		return fmt.Errorf("empty part")
+	}
+	if expr == "*" {
+		for value := min; value <= max; value++ {
+			target[value] = struct{}{}
+		}
+		return nil
+	}
+
+	step := 1
+	base := expr
+	if strings.Contains(expr, "/") {
+		parts := strings.Split(expr, "/")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid step")
+		}
+		base = parts[0]
+		stepValue, err := strconv.Atoi(parts[1])
+		if err != nil || stepValue <= 0 {
+			return fmt.Errorf("invalid step")
+		}
+		step = stepValue
+	}
+
+	rangeStart := min
+	rangeEnd := max
+	switch {
+	case base == "*" || base == "":
+	case strings.Contains(base, "-"):
+		parts := strings.Split(base, "-")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid range")
+		}
+		start, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return err
+		}
+		end, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return err
+		}
+		rangeStart = start
+		rangeEnd = end
+	default:
+		value, err := strconv.Atoi(base)
+		if err != nil {
+			return err
+		}
+		rangeStart = value
+		rangeEnd = value
+	}
+
+	if rangeStart < min || rangeEnd > max || rangeStart > rangeEnd {
+		return fmt.Errorf("out of range")
+	}
+	for value := rangeStart; value <= rangeEnd; value += step {
+		target[value] = struct{}{}
+	}
+	return nil
+}
+
+func (s *Service) logAudit(ctx context.Context, event audit.Event) {
+	if s.auditService == nil {
+		return
+	}
+	_ = s.auditService.Log(ctx, event)
+}
+
+func mapConstraintError(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return nil
+	}
+
+	if pgErr.Code != "23505" {
+		return nil
+	}
+
+	switch pgErr.ConstraintName {
+	case "scheduled_jobs_code_key":
+		return apperror.ValidationWithDetails("validation failed", map[string]any{"code": []string{"must be unique"}})
+	case "scheduled_jobs_uid_key", "scheduled_job_runs_uid_key":
+		return apperror.ValidationWithDetails("validation failed", map[string]any{"uid": []string{"must be unique"}})
+	default:
+		return apperror.ValidationWithDetails("validation failed", map[string]any{"record": []string{"must be unique"}})
+	}
+}
+
+func strPtr(value string) *string {
+	return &value
+}

@@ -16,6 +16,7 @@ export type NavigationIconKey =
   | 'requests'
   | 'deliveries'
   | 'jobs'
+  | 'scheduler'
   | 'observability'
   | 'documentation'
 export type NavigationGroupKey = 'dashboard' | 'administration' | 'sukumad' | 'settings'
@@ -128,6 +129,14 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
         path: '/jobs',
         group: 'sukumad',
         requiredPermissions: ['jobs.read', 'jobs.write'],
+      },
+      {
+        id: 'scheduler',
+        label: 'Scheduler',
+        icon: 'scheduler',
+        path: '/scheduler',
+        group: 'sukumad',
+        requiredPermissions: ['scheduler.read', 'scheduler.write'],
       },
       {
         id: 'observability',

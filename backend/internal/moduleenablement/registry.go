@@ -100,6 +100,14 @@ var registry = []Definition{
 		AdminControl:     AdminControlRuntime,
 	},
 	{
+		ModuleID:         "scheduler",
+		FlagKey:          "modules.scheduler.enabled",
+		EnabledByDefault: true,
+		Description:      "Sukumad scheduler surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlRuntime,
+	},
+	{
 		ModuleID:         "observability",
 		FlagKey:          "modules.observability.enabled",
 		EnabledByDefault: true,

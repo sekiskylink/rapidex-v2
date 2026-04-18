@@ -155,6 +155,10 @@ documentation:
       title: "Sukumad Workers Async"
       path: "sukumad-workers-async.md"
       order: 230
+    - slug: "scheduler-architecture"
+      title: "Scheduler Architecture"
+      path: "scheduler-architecture.md"
+      order: 240
 
 sukumad:
   requests:

@@ -95,6 +95,17 @@ export const moduleRegistry = [
     },
   },
   {
+    id: 'scheduler',
+    label: 'Scheduler',
+    navGroup: 'sukumad',
+    basePath: '/scheduler',
+    permissions: ['scheduler.read', 'scheduler.write'],
+    navItems: ['scheduler'],
+    metadata: {
+      description: 'Sukumad scheduler management surfaces.',
+    },
+  },
+  {
     id: 'observability',
     label: 'Observability',
     navGroup: 'sukumad',

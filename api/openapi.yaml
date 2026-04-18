@@ -22,6 +22,7 @@ tags:
   - name: Requests
   - name: Deliveries
   - name: Jobs
+  - name: Scheduler
   - name: Observability
 paths:
   /health:
@@ -761,6 +762,156 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListEnvelope'
+  /scheduler/jobs:
+    get:
+      tags: [Scheduler]
+      operationId: listScheduledJobs
+      summary: List scheduled jobs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Scheduled job list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+    post:
+      tags: [Scheduler]
+      operationId: createScheduledJob
+      summary: Create a scheduled job
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledJobUpsertRequest'
+      responses:
+        '201':
+          description: Scheduled job created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /scheduler/jobs/{id}:
+    get:
+      tags: [Scheduler]
+      operationId: getScheduledJob
+      summary: Get a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Scheduled job details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+    put:
+      tags: [Scheduler]
+      operationId: updateScheduledJob
+      summary: Update a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledJobUpsertRequest'
+      responses:
+        '200':
+          description: Scheduled job updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /scheduler/jobs/{id}/enable:
+    post:
+      tags: [Scheduler]
+      operationId: enableScheduledJob
+      summary: Enable a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Scheduled job enabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /scheduler/jobs/{id}/disable:
+    post:
+      tags: [Scheduler]
+      operationId: disableScheduledJob
+      summary: Disable a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Scheduled job disabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /scheduler/jobs/{id}/run-now:
+    post:
+      tags: [Scheduler]
+      operationId: runScheduledJobNow
+      summary: Queue a manual run for a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '201':
+          description: Scheduled job run queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
+  /scheduler/jobs/{id}/runs:
+    get:
+      tags: [Scheduler]
+      operationId: listScheduledJobRuns
+      summary: List runs for a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Scheduled job run list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEnvelope'
+  /scheduler/runs/{id}:
+    get:
+      tags: [Scheduler]
+      operationId: getScheduledJobRun
+      summary: Get a scheduled job run
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Scheduled job run details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObjectResponse'
   /observability/workers:
     get:
       tags: [Observability]
@@ -1085,6 +1236,42 @@ components:
         expiresAt:
           type: string
           format: date-time
+    ScheduledJobUpsertRequest:
+      type: object
+      required:
+        - code
+        - name
+        - jobCategory
+        - jobType
+        - scheduleType
+        - scheduleExpr
+        - timezone
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        jobCategory:
+          type: string
+          enum: [integration, maintenance]
+        jobType:
+          type: string
+        scheduleType:
+          type: string
+          enum: [cron, interval]
+        scheduleExpr:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        allowConcurrentRuns:
+          type: boolean
+        config:
+          type: object
+          additionalProperties: true
     PaginationMeta:
       type: object
       additionalProperties: true

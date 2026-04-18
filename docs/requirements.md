@@ -997,4 +997,75 @@ This example is representative only; implementation may add fields but must keep
   - web/frontend route/smoke tests passing
   - `docs/status.md` updated with verification and parity notes
 
+---
+
+## 18. Upcoming Milestone — Scheduler Vertical Slice
+
+This milestone introduces the first Scheduler slice for SukumadPro and must be implemented vertically across backend, web, and desktop.
+
+### 18.1 V1 Scope
+- Support scheduled integration jobs.
+- Support maintenance jobs.
+- Store scheduled job definitions and scheduled job run history in the backend.
+- Expose versioned API endpoints for create, update, list, get, enable/disable, run-now, and run-history retrieval.
+- Add matching Scheduler navigation and placeholder-but-working management pages in both web and desktop clients.
+
+### 18.2 V1 Non-Goals
+- retries
+- async polling
+- delivery-window scheduling
+- arbitrary scripts
+- DAG dependencies
+
+### 18.3 Scheduled Job Model
+- Scheduled jobs must include:
+  - identity and metadata (`id`, `uid`, `code`, `name`, `description`)
+  - job classification (`job_category`, `job_type`)
+  - schedule definition (`schedule_type`, `schedule_expr`, `timezone`)
+  - execution controls (`enabled`, `allow_concurrent_runs`)
+  - JSON configuration payload (`config`)
+  - runtime summary fields (`last_run_at`, `next_run_at`, `last_success_at`, `last_failure_at`)
+  - audit timestamps (`created_at`, `updated_at`)
+
+### 18.4 Scheduled Job Run Model
+- Scheduled job runs must include:
+  - identity and linkage (`id`, `uid`, `scheduled_job_id`)
+  - trigger metadata (`trigger_mode`, `scheduled_for`)
+  - execution timestamps (`started_at`, `finished_at`)
+  - lifecycle status (`pending`, `running`, `succeeded`, `failed`, `cancelled`, `skipped`)
+  - optional worker linkage (`worker_id`)
+  - failure and summary payloads (`error_message`, `result_summary`)
+  - audit timestamps (`created_at`, `updated_at`)
+
+### 18.5 Schedule Engine Rules
+- Scheduler v1 must validate schedule definitions at write time.
+- Supported schedule types:
+  - `cron`
+  - `interval`
+- Next-run calculation must use the declared timezone and compute the next future due time only.
+- Missed-run policy for v1:
+  - do not replay all missed executions
+  - compute only the next future due time from the current reference time
+
+### 18.6 Authorization and Navigation
+- Scheduler endpoints must integrate with platform authentication, RBAC, and audit logging.
+- Scheduler navigation must be added to the existing Sukumad navigation group in both web and desktop clients.
+- Scheduler route visibility must respect scheduler permissions client-side, while backend authorization remains authoritative.
+
+### 18.7 Required Client Surfaces
+- Both web and desktop must include:
+  - Scheduled Jobs list
+  - Create/Edit Scheduled Job form shell
+  - Job Runs history shell
+- These pages must load data from the shared Gin API and reuse existing admin shell/layout patterns.
+
+### 18.8 Required Tests for Milestone Completion
+- Backend tests must cover:
+  - migration shape for scheduler tables
+  - schedule validation and next-run calculation
+  - repository and API route coverage for scheduler endpoints
+- Web and desktop tests must cover:
+  - scheduler route/page smoke coverage
+  - API-backed scheduler list/form interactions at a basic level
+
 # END (Authoritative)

@@ -34,6 +34,7 @@ import (
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
+	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
 	"basepro/backend/internal/users"
@@ -160,6 +161,7 @@ func run() error {
 	})
 	sukumadDHIS2Service := dhis2.NewService(nil, outboundLimiter)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
+	sukumadSchedulerService := scheduler.NewService(scheduler.NewRepository(database), auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
 		WithRequestStatusUpdater(sukumadRequestService).
@@ -279,6 +281,7 @@ func run() error {
 			APITokenAllowBearer:  cfg.Auth.APITokenAllowBearer,
 			ServerHandler:        server.NewHandler(sukumadServerService),
 			RequestHandler:       requests.NewHandler(sukumadRequestService),
+			SchedulerHandler:     scheduler.NewHandler(sukumadSchedulerService),
 			DeliveryHandler:      delivery.NewHandler(sukumadDeliveryService),
 			AsyncHandler:         asyncjobs.NewHandler(sukumadAsyncService),
 			ObservabilityHandler: observability.NewHandler(sukumadObservabilityService),

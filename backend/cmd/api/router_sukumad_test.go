@@ -22,6 +22,7 @@ import (
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
+	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
 	"golang.org/x/net/websocket"
@@ -36,6 +37,7 @@ func newSukumadTestAppDeps(jwt *auth.JWTManager, rbacService *rbac.Service) AppD
 		RBACService:          rbacService,
 		ServerHandler:        server.NewHandler(server.NewService(server.NewRepository())),
 		RequestHandler:       requests.NewHandler(requests.NewService(requests.NewRepository())),
+		SchedulerHandler:     scheduler.NewHandler(scheduler.NewService(scheduler.NewRepository())),
 		DeliveryHandler:      delivery.NewHandler(delivery.NewService(delivery.NewRepository())),
 		AsyncHandler:         asyncjobs.NewHandler(asyncService),
 		ObservabilityHandler: observability.NewHandler(observability.NewService(observability.NewRepository(nil, workerService, rateLimitService))),
@@ -908,5 +910,79 @@ func TestServerRoutesReturnValidationErrors(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 validation error, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestSchedulerRoutesRequireSchedulerPermissions(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(211, "scheduler-reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		211: {rbac.PermissionRequestsRead},
+	})
+
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/scheduler/jobs?page=1&pageSize=25", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for missing scheduler.read permission, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestSchedulerRoutesListCreateAndRunNow(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(212, "scheduler-admin", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		212: {rbac.PermissionSchedulerRead, rbac.PermissionSchedulerWrite},
+	})
+
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/scheduler/jobs", bytes.NewBufferString(`{
+		"code":"nightly-sync",
+		"name":"Nightly Sync",
+		"description":"Nightly integration sync",
+		"jobCategory":"integration",
+		"jobType":"dhis2.sync",
+		"scheduleType":"interval",
+		"scheduleExpr":"15m",
+		"timezone":"UTC",
+		"enabled":true,
+		"allowConcurrentRuns":false,
+		"config":{"serverCode":"dhis2"}
+	}`))
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createReq.Header.Set("Content-Type", "application/json")
+	createW := httptest.NewRecorder()
+	router.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("expected 201 create, got %d body=%s", createW.Code, createW.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/scheduler/jobs?page=1&pageSize=25", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listW := httptest.NewRecorder()
+	router.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200 list, got %d body=%s", listW.Code, listW.Body.String())
+	}
+
+	runReq := httptest.NewRequest(http.MethodPost, "/api/v1/scheduler/jobs/1/run-now", nil)
+	runReq.Header.Set("Authorization", "Bearer "+token)
+	runW := httptest.NewRecorder()
+	router.ServeHTTP(runW, runReq)
+	if runW.Code != http.StatusCreated {
+		t.Fatalf("expected 201 run-now, got %d body=%s", runW.Code, runW.Body.String())
+	}
+
+	runsReq := httptest.NewRequest(http.MethodGet, "/api/v1/scheduler/jobs/1/runs?page=1&pageSize=25", nil)
+	runsReq.Header.Set("Authorization", "Bearer "+token)
+	runsW := httptest.NewRecorder()
+	router.ServeHTTP(runsW, runsReq)
+	if runsW.Code != http.StatusOK {
+		t.Fatalf("expected 200 runs list, got %d body=%s", runsW.Code, runsW.Body.String())
 	}
 }

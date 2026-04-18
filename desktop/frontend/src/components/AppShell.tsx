@@ -31,6 +31,7 @@ import DnsRoundedIcon from '@mui/icons-material/DnsRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded'
+import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded'
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
 import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
@@ -100,6 +101,7 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
+      pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
       pathname.startsWith('/documentation'),
   )
@@ -130,6 +132,7 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
+      pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
       pathname.startsWith('/documentation')
     ) {
@@ -149,6 +152,7 @@ export function AppShell() {
     requests: <ReceiptLongRoundedIcon fontSize="small" />,
     deliveries: <LocalShippingRoundedIcon fontSize="small" />,
     jobs: <WorkOutlineRoundedIcon fontSize="small" />,
+    scheduler: <ScheduleRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
     documentation: <ArticleRoundedIcon fontSize="small" />,
   }

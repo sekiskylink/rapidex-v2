@@ -406,6 +406,45 @@ describe('web auth routes', () => {
     expect(screen.getByRole('button', { name: 'Jobs' })).toBeInTheDocument()
   })
 
+  it('renders Sukumad scheduler route and navigation when permission is granted', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 141,
+        username: 'scheduler-operator',
+        roles: ['Staff'],
+        permissions: ['scheduler.read'],
+      },
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/scheduler/jobs?')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/scheduler')
+
+    expect(await screen.findByRole('heading', { name: 'Scheduler', level: 1 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Scheduler' })).toBeInTheDocument()
+  })
+
   it('renders Sukumad observability route and navigation when permission is granted', async () => {
     setAuthSnapshot({
       isAuthenticated: true,

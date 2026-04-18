@@ -15,6 +15,11 @@ export interface JobsRouteSearch {
   status?: string
 }
 
+export interface SchedulerRouteSearch {
+  q?: string
+  category?: string
+}
+
 export interface ObservabilityRouteSearch {
   eventType?: string
   level?: string
@@ -56,6 +61,13 @@ export function normalizeJobsRouteSearch(search: Record<string, unknown>): JobsR
   return {
     q: toOptional(readString(search, 'q')),
     status: toOptional(readString(search, 'status')),
+  }
+}
+
+export function normalizeSchedulerRouteSearch(search: Record<string, unknown>): SchedulerRouteSearch {
+  return {
+    q: toOptional(readString(search, 'q')),
+    category: toOptional(readString(search, 'category')),
   }
 }
 

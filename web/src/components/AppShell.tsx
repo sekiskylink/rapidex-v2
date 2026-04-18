@@ -93,6 +93,7 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
+      pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
       pathname.startsWith('/documentation'),
   )
@@ -131,6 +132,7 @@ export function AppShell() {
       pathname.startsWith('/requests') ||
       pathname.startsWith('/deliveries') ||
       pathname.startsWith('/jobs') ||
+      pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
       pathname.startsWith('/documentation')
     ) {
@@ -157,6 +159,7 @@ export function AppShell() {
     requests: <BadgeRoundedIcon fontSize="small" />,
     deliveries: <EventAvailableRoundedIcon fontSize="small" />,
     jobs: <AdminPanelSettingsRoundedIcon fontSize="small" />,
+    scheduler: <EventAvailableRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
     documentation: <FactCheckRoundedIcon fontSize="small" />,
   }

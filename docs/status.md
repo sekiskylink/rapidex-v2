@@ -1,5 +1,43 @@
 # Status
 
+## Milestone — Scheduler Vertical Slice (Complete)
+
+### What changed
+- Added the first Sukumad scheduler vertical slice across backend, web, and desktop for scheduled integration jobs and maintenance jobs.
+- Extended [docs/requirements.md](/Users/sam/projects/go/sukumadpro/docs/requirements.md) with the scheduler v1 scope and non-goals, and added architecture notes in [docs/notes/scheduler-architecture.md](/Users/sam/projects/go/sukumadpro/docs/notes/scheduler-architecture.md).
+- Added scheduler persistence with migration `000025_create_scheduler_tables` for `scheduled_jobs` and `scheduled_job_runs`.
+- Added the new Sukumad scheduler module under [backend/internal/sukumad/scheduler](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/scheduler) following the standard handler/service/repository/types layering, including schedule validation and next-run calculation for `cron` and `interval` schedules.
+- Added versioned scheduler API endpoints, wired them into the existing OpenAPI flow, and enforced the new `scheduler.read` and `scheduler.write` permissions through the existing RBAC and module-enablement registries.
+- Added Scheduler navigation and working placeholder pages in both web and desktop for scheduled-jobs listing, create/edit form shell, and run-history shell, all loading from the new backend APIs through the existing authenticated app shell.
+- Saved prompt traceability copy in `docs/prompts/2026-04-18-scheduler-vertical-slice.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added migration coverage for scheduler tables
+  - added scheduler service validation and next-run calculation tests
+  - added repository coverage for scheduled jobs and scheduled job runs
+  - added scheduler handler/API coverage and router permission coverage
+- Web:
+  - added scheduler page smoke coverage
+  - updated registry and route smoke coverage for scheduler navigation and routes
+- Desktop:
+  - added matching scheduler page smoke coverage
+  - updated registry and route smoke coverage for scheduler navigation and routes
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/scheduler ./internal/rbac ./internal/moduleenablement`)
+- Backend API focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run 'TestModulesEffectiveEndpointReturnsResolvedModuleFlags|TestSchedulerRoutes'`)
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx src/routes.test.tsx src/registry/registry.test.ts`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx src/routes.test.tsx src/registry/registry.test.ts`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Scheduler v1 computes only the next future due time and does not replay missed executions.
+- Retries, async polling integration, delivery-window scheduling, arbitrary scripts, and DAG dependencies remain out of scope for this slice.
+- Existing non-blocking frontend build warnings remain from third-party `'use client'` bundling and Vite chunk-size output.
+
 ## Milestone — API Token Settings UI (Complete)
 
 ### What changed

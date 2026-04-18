@@ -131,6 +131,22 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     moduleEnablementId: 'jobs',
   },
   {
+    key: 'scheduler.read',
+    label: 'Scheduler: Read',
+    description: 'View Sukumad scheduled jobs and run histories.',
+    module: 'scheduler',
+    category: 'Sukumad',
+    moduleEnablementId: 'scheduler',
+  },
+  {
+    key: 'scheduler.write',
+    label: 'Scheduler: Write',
+    description: 'Create, update, and trigger Sukumad scheduled jobs.',
+    module: 'scheduler',
+    category: 'Sukumad',
+    moduleEnablementId: 'scheduler',
+  },
+  {
     key: 'observability.read',
     label: 'Observability: Read',
     description: 'View Sukumad observability dashboards and traces.',

@@ -81,6 +81,13 @@ export const moduleEnablementRegistry = [
     scope: 'full-stack',
   },
   {
+    moduleId: 'scheduler',
+    flagKey: 'modules.scheduler.enabled',
+    enabledByDefault: true,
+    description: 'Sukumad scheduler surfaces.',
+    scope: 'full-stack',
+  },
+  {
     moduleId: 'observability',
     flagKey: 'modules.observability.enabled',
     enabledByDefault: true,

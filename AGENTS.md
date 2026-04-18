@@ -362,6 +362,39 @@ At the completion of each milestone the agent must:
 - maintain architecture notes under `docs/notes/`
 - save the prompt used for the milestone under `docs/prompts/` (not committed)
 
+# 11.1 Planning Documents
+
+- Active implementation plans must be kept under:
+
+  docs/plans/
+
+- These are **working documents** used for:
+  - feature breakdowns
+  - task sequencing
+  - Codex session execution guidance
+
+- Files in `docs/plans/` are **not the source of truth**.
+
+- Canonical sources remain:
+  - `AGENTS.md` → execution rules and constraints
+  - `docs/requirements.md` → system behavior and scope
+  - `docs/status.md` → progress tracking
+  - `docs/notes/` → durable technical decisions
+
+- The agent may read `docs/plans/` for guidance, but:
+  - If there is any conflict, `AGENTS.md` and `docs/requirements.md` take precedence.
+
+- Plan files are **temporary by default**:
+  - Do not commit them unless they provide long-term value.
+  - Ensure `.gitignore` includes:
+    - `docs/plans/`
+
+- After completing a milestone:
+  - Promote any durable insights from `docs/plans/` into:
+    - `docs/notes/`
+    - `docs/status.md`
+    - or `docs/requirements.md` if requirements changed
+
 ---
 
 # 12. Milestone Completion Criteria

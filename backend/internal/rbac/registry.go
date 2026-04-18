@@ -16,6 +16,8 @@ const (
 	PermissionDeliveriesWrite   = "deliveries.write"
 	PermissionJobsRead          = "jobs.read"
 	PermissionJobsWrite         = "jobs.write"
+	PermissionSchedulerRead     = "scheduler.read"
+	PermissionSchedulerWrite    = "scheduler.write"
 	PermissionObservabilityRead = "observability.read"
 )
 
@@ -144,6 +146,20 @@ func BasePermissionRegistry() []PermissionDefinition {
 			Category:    "Sukumad",
 		},
 		{
+			Key:         PermissionSchedulerRead,
+			Label:       "Scheduler: Read",
+			Description: "View Sukumad scheduled jobs and run histories.",
+			Module:      "scheduler",
+			Category:    "Sukumad",
+		},
+		{
+			Key:         PermissionSchedulerWrite,
+			Label:       "Scheduler: Write",
+			Description: "Create, update, and trigger Sukumad scheduled jobs.",
+			Module:      "scheduler",
+			Category:    "Sukumad",
+		},
+		{
 			Key:         PermissionObservabilityRead,
 			Label:       "Observability: Read",
 			Description: "View Sukumad operational observability surfaces.",
@@ -231,6 +247,17 @@ func BaseModuleRegistry() []ModuleDefinition {
 			NavItems: []string{"jobs"},
 		},
 		{
+			ID:       "scheduler",
+			Label:    "Scheduler",
+			NavGroup: "sukumad",
+			BasePath: "/scheduler",
+			Permissions: []string{
+				PermissionSchedulerRead,
+				PermissionSchedulerWrite,
+			},
+			NavItems: []string{"scheduler"},
+		},
+		{
 			ID:       "observability",
 			Label:    "Observability",
 			NavGroup: "sukumad",
@@ -265,6 +292,8 @@ func ModuleIDForPermission(permission string) (string, bool) {
 		return "deliveries", true
 	case PermissionJobsRead, PermissionJobsWrite:
 		return "jobs", true
+	case PermissionSchedulerRead, PermissionSchedulerWrite:
+		return "scheduler", true
 	case PermissionObservabilityRead:
 		return "observability", true
 	default:

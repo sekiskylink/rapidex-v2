@@ -24,6 +24,7 @@ describe('desktop registries', () => {
       'requests',
       'deliveries',
       'jobs',
+      'scheduler',
       'observability',
       'documentation',
     ])
@@ -44,6 +45,7 @@ describe('desktop registries', () => {
         'requests.read',
         'deliveries.read',
         'jobs.read',
+        'scheduler.read',
         'observability.read',
       ]),
     )
@@ -59,6 +61,7 @@ describe('desktop registries', () => {
       'requests',
       'deliveries',
       'jobs',
+      'scheduler',
       'observability',
       'documentation',
     ])
@@ -75,7 +78,7 @@ describe('desktop registries', () => {
     const admin = authenticatedNavigationRegistry.find((item) => item.id === 'administration')
     expect(admin?.children?.map((item) => item.id)).toEqual(['users', 'roles', 'permissions', 'audit', 'settings'])
     const sukumad = authenticatedNavigationRegistry.find((item) => item.id === 'sukumad')
-    expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'observability', 'documentation'])
+    expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'scheduler', 'observability', 'documentation'])
   })
 
   it('enforces navigation access from required permissions', () => {
@@ -92,6 +95,7 @@ describe('desktop registries', () => {
     const serversReader = principalWith(['servers.read'], ['Staff'])
     expect(canAccessNavigationPath(serversReader, '/servers')).toBe(true)
     expect(canAccessNavigationPath(serversReader, '/observability')).toBe(false)
+    expect(canAccessNavigationPath(serversReader, '/scheduler')).toBe(false)
     expect(canAccessNavigationPath(serversReader, '/documentation')).toBe(true)
   })
 

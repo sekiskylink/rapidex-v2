@@ -25,6 +25,9 @@ import { PermissionsPage } from './pages/PermissionsPage'
 import { DeliveriesPage } from './pages/DeliveriesPage'
 import { JobsPage } from './pages/JobsPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { SchedulerJobFormPage } from './pages/SchedulerJobFormPage'
+import { SchedulerJobsPage } from './pages/SchedulerJobsPage'
+import { SchedulerJobRunsPage } from './pages/SchedulerJobRunsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { RolesPage } from './pages/RolesPage'
 import { ServersPage } from './pages/ServersPage'
@@ -35,6 +38,7 @@ import {
   normalizeRequestsRouteSearch,
   normalizeDeliveriesRouteSearch,
   normalizeJobsRouteSearch,
+  normalizeSchedulerRouteSearch,
   normalizeObservabilityRouteSearch,
 } from './pages/listRouteSearch'
 import { settingsStore } from './settings/store'
@@ -396,6 +400,42 @@ function JobsRoutePage() {
   return <ForbiddenPage />
 }
 
+function SchedulerRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/scheduler')
+  if (accessState === 'allowed') {
+    return <SchedulerJobsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function SchedulerFormRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/scheduler')
+  if (accessState === 'allowed') {
+    return <SchedulerJobFormPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function SchedulerRunsRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/scheduler')
+  if (accessState === 'allowed') {
+    return <SchedulerJobRunsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/scheduler') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
 function ObservabilityRoutePage() {
   const principal = useSessionPrincipal()
   const accessState = getRouteAccessState(principal, '/observability')
@@ -522,6 +562,32 @@ const jobsRoute = createRoute({
   component: JobsRoutePage,
 })
 
+const schedulerRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeSchedulerRouteSearch(search),
+  component: SchedulerRoutePage,
+})
+
+const schedulerCreateRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler/new',
+  component: SchedulerFormRoutePage,
+})
+
+const schedulerEditRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler/$jobId',
+  component: SchedulerFormRoutePage,
+})
+
+const schedulerRunsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/scheduler/$jobId/runs',
+  component: SchedulerRunsRoutePage,
+})
+
 const observabilityRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/observability',
@@ -553,6 +619,10 @@ const routeTree = rootRoute.addChildren([
     requestsRoute,
     deliveriesRoute,
     jobsRoute,
+    schedulerRoute,
+    schedulerCreateRoute,
+    schedulerEditRoute,
+    schedulerRunsRoute,
     observabilityRoute,
     documentationRoute,
   ]),

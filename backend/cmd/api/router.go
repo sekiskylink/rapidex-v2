@@ -20,6 +20,7 @@ import (
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
+	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/users"
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,7 @@ type AppDeps struct {
 	APITokenAllowBearer  bool
 	ServerHandler        *server.Handler
 	RequestHandler       *requests.Handler
+	SchedulerHandler     *scheduler.Handler
 	DeliveryHandler      *delivery.Handler
 	AsyncHandler         *asyncjobs.Handler
 	ObservabilityHandler *observability.Handler
@@ -203,6 +205,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		ModuleFlagsProvider:  deps.ModuleFlagsProvider,
 		ServerHandler:        deps.ServerHandler,
 		RequestHandler:       deps.RequestHandler,
+		SchedulerHandler:     deps.SchedulerHandler,
 		DeliveryHandler:      deps.DeliveryHandler,
 		AsyncHandler:         deps.AsyncHandler,
 		ObservabilityHandler: deps.ObservabilityHandler,
