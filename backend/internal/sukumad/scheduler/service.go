@@ -21,6 +21,7 @@ type Service struct {
 	repo         Repository
 	auditService *audit.Service
 	clock        func() time.Time
+	registry     *HandlerRegistry
 }
 
 func NewService(repository Repository, auditService ...*audit.Service) *Service {
@@ -31,6 +32,7 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 	return &Service{
 		repo:         repository,
 		auditService: auditSvc,
+		registry:     NewDefaultHandlerRegistry(),
 		clock: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -40,6 +42,13 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 func (s *Service) WithClock(clock func() time.Time) *Service {
 	if clock != nil {
 		s.clock = clock
+	}
+	return s
+}
+
+func (s *Service) WithRegistry(registry *HandlerRegistry) *Service {
+	if registry != nil {
+		s.registry = registry
 	}
 	return s
 }
@@ -218,6 +227,17 @@ func (s *Service) RunNow(ctx context.Context, actorID *int64, id int64) (RunReco
 	if err != nil {
 		return RunRecord{}, err
 	}
+	if !job.AllowConcurrentRuns {
+		active, err := s.repo.HasActiveJobRuns(ctx, job.ID)
+		if err != nil {
+			return RunRecord{}, err
+		}
+		if active {
+			return RunRecord{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"id": []string{"scheduled job already has an active run"},
+			})
+		}
+	}
 
 	now := s.clock()
 	record, err := s.repo.CreateJobRun(ctx, CreateRunParams{
@@ -269,6 +289,125 @@ func (s *Service) GetRun(ctx context.Context, id int64) (RunRecord, error) {
 	return record, nil
 }
 
+func (s *Service) DispatchDueJobs(ctx context.Context, limit int) (DispatchCycleResult, error) {
+	if limit <= 0 {
+		limit = 1
+	}
+	now := s.clock()
+	jobs, err := s.repo.ListDueScheduledJobs(ctx, now, limit)
+	if err != nil {
+		return DispatchCycleResult{}, err
+	}
+
+	result := DispatchCycleResult{
+		CreatedRuns: make([]RunRecord, 0, len(jobs)),
+		SkippedJobs: make([]int64, 0),
+	}
+	for _, job := range jobs {
+		scheduledFor := now
+		if job.NextRunAt != nil {
+			scheduledFor = job.NextRunAt.UTC()
+		}
+		nextRunAt, err := s.CalculateNextFutureRun(job.ScheduleType, job.ScheduleExpr, job.Timezone, scheduledFor, now)
+		if err != nil {
+			return result, err
+		}
+		run, dispatched, err := s.repo.DispatchScheduledJob(ctx, DispatchJobParams{
+			JobID:        job.ID,
+			RunUID:       newUID(),
+			ScheduledFor: scheduledFor,
+			NextRunAt:    nextRunAt,
+			TriggerMode:  TriggerModeScheduled,
+			ResultSummary: map[string]any{
+				"message": "Scheduled run queued by dispatcher",
+			},
+		})
+		if err != nil {
+			return result, err
+		}
+		if !dispatched {
+			result.SkippedJobs = append(result.SkippedJobs, job.ID)
+			continue
+		}
+		result.CreatedRuns = append(result.CreatedRuns, run)
+	}
+	return result, nil
+}
+
+func (s *Service) RunPendingSchedulerRuns(ctx context.Context, workerID int64, batchSize int) error {
+	if batchSize <= 0 {
+		batchSize = 1
+	}
+	for index := 0; index < batchSize; index++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		run, err := s.repo.ClaimNextPendingRun(ctx, s.clock(), workerID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		job, err := s.repo.GetScheduledJobByID(ctx, run.ScheduledJobID)
+		if err != nil {
+			return s.finishRun(ctx, run.ID, RunStatusFailed, map[string]any{"message": "failed to load scheduled job"}, err)
+		}
+
+		handler := s.registry.Lookup(job.JobType)
+		if handler == nil {
+			err := fmt.Errorf("unknown scheduler job type %q", job.JobType)
+			if finishErr := s.finishRun(ctx, run.ID, RunStatusFailed, map[string]any{"jobType": job.JobType}, err); finishErr != nil {
+				return finishErr
+			}
+			continue
+		}
+
+		exec := JobExecution{Job: job, Run: run, Now: s.clock()}
+		result, handlerErr := handler.Execute(ctx, exec)
+		if handlerErr != nil {
+			if errors.Is(handlerErr, context.Canceled) && ctx.Err() != nil {
+				if finishErr := s.finishRun(ctx, run.ID, RunStatusCancelled, map[string]any{"jobType": job.JobType}, handlerErr); finishErr != nil {
+					return finishErr
+				}
+				return ctx.Err()
+			}
+			if finishErr := s.finishRun(ctx, run.ID, RunStatusFailed, result.ResultSummary, handlerErr); finishErr != nil {
+				return finishErr
+			}
+			continue
+		}
+		status := result.Status
+		if status == "" {
+			status = RunStatusSucceeded
+		}
+		if finishErr := s.finishRun(ctx, run.ID, status, result.ResultSummary, nil); finishErr != nil {
+			return finishErr
+		}
+	}
+	return nil
+}
+
+func (s *Service) finishRun(ctx context.Context, runID int64, status string, summary map[string]any, runErr error) error {
+	finishedAt := s.clock()
+	params := FinalizeRunParams{
+		RunID:         runID,
+		Status:        status,
+		FinishedAt:    finishedAt,
+		ErrorMessage:  errorString(runErr),
+		ResultSummary: cloneJSONMap(summary),
+		LastRunAt:     finishedAt,
+	}
+	switch status {
+	case RunStatusSucceeded:
+		params.LastSuccessAt = &finishedAt
+	case RunStatusFailed, RunStatusCancelled:
+		params.LastFailureAt = &finishedAt
+	}
+	_, err := s.repo.FinalizeJobRun(ctx, params)
+	return err
+}
+
 func (s *Service) CalculateNextRun(scheduleType string, scheduleExpr string, timezone string, reference time.Time) (*time.Time, error) {
 	location, err := time.LoadLocation(strings.TrimSpace(timezone))
 	if err != nil {
@@ -288,6 +427,44 @@ func (s *Service) CalculateNextRun(scheduleType string, scheduleExpr string, tim
 		next, err := nextCronTime(scheduleExpr, reference.In(location))
 		if err != nil {
 			return nil, err
+		}
+		nextUTC := next.UTC()
+		return &nextUTC, nil
+	default:
+		return nil, fmt.Errorf("scheduleType must be one of cron or interval")
+	}
+}
+
+func (s *Service) CalculateNextFutureRun(scheduleType string, scheduleExpr string, timezone string, anchor time.Time, after time.Time) (*time.Time, error) {
+	location, err := time.LoadLocation(strings.TrimSpace(timezone))
+	if err != nil {
+		return nil, fmt.Errorf("timezone must be valid")
+	}
+	anchorLocal := anchor.In(location)
+	afterLocal := after.In(location)
+
+	switch strings.ToLower(strings.TrimSpace(scheduleType)) {
+	case ScheduleTypeInterval:
+		duration, err := parseIntervalExpr(scheduleExpr)
+		if err != nil {
+			return nil, err
+		}
+		next := anchorLocal.Add(duration)
+		for !next.After(afterLocal) {
+			next = next.Add(duration)
+		}
+		nextUTC := next.UTC()
+		return &nextUTC, nil
+	case ScheduleTypeCron:
+		next, err := nextCronTime(scheduleExpr, anchorLocal)
+		if err != nil {
+			return nil, err
+		}
+		for !next.After(afterLocal) {
+			next, err = nextCronTime(scheduleExpr, next)
+			if err != nil {
+				return nil, err
+			}
 		}
 		nextUTC := next.UTC()
 		return &nextUTC, nil
@@ -552,4 +729,11 @@ func mapConstraintError(err error) error {
 
 func strPtr(value string) *string {
 	return &value
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

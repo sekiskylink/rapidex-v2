@@ -775,7 +775,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListEnvelope'
+                $ref: '#/components/schemas/ScheduledJobListResponse'
     post:
       tags: [Scheduler]
       operationId: createScheduledJob
@@ -794,7 +794,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRecord'
   /scheduler/jobs/{id}:
     get:
       tags: [Scheduler]
@@ -810,7 +810,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRecord'
     put:
       tags: [Scheduler]
       operationId: updateScheduledJob
@@ -831,7 +831,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRecord'
   /scheduler/jobs/{id}/enable:
     post:
       tags: [Scheduler]
@@ -847,7 +847,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRecord'
   /scheduler/jobs/{id}/disable:
     post:
       tags: [Scheduler]
@@ -863,7 +863,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRecord'
   /scheduler/jobs/{id}/run-now:
     post:
       tags: [Scheduler]
@@ -879,7 +879,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRunRecord'
   /scheduler/jobs/{id}/runs:
     get:
       tags: [Scheduler]
@@ -895,7 +895,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListEnvelope'
+                $ref: '#/components/schemas/ScheduledJobRunListResponse'
   /scheduler/runs/{id}:
     get:
       tags: [Scheduler]
@@ -911,7 +911,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObjectResponse'
+                $ref: '#/components/schemas/ScheduledJobRunRecord'
   /observability/workers:
     get:
       tags: [Observability]
@@ -1272,6 +1272,137 @@ components:
         config:
           type: object
           additionalProperties: true
+    ScheduledJobRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: integer
+        uid:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        jobCategory:
+          type: string
+          enum: [integration, maintenance]
+        jobType:
+          type: string
+        scheduleType:
+          type: string
+          enum: [cron, interval]
+        scheduleExpr:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        allowConcurrentRuns:
+          type: boolean
+        config:
+          type: object
+          additionalProperties: true
+        lastRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastSuccessAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastFailureAt:
+          type: string
+          format: date-time
+          nullable: true
+        latestRunStatus:
+          type: string
+          enum: [pending, running, succeeded, failed, cancelled, skipped]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ScheduledJobRunRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: integer
+        uid:
+          type: string
+        scheduledJobId:
+          type: integer
+        scheduledJobUid:
+          type: string
+        scheduledJobCode:
+          type: string
+        scheduledJobName:
+          type: string
+        triggerMode:
+          type: string
+          enum: [scheduled, manual]
+        scheduledFor:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed, cancelled, skipped]
+        workerId:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+        resultSummary:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ScheduledJobListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledJobRecord'
+        totalCount:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    ScheduledJobRunListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledJobRunRecord'
+        totalCount:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
     PaginationMeta:
       type: object
       additionalProperties: true

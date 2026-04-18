@@ -47,6 +47,7 @@ type Record struct {
 	NextRunAt           *time.Time     `db:"next_run_at" json:"nextRunAt,omitempty"`
 	LastSuccessAt       *time.Time     `db:"last_success_at" json:"lastSuccessAt,omitempty"`
 	LastFailureAt       *time.Time     `db:"last_failure_at" json:"lastFailureAt,omitempty"`
+	LatestRunStatus     string         `db:"latest_run_status" json:"latestRunStatus"`
 	CreatedAt           time.Time      `db:"created_at" json:"createdAt"`
 	UpdatedAt           time.Time      `db:"updated_at" json:"updatedAt"`
 }
@@ -148,6 +149,51 @@ type CreateRunParams struct {
 	ResultSummary  map[string]any
 }
 
+type DispatchJobParams struct {
+	JobID         int64
+	RunUID        string
+	ScheduledFor  time.Time
+	NextRunAt     *time.Time
+	TriggerMode   string
+	ResultSummary map[string]any
+}
+
+type FinalizeRunParams struct {
+	RunID          int64
+	Status         string
+	FinishedAt     time.Time
+	ErrorMessage   string
+	ResultSummary  map[string]any
+	LastRunAt      time.Time
+	LastSuccessAt  *time.Time
+	LastFailureAt  *time.Time
+}
+
+type DispatchCycleResult struct {
+	CreatedRuns []RunRecord
+	SkippedJobs []int64
+}
+
+type JobExecution struct {
+	Job Record
+	Run RunRecord
+	Now time.Time
+}
+
+type JobResult struct {
+	Status        string
+	ResultSummary map[string]any
+}
+
+type RuntimeConfig struct {
+	Enabled         bool
+	DispatchEnabled bool
+	DispatchEvery   time.Duration
+	DispatchBatch   int
+	RunEvery        time.Duration
+	RunBatch        int
+}
+
 type CreateInput struct {
 	Code                string
 	Name                string
@@ -188,4 +234,9 @@ type Repository interface {
 	ListJobRuns(ctx context.Context, jobID int64, query RunListQuery) (RunListResult, error)
 	GetRunByID(ctx context.Context, id int64) (RunRecord, error)
 	CreateJobRun(ctx context.Context, params CreateRunParams) (RunRecord, error)
+	ListDueScheduledJobs(ctx context.Context, now time.Time, limit int) ([]Record, error)
+	HasActiveJobRuns(ctx context.Context, jobID int64) (bool, error)
+	DispatchScheduledJob(ctx context.Context, params DispatchJobParams) (RunRecord, bool, error)
+	ClaimNextPendingRun(ctx context.Context, now time.Time, workerID int64) (RunRecord, error)
+	FinalizeJobRun(ctx context.Context, params FinalizeRunParams) (RunRecord, error)
 }

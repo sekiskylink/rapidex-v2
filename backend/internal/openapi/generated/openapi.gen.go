@@ -22,18 +22,132 @@ const (
 	BearerAuthScopes   = "bearerAuth.Scopes"
 )
 
+// Defines values for ScheduledJobRecordJobCategory.
+const (
+	ScheduledJobRecordJobCategoryIntegration ScheduledJobRecordJobCategory = "integration"
+	ScheduledJobRecordJobCategoryMaintenance ScheduledJobRecordJobCategory = "maintenance"
+)
+
+// Valid indicates whether the value is a known member of the ScheduledJobRecordJobCategory enum.
+func (e ScheduledJobRecordJobCategory) Valid() bool {
+	switch e {
+	case ScheduledJobRecordJobCategoryIntegration:
+		return true
+	case ScheduledJobRecordJobCategoryMaintenance:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduledJobRecordLatestRunStatus.
+const (
+	ScheduledJobRecordLatestRunStatusCancelled ScheduledJobRecordLatestRunStatus = "cancelled"
+	ScheduledJobRecordLatestRunStatusFailed    ScheduledJobRecordLatestRunStatus = "failed"
+	ScheduledJobRecordLatestRunStatusPending   ScheduledJobRecordLatestRunStatus = "pending"
+	ScheduledJobRecordLatestRunStatusRunning   ScheduledJobRecordLatestRunStatus = "running"
+	ScheduledJobRecordLatestRunStatusSkipped   ScheduledJobRecordLatestRunStatus = "skipped"
+	ScheduledJobRecordLatestRunStatusSucceeded ScheduledJobRecordLatestRunStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ScheduledJobRecordLatestRunStatus enum.
+func (e ScheduledJobRecordLatestRunStatus) Valid() bool {
+	switch e {
+	case ScheduledJobRecordLatestRunStatusCancelled:
+		return true
+	case ScheduledJobRecordLatestRunStatusFailed:
+		return true
+	case ScheduledJobRecordLatestRunStatusPending:
+		return true
+	case ScheduledJobRecordLatestRunStatusRunning:
+		return true
+	case ScheduledJobRecordLatestRunStatusSkipped:
+		return true
+	case ScheduledJobRecordLatestRunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduledJobRecordScheduleType.
+const (
+	ScheduledJobRecordScheduleTypeCron     ScheduledJobRecordScheduleType = "cron"
+	ScheduledJobRecordScheduleTypeInterval ScheduledJobRecordScheduleType = "interval"
+)
+
+// Valid indicates whether the value is a known member of the ScheduledJobRecordScheduleType enum.
+func (e ScheduledJobRecordScheduleType) Valid() bool {
+	switch e {
+	case ScheduledJobRecordScheduleTypeCron:
+		return true
+	case ScheduledJobRecordScheduleTypeInterval:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduledJobRunRecordStatus.
+const (
+	ScheduledJobRunRecordStatusCancelled ScheduledJobRunRecordStatus = "cancelled"
+	ScheduledJobRunRecordStatusFailed    ScheduledJobRunRecordStatus = "failed"
+	ScheduledJobRunRecordStatusPending   ScheduledJobRunRecordStatus = "pending"
+	ScheduledJobRunRecordStatusRunning   ScheduledJobRunRecordStatus = "running"
+	ScheduledJobRunRecordStatusSkipped   ScheduledJobRunRecordStatus = "skipped"
+	ScheduledJobRunRecordStatusSucceeded ScheduledJobRunRecordStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ScheduledJobRunRecordStatus enum.
+func (e ScheduledJobRunRecordStatus) Valid() bool {
+	switch e {
+	case ScheduledJobRunRecordStatusCancelled:
+		return true
+	case ScheduledJobRunRecordStatusFailed:
+		return true
+	case ScheduledJobRunRecordStatusPending:
+		return true
+	case ScheduledJobRunRecordStatusRunning:
+		return true
+	case ScheduledJobRunRecordStatusSkipped:
+		return true
+	case ScheduledJobRunRecordStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduledJobRunRecordTriggerMode.
+const (
+	Manual    ScheduledJobRunRecordTriggerMode = "manual"
+	Scheduled ScheduledJobRunRecordTriggerMode = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the ScheduledJobRunRecordTriggerMode enum.
+func (e ScheduledJobRunRecordTriggerMode) Valid() bool {
+	switch e {
+	case Manual:
+		return true
+	case Scheduled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScheduledJobUpsertRequestJobCategory.
 const (
-	Integration ScheduledJobUpsertRequestJobCategory = "integration"
-	Maintenance ScheduledJobUpsertRequestJobCategory = "maintenance"
+	ScheduledJobUpsertRequestJobCategoryIntegration ScheduledJobUpsertRequestJobCategory = "integration"
+	ScheduledJobUpsertRequestJobCategoryMaintenance ScheduledJobUpsertRequestJobCategory = "maintenance"
 )
 
 // Valid indicates whether the value is a known member of the ScheduledJobUpsertRequestJobCategory enum.
 func (e ScheduledJobUpsertRequestJobCategory) Valid() bool {
 	switch e {
-	case Integration:
+	case ScheduledJobUpsertRequestJobCategoryIntegration:
 		return true
-	case Maintenance:
+	case ScheduledJobUpsertRequestJobCategoryMaintenance:
 		return true
 	default:
 		return false
@@ -42,16 +156,16 @@ func (e ScheduledJobUpsertRequestJobCategory) Valid() bool {
 
 // Defines values for ScheduledJobUpsertRequestScheduleType.
 const (
-	Cron     ScheduledJobUpsertRequestScheduleType = "cron"
-	Interval ScheduledJobUpsertRequestScheduleType = "interval"
+	ScheduledJobUpsertRequestScheduleTypeCron     ScheduledJobUpsertRequestScheduleType = "cron"
+	ScheduledJobUpsertRequestScheduleTypeInterval ScheduledJobUpsertRequestScheduleType = "interval"
 )
 
 // Valid indicates whether the value is a known member of the ScheduledJobUpsertRequestScheduleType enum.
 func (e ScheduledJobUpsertRequestScheduleType) Valid() bool {
 	switch e {
-	case Cron:
+	case ScheduledJobUpsertRequestScheduleTypeCron:
 		return true
-	case Interval:
+	case ScheduledJobUpsertRequestScheduleTypeInterval:
 		return true
 	default:
 		return false
@@ -205,6 +319,83 @@ type ResetPasswordRequest struct {
 	Password string `json:"password"`
 	Token    string `json:"token"`
 }
+
+// ScheduledJobListResponse defines model for ScheduledJobListResponse.
+type ScheduledJobListResponse struct {
+	Items      *[]ScheduledJobRecord `json:"items,omitempty"`
+	Page       *int                  `json:"page,omitempty"`
+	PageSize   *int                  `json:"pageSize,omitempty"`
+	TotalCount *int                  `json:"totalCount,omitempty"`
+}
+
+// ScheduledJobRecord defines model for ScheduledJobRecord.
+type ScheduledJobRecord struct {
+	AllowConcurrentRuns  *bool                              `json:"allowConcurrentRuns,omitempty"`
+	Code                 *string                            `json:"code,omitempty"`
+	Config               *map[string]interface{}            `json:"config,omitempty"`
+	CreatedAt            *time.Time                         `json:"createdAt,omitempty"`
+	Description          *string                            `json:"description,omitempty"`
+	Enabled              *bool                              `json:"enabled,omitempty"`
+	Id                   *int                               `json:"id,omitempty"`
+	JobCategory          *ScheduledJobRecordJobCategory     `json:"jobCategory,omitempty"`
+	JobType              *string                            `json:"jobType,omitempty"`
+	LastFailureAt        *time.Time                         `json:"lastFailureAt,omitempty"`
+	LastRunAt            *time.Time                         `json:"lastRunAt,omitempty"`
+	LastSuccessAt        *time.Time                         `json:"lastSuccessAt,omitempty"`
+	LatestRunStatus      *ScheduledJobRecordLatestRunStatus `json:"latestRunStatus,omitempty"`
+	Name                 *string                            `json:"name,omitempty"`
+	NextRunAt            *time.Time                         `json:"nextRunAt,omitempty"`
+	ScheduleExpr         *string                            `json:"scheduleExpr,omitempty"`
+	ScheduleType         *ScheduledJobRecordScheduleType    `json:"scheduleType,omitempty"`
+	Timezone             *string                            `json:"timezone,omitempty"`
+	Uid                  *string                            `json:"uid,omitempty"`
+	UpdatedAt            *time.Time                         `json:"updatedAt,omitempty"`
+	AdditionalProperties map[string]interface{}             `json:"-"`
+}
+
+// ScheduledJobRecordJobCategory defines model for ScheduledJobRecord.JobCategory.
+type ScheduledJobRecordJobCategory string
+
+// ScheduledJobRecordLatestRunStatus defines model for ScheduledJobRecord.LatestRunStatus.
+type ScheduledJobRecordLatestRunStatus string
+
+// ScheduledJobRecordScheduleType defines model for ScheduledJobRecord.ScheduleType.
+type ScheduledJobRecordScheduleType string
+
+// ScheduledJobRunListResponse defines model for ScheduledJobRunListResponse.
+type ScheduledJobRunListResponse struct {
+	Items      *[]ScheduledJobRunRecord `json:"items,omitempty"`
+	Page       *int                     `json:"page,omitempty"`
+	PageSize   *int                     `json:"pageSize,omitempty"`
+	TotalCount *int                     `json:"totalCount,omitempty"`
+}
+
+// ScheduledJobRunRecord defines model for ScheduledJobRunRecord.
+type ScheduledJobRunRecord struct {
+	CreatedAt            *time.Time                        `json:"createdAt,omitempty"`
+	ErrorMessage         *string                           `json:"errorMessage,omitempty"`
+	FinishedAt           *time.Time                        `json:"finishedAt,omitempty"`
+	Id                   *int                              `json:"id,omitempty"`
+	ResultSummary        *map[string]interface{}           `json:"resultSummary,omitempty"`
+	ScheduledFor         *time.Time                        `json:"scheduledFor,omitempty"`
+	ScheduledJobCode     *string                           `json:"scheduledJobCode,omitempty"`
+	ScheduledJobId       *int                              `json:"scheduledJobId,omitempty"`
+	ScheduledJobName     *string                           `json:"scheduledJobName,omitempty"`
+	ScheduledJobUid      *string                           `json:"scheduledJobUid,omitempty"`
+	StartedAt            *time.Time                        `json:"startedAt,omitempty"`
+	Status               *ScheduledJobRunRecordStatus      `json:"status,omitempty"`
+	TriggerMode          *ScheduledJobRunRecordTriggerMode `json:"triggerMode,omitempty"`
+	Uid                  *string                           `json:"uid,omitempty"`
+	UpdatedAt            *time.Time                        `json:"updatedAt,omitempty"`
+	WorkerId             *int                              `json:"workerId,omitempty"`
+	AdditionalProperties map[string]interface{}            `json:"-"`
+}
+
+// ScheduledJobRunRecordStatus defines model for ScheduledJobRunRecord.Status.
+type ScheduledJobRunRecordStatus string
+
+// ScheduledJobRunRecordTriggerMode defines model for ScheduledJobRunRecord.TriggerMode.
+type ScheduledJobRunRecordTriggerMode string
 
 // ScheduledJobUpsertRequest defines model for ScheduledJobUpsertRequest.
 type ScheduledJobUpsertRequest struct {
@@ -1052,69 +1243,719 @@ func (a PrincipalResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
+// Getter for additional properties for ScheduledJobRecord. Returns the specified
+// element and whether it was found
+func (a ScheduledJobRecord) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ScheduledJobRecord
+func (a *ScheduledJobRecord) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ScheduledJobRecord to handle AdditionalProperties
+func (a *ScheduledJobRecord) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["allowConcurrentRuns"]; found {
+		err = json.Unmarshal(raw, &a.AllowConcurrentRuns)
+		if err != nil {
+			return fmt.Errorf("error reading 'allowConcurrentRuns': %w", err)
+		}
+		delete(object, "allowConcurrentRuns")
+	}
+
+	if raw, found := object["code"]; found {
+		err = json.Unmarshal(raw, &a.Code)
+		if err != nil {
+			return fmt.Errorf("error reading 'code': %w", err)
+		}
+		delete(object, "code")
+	}
+
+	if raw, found := object["config"]; found {
+		err = json.Unmarshal(raw, &a.Config)
+		if err != nil {
+			return fmt.Errorf("error reading 'config': %w", err)
+		}
+		delete(object, "config")
+	}
+
+	if raw, found := object["createdAt"]; found {
+		err = json.Unmarshal(raw, &a.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'createdAt': %w", err)
+		}
+		delete(object, "createdAt")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["enabled"]; found {
+		err = json.Unmarshal(raw, &a.Enabled)
+		if err != nil {
+			return fmt.Errorf("error reading 'enabled': %w", err)
+		}
+		delete(object, "enabled")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["jobCategory"]; found {
+		err = json.Unmarshal(raw, &a.JobCategory)
+		if err != nil {
+			return fmt.Errorf("error reading 'jobCategory': %w", err)
+		}
+		delete(object, "jobCategory")
+	}
+
+	if raw, found := object["jobType"]; found {
+		err = json.Unmarshal(raw, &a.JobType)
+		if err != nil {
+			return fmt.Errorf("error reading 'jobType': %w", err)
+		}
+		delete(object, "jobType")
+	}
+
+	if raw, found := object["lastFailureAt"]; found {
+		err = json.Unmarshal(raw, &a.LastFailureAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'lastFailureAt': %w", err)
+		}
+		delete(object, "lastFailureAt")
+	}
+
+	if raw, found := object["lastRunAt"]; found {
+		err = json.Unmarshal(raw, &a.LastRunAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'lastRunAt': %w", err)
+		}
+		delete(object, "lastRunAt")
+	}
+
+	if raw, found := object["lastSuccessAt"]; found {
+		err = json.Unmarshal(raw, &a.LastSuccessAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'lastSuccessAt': %w", err)
+		}
+		delete(object, "lastSuccessAt")
+	}
+
+	if raw, found := object["latestRunStatus"]; found {
+		err = json.Unmarshal(raw, &a.LatestRunStatus)
+		if err != nil {
+			return fmt.Errorf("error reading 'latestRunStatus': %w", err)
+		}
+		delete(object, "latestRunStatus")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["nextRunAt"]; found {
+		err = json.Unmarshal(raw, &a.NextRunAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'nextRunAt': %w", err)
+		}
+		delete(object, "nextRunAt")
+	}
+
+	if raw, found := object["scheduleExpr"]; found {
+		err = json.Unmarshal(raw, &a.ScheduleExpr)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduleExpr': %w", err)
+		}
+		delete(object, "scheduleExpr")
+	}
+
+	if raw, found := object["scheduleType"]; found {
+		err = json.Unmarshal(raw, &a.ScheduleType)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduleType': %w", err)
+		}
+		delete(object, "scheduleType")
+	}
+
+	if raw, found := object["timezone"]; found {
+		err = json.Unmarshal(raw, &a.Timezone)
+		if err != nil {
+			return fmt.Errorf("error reading 'timezone': %w", err)
+		}
+		delete(object, "timezone")
+	}
+
+	if raw, found := object["uid"]; found {
+		err = json.Unmarshal(raw, &a.Uid)
+		if err != nil {
+			return fmt.Errorf("error reading 'uid': %w", err)
+		}
+		delete(object, "uid")
+	}
+
+	if raw, found := object["updatedAt"]; found {
+		err = json.Unmarshal(raw, &a.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'updatedAt': %w", err)
+		}
+		delete(object, "updatedAt")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ScheduledJobRecord to handle AdditionalProperties
+func (a ScheduledJobRecord) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AllowConcurrentRuns != nil {
+		object["allowConcurrentRuns"], err = json.Marshal(a.AllowConcurrentRuns)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'allowConcurrentRuns': %w", err)
+		}
+	}
+
+	if a.Code != nil {
+		object["code"], err = json.Marshal(a.Code)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'code': %w", err)
+		}
+	}
+
+	if a.Config != nil {
+		object["config"], err = json.Marshal(a.Config)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'config': %w", err)
+		}
+	}
+
+	if a.CreatedAt != nil {
+		object["createdAt"], err = json.Marshal(a.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'createdAt': %w", err)
+		}
+	}
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.Enabled != nil {
+		object["enabled"], err = json.Marshal(a.Enabled)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'enabled': %w", err)
+		}
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.JobCategory != nil {
+		object["jobCategory"], err = json.Marshal(a.JobCategory)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'jobCategory': %w", err)
+		}
+	}
+
+	if a.JobType != nil {
+		object["jobType"], err = json.Marshal(a.JobType)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'jobType': %w", err)
+		}
+	}
+
+	if a.LastFailureAt != nil {
+		object["lastFailureAt"], err = json.Marshal(a.LastFailureAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'lastFailureAt': %w", err)
+		}
+	}
+
+	if a.LastRunAt != nil {
+		object["lastRunAt"], err = json.Marshal(a.LastRunAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'lastRunAt': %w", err)
+		}
+	}
+
+	if a.LastSuccessAt != nil {
+		object["lastSuccessAt"], err = json.Marshal(a.LastSuccessAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'lastSuccessAt': %w", err)
+		}
+	}
+
+	if a.LatestRunStatus != nil {
+		object["latestRunStatus"], err = json.Marshal(a.LatestRunStatus)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'latestRunStatus': %w", err)
+		}
+	}
+
+	if a.Name != nil {
+		object["name"], err = json.Marshal(a.Name)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'name': %w", err)
+		}
+	}
+
+	if a.NextRunAt != nil {
+		object["nextRunAt"], err = json.Marshal(a.NextRunAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'nextRunAt': %w", err)
+		}
+	}
+
+	if a.ScheduleExpr != nil {
+		object["scheduleExpr"], err = json.Marshal(a.ScheduleExpr)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduleExpr': %w", err)
+		}
+	}
+
+	if a.ScheduleType != nil {
+		object["scheduleType"], err = json.Marshal(a.ScheduleType)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduleType': %w", err)
+		}
+	}
+
+	if a.Timezone != nil {
+		object["timezone"], err = json.Marshal(a.Timezone)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'timezone': %w", err)
+		}
+	}
+
+	if a.Uid != nil {
+		object["uid"], err = json.Marshal(a.Uid)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'uid': %w", err)
+		}
+	}
+
+	if a.UpdatedAt != nil {
+		object["updatedAt"], err = json.Marshal(a.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'updatedAt': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for ScheduledJobRunRecord. Returns the specified
+// element and whether it was found
+func (a ScheduledJobRunRecord) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ScheduledJobRunRecord
+func (a *ScheduledJobRunRecord) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ScheduledJobRunRecord to handle AdditionalProperties
+func (a *ScheduledJobRunRecord) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["createdAt"]; found {
+		err = json.Unmarshal(raw, &a.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'createdAt': %w", err)
+		}
+		delete(object, "createdAt")
+	}
+
+	if raw, found := object["errorMessage"]; found {
+		err = json.Unmarshal(raw, &a.ErrorMessage)
+		if err != nil {
+			return fmt.Errorf("error reading 'errorMessage': %w", err)
+		}
+		delete(object, "errorMessage")
+	}
+
+	if raw, found := object["finishedAt"]; found {
+		err = json.Unmarshal(raw, &a.FinishedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'finishedAt': %w", err)
+		}
+		delete(object, "finishedAt")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["resultSummary"]; found {
+		err = json.Unmarshal(raw, &a.ResultSummary)
+		if err != nil {
+			return fmt.Errorf("error reading 'resultSummary': %w", err)
+		}
+		delete(object, "resultSummary")
+	}
+
+	if raw, found := object["scheduledFor"]; found {
+		err = json.Unmarshal(raw, &a.ScheduledFor)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduledFor': %w", err)
+		}
+		delete(object, "scheduledFor")
+	}
+
+	if raw, found := object["scheduledJobCode"]; found {
+		err = json.Unmarshal(raw, &a.ScheduledJobCode)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduledJobCode': %w", err)
+		}
+		delete(object, "scheduledJobCode")
+	}
+
+	if raw, found := object["scheduledJobId"]; found {
+		err = json.Unmarshal(raw, &a.ScheduledJobId)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduledJobId': %w", err)
+		}
+		delete(object, "scheduledJobId")
+	}
+
+	if raw, found := object["scheduledJobName"]; found {
+		err = json.Unmarshal(raw, &a.ScheduledJobName)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduledJobName': %w", err)
+		}
+		delete(object, "scheduledJobName")
+	}
+
+	if raw, found := object["scheduledJobUid"]; found {
+		err = json.Unmarshal(raw, &a.ScheduledJobUid)
+		if err != nil {
+			return fmt.Errorf("error reading 'scheduledJobUid': %w", err)
+		}
+		delete(object, "scheduledJobUid")
+	}
+
+	if raw, found := object["startedAt"]; found {
+		err = json.Unmarshal(raw, &a.StartedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'startedAt': %w", err)
+		}
+		delete(object, "startedAt")
+	}
+
+	if raw, found := object["status"]; found {
+		err = json.Unmarshal(raw, &a.Status)
+		if err != nil {
+			return fmt.Errorf("error reading 'status': %w", err)
+		}
+		delete(object, "status")
+	}
+
+	if raw, found := object["triggerMode"]; found {
+		err = json.Unmarshal(raw, &a.TriggerMode)
+		if err != nil {
+			return fmt.Errorf("error reading 'triggerMode': %w", err)
+		}
+		delete(object, "triggerMode")
+	}
+
+	if raw, found := object["uid"]; found {
+		err = json.Unmarshal(raw, &a.Uid)
+		if err != nil {
+			return fmt.Errorf("error reading 'uid': %w", err)
+		}
+		delete(object, "uid")
+	}
+
+	if raw, found := object["updatedAt"]; found {
+		err = json.Unmarshal(raw, &a.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'updatedAt': %w", err)
+		}
+		delete(object, "updatedAt")
+	}
+
+	if raw, found := object["workerId"]; found {
+		err = json.Unmarshal(raw, &a.WorkerId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workerId': %w", err)
+		}
+		delete(object, "workerId")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ScheduledJobRunRecord to handle AdditionalProperties
+func (a ScheduledJobRunRecord) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.CreatedAt != nil {
+		object["createdAt"], err = json.Marshal(a.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'createdAt': %w", err)
+		}
+	}
+
+	if a.ErrorMessage != nil {
+		object["errorMessage"], err = json.Marshal(a.ErrorMessage)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'errorMessage': %w", err)
+		}
+	}
+
+	if a.FinishedAt != nil {
+		object["finishedAt"], err = json.Marshal(a.FinishedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'finishedAt': %w", err)
+		}
+	}
+
+	if a.Id != nil {
+		object["id"], err = json.Marshal(a.Id)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.ResultSummary != nil {
+		object["resultSummary"], err = json.Marshal(a.ResultSummary)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'resultSummary': %w", err)
+		}
+	}
+
+	if a.ScheduledFor != nil {
+		object["scheduledFor"], err = json.Marshal(a.ScheduledFor)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduledFor': %w", err)
+		}
+	}
+
+	if a.ScheduledJobCode != nil {
+		object["scheduledJobCode"], err = json.Marshal(a.ScheduledJobCode)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduledJobCode': %w", err)
+		}
+	}
+
+	if a.ScheduledJobId != nil {
+		object["scheduledJobId"], err = json.Marshal(a.ScheduledJobId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduledJobId': %w", err)
+		}
+	}
+
+	if a.ScheduledJobName != nil {
+		object["scheduledJobName"], err = json.Marshal(a.ScheduledJobName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduledJobName': %w", err)
+		}
+	}
+
+	if a.ScheduledJobUid != nil {
+		object["scheduledJobUid"], err = json.Marshal(a.ScheduledJobUid)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'scheduledJobUid': %w", err)
+		}
+	}
+
+	if a.StartedAt != nil {
+		object["startedAt"], err = json.Marshal(a.StartedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'startedAt': %w", err)
+		}
+	}
+
+	if a.Status != nil {
+		object["status"], err = json.Marshal(a.Status)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'status': %w", err)
+		}
+	}
+
+	if a.TriggerMode != nil {
+		object["triggerMode"], err = json.Marshal(a.TriggerMode)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'triggerMode': %w", err)
+		}
+	}
+
+	if a.Uid != nil {
+		object["uid"], err = json.Marshal(a.Uid)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'uid': %w", err)
+		}
+	}
+
+	if a.UpdatedAt != nil {
+		object["updatedAt"], err = json.Marshal(a.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'updatedAt': %w", err)
+		}
+	}
+
+	if a.WorkerId != nil {
+		object["workerId"], err = json.Marshal(a.WorkerId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workerId': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"vwEAAP//k1Oy0xdtAAA=",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

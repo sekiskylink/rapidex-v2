@@ -28,6 +28,13 @@ Scheduler v1 does not include:
 - arbitrary scripts
 - DAG dependencies
 
+Scheduler runtime v1.1 adds:
+
+- a dispatcher loop in the worker process
+- durable pending scheduler-run queueing through `scheduled_job_runs`
+- worker-side execution of queued scheduler runs
+- latest-run status surfaced back to list/detail APIs
+
 ## Module Placement
 
 All backend scheduler logic lives under `backend/internal/sukumad/scheduler`.
@@ -80,6 +87,39 @@ Missed-run policy for v1:
 - do not backfill or replay every missed execution
 
 This keeps v1 deterministic and avoids implicit catch-up bursts before worker orchestration policies are designed.
+
+## Runtime Execution
+
+The scheduler runtime lives in the worker process and has two cooperating loops:
+
+- a dispatcher loop that wakes on a configured interval, selects due enabled jobs, and enqueues pending `scheduled_job_runs`
+- a scheduler-run worker loop that claims pending runs, marks them running, executes the registered job handler, and finalizes the run status
+
+Duplicate dispatch protection relies on database row locking with `FOR UPDATE SKIP LOCKED` around due-job dispatch. This allows multiple worker instances to share the same database without queueing the same due occurrence twice.
+
+`allow_concurrent_runs` is enforced in two places:
+
+- dispatch skips creating a new pending run when the job already has a pending or running run
+- run claiming prevents a second pending run for the same job from being promoted to `running` while another run is active
+
+The durable queue remains `scheduled_job_runs`; no second scheduler-specific task table is introduced.
+
+## Handler Registry
+
+Scheduler job execution uses a handler registry keyed by `job_type`.
+
+Registered job types:
+
+- `metadata_sync`
+- `export_pending_requests`
+- `reconciliation_pull`
+- `scheduled_backfill`
+- `archive_old_requests`
+- `purge_old_logs`
+- `mark_stuck_requests`
+- `cleanup_orphaned_records`
+
+Handlers decode typed config payloads from the stored JSON config and return structured result summaries. Placeholder handlers remain explicit by returning either `succeeded` or `skipped` with a structured summary instead of silently no-oping.
 
 ## API Surface
 

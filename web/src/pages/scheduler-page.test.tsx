@@ -114,6 +114,7 @@ describe('scheduler pages', () => {
               allowConcurrentRuns: false,
               config: { serverCode: 'dhis2' },
               nextRunAt: '2026-04-18T21:15:00Z',
+              latestRunStatus: 'succeeded',
               createdAt: '2026-04-18T21:00:00Z',
               updatedAt: '2026-04-18T21:00:00Z',
             },
@@ -131,6 +132,7 @@ describe('scheduler pages', () => {
     expect(await screen.findByRole('heading', { name: 'Scheduler', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('nightly-sync')).toBeInTheDocument()
     expect(screen.getByText('Nightly Sync')).toBeInTheDocument()
+    expect(screen.getByText('succeeded')).toBeInTheDocument()
   })
 
   it('submits create scheduled job form through API', async () => {
@@ -146,7 +148,7 @@ describe('scheduler pages', () => {
           name: 'Cleanup',
           description: 'Cleanup job',
           jobCategory: 'maintenance',
-          jobType: 'cleanup.prune',
+          jobType: 'purge_old_logs',
           scheduleType: 'cron',
           scheduleExpr: '0 2 * * *',
           timezone: 'UTC',
@@ -163,7 +165,7 @@ describe('scheduler pages', () => {
           name: 'Cleanup',
           description: 'Cleanup job',
           jobCategory: 'maintenance',
-          jobType: 'cleanup.prune',
+          jobType: 'purge_old_logs',
           scheduleType: 'cron',
           scheduleExpr: '0 2 * * *',
           timezone: 'UTC',
@@ -183,7 +185,8 @@ describe('scheduler pages', () => {
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Cleanup job' } })
     fireEvent.mouseDown(screen.getByLabelText('Job Category'))
     fireEvent.click(await screen.findByRole('option', { name: 'Maintenance' }))
-    fireEvent.change(screen.getByLabelText('Job Type'), { target: { value: 'cleanup.prune' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Purge Old Logs' }))
     fireEvent.mouseDown(screen.getByLabelText('Schedule Type'))
     fireEvent.click(await screen.findByRole('option', { name: 'Cron' }))
     fireEvent.change(screen.getByLabelText('Schedule Expression'), { target: { value: '0 2 * * *' } })
@@ -195,7 +198,7 @@ describe('scheduler pages', () => {
       code: 'cleanup',
       name: 'Cleanup',
       jobCategory: 'maintenance',
-      jobType: 'cleanup.prune',
+      jobType: 'purge_old_logs',
       scheduleType: 'cron',
       scheduleExpr: '0 2 * * *',
       config: { retainDays: 30 },

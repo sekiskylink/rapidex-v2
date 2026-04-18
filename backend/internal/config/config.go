@@ -164,6 +164,18 @@ type Config struct {
 				IntervalSeconds int `mapstructure:"interval_seconds"`
 			} `mapstructure:"retention"`
 		} `mapstructure:"workers"`
+		Scheduler struct {
+			Enabled bool `mapstructure:"enabled"`
+			Dispatcher struct {
+				Enabled         bool `mapstructure:"enabled"`
+				IntervalSeconds int  `mapstructure:"interval_seconds"`
+				BatchSize       int  `mapstructure:"batch_size"`
+			} `mapstructure:"dispatcher"`
+			Worker struct {
+				IntervalSeconds int `mapstructure:"interval_seconds"`
+				BatchSize       int `mapstructure:"batch_size"`
+			} `mapstructure:"worker"`
+		} `mapstructure:"scheduler"`
 	} `mapstructure:"sukumad"`
 }
 
@@ -326,6 +338,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("sukumad.workers.poll.batch_size", 10)
 	v.SetDefault("sukumad.workers.poll.claim_timeout_seconds", 60)
 	v.SetDefault("sukumad.workers.retention.interval_seconds", 300)
+	v.SetDefault("sukumad.scheduler.enabled", true)
+	v.SetDefault("sukumad.scheduler.dispatcher.enabled", true)
+	v.SetDefault("sukumad.scheduler.dispatcher.interval_seconds", 15)
+	v.SetDefault("sukumad.scheduler.dispatcher.batch_size", 10)
+	v.SetDefault("sukumad.scheduler.worker.interval_seconds", 5)
+	v.SetDefault("sukumad.scheduler.worker.batch_size", 5)
 }
 
 func defaultConfig() Config {
@@ -410,6 +428,12 @@ func defaultConfig() Config {
 	cfg.Sukumad.Workers.Poll.BatchSize = 10
 	cfg.Sukumad.Workers.Poll.ClaimTimeoutSeconds = 60
 	cfg.Sukumad.Workers.Retention.IntervalSeconds = 300
+	cfg.Sukumad.Scheduler.Enabled = true
+	cfg.Sukumad.Scheduler.Dispatcher.Enabled = true
+	cfg.Sukumad.Scheduler.Dispatcher.IntervalSeconds = 15
+	cfg.Sukumad.Scheduler.Dispatcher.BatchSize = 10
+	cfg.Sukumad.Scheduler.Worker.IntervalSeconds = 5
+	cfg.Sukumad.Scheduler.Worker.BatchSize = 5
 	return cfg
 }
 
@@ -583,6 +607,18 @@ func validate(cfg Config) error {
 	}
 	if cfg.Sukumad.Workers.Retention.IntervalSeconds <= 0 {
 		return errors.New("sukumad.workers.retention.interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Scheduler.Dispatcher.IntervalSeconds <= 0 {
+		return errors.New("sukumad.scheduler.dispatcher.interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Scheduler.Dispatcher.BatchSize <= 0 {
+		return errors.New("sukumad.scheduler.dispatcher.batch_size must be > 0")
+	}
+	if cfg.Sukumad.Scheduler.Worker.IntervalSeconds <= 0 {
+		return errors.New("sukumad.scheduler.worker.interval_seconds must be > 0")
+	}
+	if cfg.Sukumad.Scheduler.Worker.BatchSize <= 0 {
+		return errors.New("sukumad.scheduler.worker.batch_size must be > 0")
 	}
 	for key, destination := range cfg.Sukumad.RateLimit.Destinations {
 		if strings.TrimSpace(key) == "" {

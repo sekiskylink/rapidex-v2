@@ -51,7 +51,7 @@ const defaultFormState: SchedulerJobFormState = {
   name: '',
   description: '',
   jobCategory: 'integration',
-  jobType: '',
+  jobType: 'metadata_sync',
   scheduleType: 'interval',
   scheduleExpr: '15m',
   timezone: 'UTC',
@@ -59,6 +59,17 @@ const defaultFormState: SchedulerJobFormState = {
   allowConcurrentRuns: false,
   configText: '{}',
 }
+
+const jobTypeOptions = [
+  { value: 'metadata_sync', label: 'Metadata Sync' },
+  { value: 'export_pending_requests', label: 'Export Pending Requests' },
+  { value: 'reconciliation_pull', label: 'Reconciliation Pull' },
+  { value: 'scheduled_backfill', label: 'Scheduled Backfill' },
+  { value: 'archive_old_requests', label: 'Archive Old Requests' },
+  { value: 'purge_old_logs', label: 'Purge Old Logs' },
+  { value: 'mark_stuck_requests', label: 'Mark Stuck Requests' },
+  { value: 'cleanup_orphaned_records', label: 'Cleanup Orphaned Records' },
+] as const
 
 function formatDate(value?: string | null) {
   if (!value) {
@@ -183,6 +194,21 @@ export function SchedulerJobFormPage() {
     }
   }
 
+  const handleRunNow = async () => {
+    if (!jobId) {
+      return
+    }
+    try {
+      await apiRequest(`/scheduler/jobs/${jobId}/run-now`, { method: 'POST' })
+      notify.success('Scheduled job run queued.')
+    } catch (error) {
+      await handleAppError(error, {
+        fallbackMessage: 'Unable to queue scheduled job run.',
+        notifier: notify,
+      })
+    }
+  }
+
   return (
     <Stack spacing={3}>
       <Box display="flex" justifyContent="space-between" gap={2} flexDirection={{ xs: 'column', md: 'row' }}>
@@ -198,6 +224,11 @@ export function SchedulerJobFormPage() {
           <Button variant="outlined" onClick={() => void navigate({ to: '/scheduler' })}>
             Back to Scheduler
           </Button>
+          {isEdit && jobId ? (
+            <Button variant="outlined" onClick={handleRunNow}>
+              Run Now
+            </Button>
+          ) : null}
           {isEdit && jobId ? (
             <Button variant="outlined" onClick={() => void navigate({ to: '/scheduler/$jobId/runs', params: { jobId: String(jobId) } })}>
               View Runs
@@ -242,7 +273,21 @@ export function SchedulerJobFormPage() {
               <MenuItem value="integration">Integration</MenuItem>
               <MenuItem value="maintenance">Maintenance</MenuItem>
             </TextField>
-            <TextField label="Job Type" value={form.jobType} onChange={(event) => updateField('jobType', event.target.value)} fullWidth disabled={loading || saving} />
+            <TextField
+              select
+              label="Job Type"
+              value={form.jobType}
+              onChange={(event) => updateField('jobType', event.target.value)}
+              fullWidth
+              disabled={loading || saving}
+              helperText="Scheduler runtime supports the registered scheduler job types."
+            >
+              {jobTypeOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>

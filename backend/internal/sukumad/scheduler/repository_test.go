@@ -23,21 +23,28 @@ func TestSQLRepositoryListScheduledJobs(t *testing.T) {
 	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
 	dataRows := sqlmock.NewRows([]string{
 		"id", "uid", "code", "name", "description", "job_category", "job_type", "schedule_type", "schedule_expr",
-		"timezone", "enabled", "allow_concurrent_runs", "config", "last_run_at", "next_run_at", "last_success_at", "last_failure_at",
+		"timezone", "enabled", "allow_concurrent_runs", "config", "last_run_at", "next_run_at", "last_success_at", "last_failure_at", "latest_run_status",
 		"created_at", "updated_at",
 	}).AddRow(
 		1, "11111111-1111-1111-1111-111111111111", "nightly-sync", "Nightly Sync", "sync nightly", "integration", "dhis2.sync", "interval", "15m",
-		"UTC", true, false, []byte(`{"serverCode":"dhis2"}`), nil, nextRun, nil, nil, now, now,
+		"UTC", true, false, []byte(`{"serverCode":"dhis2"}`), nil, nextRun, nil, nil, "succeeded", now, now,
 	)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM scheduled_jobs WHERE (code ILIKE $1 OR name ILIKE $1 OR description ILIKE $1 OR job_type ILIKE $1) AND job_category = $2`)).
 		WithArgs("%sync%", "integration").
 		WillReturnRows(countRows)
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
-		       timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
-		       created_at, updated_at
-		FROM scheduled_jobs
+		SELECT j.id, j.uid::text AS uid, j.code, j.name, j.description, j.job_category, j.job_type, j.schedule_type, j.schedule_expr,
+		       j.timezone, j.enabled, j.allow_concurrent_runs, j.config, j.last_run_at, j.next_run_at, j.last_success_at, j.last_failure_at,
+		       COALESCE(latest.status, '') AS latest_run_status, j.created_at, j.updated_at
+		FROM scheduled_jobs j
+		LEFT JOIN LATERAL (
+			SELECT r.status
+			FROM scheduled_job_runs r
+			WHERE r.scheduled_job_id = j.id
+			ORDER BY COALESCE(r.finished_at, r.started_at, r.created_at) DESC, r.id DESC
+			LIMIT 1
+		) latest ON TRUE
 	 WHERE (code ILIKE $1 OR name ILIKE $1 OR description ILIKE $1 OR job_type ILIKE $1) AND job_category = $2 ORDER BY name ASC LIMIT $3 OFFSET $4`)).
 		WithArgs("%sync%", "integration", 25, 0).
 		WillReturnRows(dataRows)

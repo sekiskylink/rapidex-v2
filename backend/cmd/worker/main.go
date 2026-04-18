@@ -24,6 +24,7 @@ import (
 	"basepro/backend/internal/sukumad/observability"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
+	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/worker"
 )
@@ -106,6 +107,7 @@ func run() error {
 	})
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
+	sukumadSchedulerService := scheduler.NewService(scheduler.NewRepository(database), auditService)
 	sukumadIngestService := ingest.NewService(ingest.NewRepository(database), sukumadRequestService, auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
@@ -121,6 +123,17 @@ func run() error {
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
+	schedulerRuntime := scheduler.NewRuntime(sukumadSchedulerService, func() scheduler.RuntimeConfig {
+		nextCfg := config.Get().Sukumad.Scheduler
+		return scheduler.RuntimeConfig{
+			Enabled:         nextCfg.Enabled,
+			DispatchEnabled: nextCfg.Enabled && nextCfg.Dispatcher.Enabled,
+			DispatchEvery:   time.Duration(nextCfg.Dispatcher.IntervalSeconds) * time.Second,
+			DispatchBatch:   nextCfg.Dispatcher.BatchSize,
+			RunEvery:        time.Duration(nextCfg.Worker.IntervalSeconds) * time.Second,
+			RunBatch:        nextCfg.Worker.BatchSize,
+		}
+	})
 
 	executor := worker.NewDeliveryExecutor(
 		delivery.NewRepository(database),
@@ -172,6 +185,10 @@ func run() error {
 	retentionDef.Interval = time.Duration(workerCfg.Retention.IntervalSeconds) * time.Second
 	retentionDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 
+	schedulerDef := worker.NewSchedulerDefinition(sukumadSchedulerService, config.Get().Sukumad.Scheduler.Worker.BatchSize)
+	schedulerDef.Interval = time.Duration(config.Get().Sukumad.Scheduler.Worker.IntervalSeconds) * time.Second
+	schedulerDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
+
 	ingestRuntime := ingest.NewRuntime(sukumadIngestService, func() ingest.RuntimeConfig {
 		nextCfg := config.Get().Sukumad.Ingest.Directory
 		return ingest.RuntimeConfig{
@@ -194,8 +211,13 @@ func run() error {
 	ingestDef.Interval = time.Second
 	ingestDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 
-	manager := worker.NewManager(sukumadWorkerService, ingestDef, sendDef, retryDef, pollDef, retentionDef)
+	manager := worker.NewManager(sukumadWorkerService, ingestDef, sendDef, retryDef, pollDef, retentionDef, schedulerDef)
 	errCh := manager.Start(ctx)
+	dispatchErrCh := make(chan error, 1)
+	go func() {
+		dispatchErrCh <- schedulerRuntime.RunDispatcher(ctx)
+		close(dispatchErrCh)
+	}()
 
 	for {
 		select {
@@ -214,6 +236,15 @@ func run() error {
 				}
 			}
 			return nil
+		case err, ok := <-dispatchErrCh:
+			if !ok {
+				dispatchErrCh = nil
+				continue
+			}
+			if err != nil && !errors.Is(err, context.Canceled) {
+				stop()
+				return err
+			}
 		}
 	}
 }

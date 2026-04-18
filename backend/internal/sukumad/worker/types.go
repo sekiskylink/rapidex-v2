@@ -11,6 +11,7 @@ const (
 	TypePoll      = "poll"
 	TypeRetry     = "retry"
 	TypeRetention = "retention"
+	TypeSchedulerRun = "scheduler.run"
 )
 
 const (

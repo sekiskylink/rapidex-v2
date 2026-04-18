@@ -275,6 +275,15 @@ func (m *Manager) runWorker(ctx context.Context, def Definition) error {
 			}
 		case <-workTicker.C:
 			if err := def.Run(ctx, exec); err != nil {
+				if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+					now := time.Now().UTC()
+					stopMeta := mergeMeta(metaState, map[string]any{"shutdown": "context cancelled"})
+					_, stopErr := m.service.UpdateStatus(context.Background(), record.ID, StatusStopped, &now, stopMeta)
+					if stopErr != nil {
+						return stopErr
+					}
+					return ctx.Err()
+				}
 				now := time.Now().UTC()
 				failMeta := mergeMeta(metaState, map[string]any{"lastError": err.Error()})
 				_, updateErr := m.service.UpdateStatus(context.Background(), record.ID, StatusFailed, &now, failMeta)

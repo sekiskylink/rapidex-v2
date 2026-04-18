@@ -49,6 +49,7 @@ type recordRow struct {
 	NextRunAt           *time.Time      `db:"next_run_at"`
 	LastSuccessAt       *time.Time      `db:"last_success_at"`
 	LastFailureAt       *time.Time      `db:"last_failure_at"`
+	LatestRunStatus     string          `db:"latest_run_status"`
 	CreatedAt           time.Time       `db:"created_at"`
 	UpdatedAt           time.Time       `db:"updated_at"`
 }
@@ -164,10 +165,17 @@ func (r *SQLRepository) ListScheduledJobs(ctx context.Context, query ListQuery) 
 	selectArgs := append([]any{}, args...)
 	selectArgs = append(selectArgs, q.PageSize, offset)
 	querySQL := `
-		SELECT id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
-		       timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
-		       created_at, updated_at
-		FROM scheduled_jobs
+		SELECT j.id, j.uid::text AS uid, j.code, j.name, j.description, j.job_category, j.job_type, j.schedule_type, j.schedule_expr,
+		       j.timezone, j.enabled, j.allow_concurrent_runs, j.config, j.last_run_at, j.next_run_at, j.last_success_at, j.last_failure_at,
+		       COALESCE(latest.status, '') AS latest_run_status, j.created_at, j.updated_at
+		FROM scheduled_jobs j
+		LEFT JOIN LATERAL (
+			SELECT r.status
+			FROM scheduled_job_runs r
+			WHERE r.scheduled_job_id = j.id
+			ORDER BY COALESCE(r.finished_at, r.started_at, r.created_at) DESC, r.id DESC
+			LIMIT 1
+		) latest ON TRUE
 	` + whereClause + fmt.Sprintf(" ORDER BY %s %s LIMIT $%d OFFSET $%d",
 		resolveJobSortColumn(q.SortField),
 		strings.ToUpper(q.SortOrder),
@@ -188,11 +196,18 @@ func (r *SQLRepository) ListScheduledJobs(ctx context.Context, query ListQuery) 
 func (r *SQLRepository) GetScheduledJobByID(ctx context.Context, id int64) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
-		SELECT id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
-		       timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
-		       created_at, updated_at
-		FROM scheduled_jobs
-		WHERE id = $1
+		SELECT j.id, j.uid::text AS uid, j.code, j.name, j.description, j.job_category, j.job_type, j.schedule_type, j.schedule_expr,
+		       j.timezone, j.enabled, j.allow_concurrent_runs, j.config, j.last_run_at, j.next_run_at, j.last_success_at, j.last_failure_at,
+		       COALESCE(latest.status, '') AS latest_run_status, j.created_at, j.updated_at
+		FROM scheduled_jobs j
+		LEFT JOIN LATERAL (
+			SELECT r.status
+			FROM scheduled_job_runs r
+			WHERE r.scheduled_job_id = j.id
+			ORDER BY COALESCE(r.finished_at, r.started_at, r.created_at) DESC, r.id DESC
+			LIMIT 1
+		) latest ON TRUE
+		WHERE j.id = $1
 	`, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Record{}, sql.ErrNoRows
@@ -217,7 +232,7 @@ func (r *SQLRepository) CreateScheduledJob(ctx context.Context, params CreatePar
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, NOW(), NOW())
 		RETURNING id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
 		          timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
-		          created_at, updated_at
+		          '' AS latest_run_status, created_at, updated_at
 	`,
 		params.UID,
 		params.Code,
@@ -263,7 +278,7 @@ func (r *SQLRepository) UpdateScheduledJob(ctx context.Context, params UpdatePar
 		WHERE id = $1
 		RETURNING id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
 		          timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
-		          created_at, updated_at
+		          '' AS latest_run_status, created_at, updated_at
 	`,
 		params.ID,
 		params.Code,
@@ -297,7 +312,7 @@ func (r *SQLRepository) SetScheduledJobEnabled(ctx context.Context, params SetEn
 		WHERE id = $1
 		RETURNING id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
 		          timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
-		          created_at, updated_at
+		          '' AS latest_run_status, created_at, updated_at
 	`, params.ID, params.Enabled, params.NextRunAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Record{}, sql.ErrNoRows
@@ -392,6 +407,229 @@ func (r *SQLRepository) CreateJobRun(ctx context.Context, params CreateRunParams
 	return r.GetRunByID(ctx, row.ID)
 }
 
+func (r *SQLRepository) ListDueScheduledJobs(ctx context.Context, now time.Time, limit int) ([]Record, error) {
+	if limit <= 0 {
+		limit = 1
+	}
+	rows := []recordRow{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT j.id, j.uid::text AS uid, j.code, j.name, j.description, j.job_category, j.job_type, j.schedule_type, j.schedule_expr,
+		       j.timezone, j.enabled, j.allow_concurrent_runs, j.config, j.last_run_at, j.next_run_at, j.last_success_at, j.last_failure_at,
+		       COALESCE(latest.status, '') AS latest_run_status, j.created_at, j.updated_at
+		FROM scheduled_jobs j
+		LEFT JOIN LATERAL (
+			SELECT r.status
+			FROM scheduled_job_runs r
+			WHERE r.scheduled_job_id = j.id
+			ORDER BY COALESCE(r.finished_at, r.started_at, r.created_at) DESC, r.id DESC
+			LIMIT 1
+		) latest ON TRUE
+		WHERE j.enabled = TRUE
+		  AND j.next_run_at IS NOT NULL
+		  AND j.next_run_at <= $1
+		ORDER BY j.next_run_at ASC, j.id ASC
+		LIMIT $2
+	`, now.UTC(), limit); err != nil {
+		return nil, fmt.Errorf("list due scheduled jobs: %w", err)
+	}
+	return decodeRows(rows)
+}
+
+func (r *SQLRepository) HasActiveJobRuns(ctx context.Context, jobID int64) (bool, error) {
+	var active bool
+	if err := r.db.GetContext(ctx, &active, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM scheduled_job_runs
+			WHERE scheduled_job_id = $1
+			  AND status IN ('pending', 'running')
+		)
+	`, jobID); err != nil {
+		return false, fmt.Errorf("check active scheduler runs: %w", err)
+	}
+	return active, nil
+}
+
+func (r *SQLRepository) DispatchScheduledJob(ctx context.Context, params DispatchJobParams) (RunRecord, bool, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return RunRecord{}, false, fmt.Errorf("begin scheduler dispatch tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var job recordRow
+	if err := tx.GetContext(ctx, &job, `
+		SELECT id, uid::text AS uid, code, name, description, job_category, job_type, schedule_type, schedule_expr,
+		       timezone, enabled, allow_concurrent_runs, config, last_run_at, next_run_at, last_success_at, last_failure_at,
+		       '' AS latest_run_status, created_at, updated_at
+		FROM scheduled_jobs
+		WHERE id = $1
+		  AND enabled = TRUE
+		  AND next_run_at IS NOT NULL
+		  AND next_run_at <= $2
+		FOR UPDATE SKIP LOCKED
+	`, params.JobID, params.ScheduledFor.UTC()); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return RunRecord{}, false, nil
+		}
+		return RunRecord{}, false, fmt.Errorf("lock scheduled job for dispatch: %w", err)
+	}
+
+	if !job.AllowConcurrentRuns {
+		var active bool
+		if err := tx.GetContext(ctx, &active, `
+			SELECT EXISTS(
+				SELECT 1
+				FROM scheduled_job_runs
+				WHERE scheduled_job_id = $1
+				  AND status IN ('pending', 'running')
+			)
+		`, params.JobID); err != nil {
+			return RunRecord{}, false, fmt.Errorf("check active scheduler runs in dispatch: %w", err)
+		}
+		if active {
+			if err := tx.Commit(); err != nil {
+				return RunRecord{}, false, fmt.Errorf("commit skipped scheduler dispatch: %w", err)
+			}
+			return RunRecord{}, false, nil
+		}
+	}
+
+	resultSummary, err := json.Marshal(cloneJSONMap(params.ResultSummary))
+	if err != nil {
+		return RunRecord{}, false, fmt.Errorf("marshal dispatch result summary: %w", err)
+	}
+
+	var runID int64
+	if err := tx.GetContext(ctx, &runID, `
+		INSERT INTO scheduled_job_runs (
+			uid, scheduled_job_id, trigger_mode, scheduled_for, status, result_summary, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, 'pending', $5::jsonb, NOW(), NOW())
+		RETURNING id
+	`, params.RunUID, params.JobID, params.TriggerMode, params.ScheduledFor.UTC(), string(resultSummary)); err != nil {
+		return RunRecord{}, false, fmt.Errorf("insert scheduled job run during dispatch: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE scheduled_jobs
+		SET next_run_at = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, params.JobID, params.NextRunAt); err != nil {
+		return RunRecord{}, false, fmt.Errorf("update next run during dispatch: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return RunRecord{}, false, fmt.Errorf("commit scheduler dispatch tx: %w", err)
+	}
+	record, err := r.GetRunByID(ctx, runID)
+	if err != nil {
+		return RunRecord{}, false, err
+	}
+	return record, true, nil
+}
+
+func (r *SQLRepository) ClaimNextPendingRun(ctx context.Context, now time.Time, workerID int64) (RunRecord, error) {
+	var row runRow
+	if err := r.db.GetContext(ctx, &row, `
+		WITH candidate AS (
+			SELECT r.id
+			FROM scheduled_job_runs r
+			INNER JOIN scheduled_jobs j ON j.id = r.scheduled_job_id
+			WHERE r.status = 'pending'
+			  AND (
+				j.allow_concurrent_runs = TRUE OR NOT EXISTS (
+					SELECT 1
+					FROM scheduled_job_runs active
+					WHERE active.scheduled_job_id = r.scheduled_job_id
+					  AND active.status = 'running'
+					  AND active.id <> r.id
+				)
+			  )
+			ORDER BY r.scheduled_for ASC, r.created_at ASC, r.id ASC
+			LIMIT 1
+			FOR UPDATE SKIP LOCKED
+		), claimed AS (
+			UPDATE scheduled_job_runs r
+			SET status = 'running',
+			    worker_id = NULLIF($2, 0),
+			    started_at = $1,
+			    updated_at = NOW()
+			WHERE r.id IN (SELECT id FROM candidate)
+			RETURNING r.id, r.scheduled_job_id
+		), touched_jobs AS (
+			UPDATE scheduled_jobs j
+			SET last_run_at = $1,
+			    updated_at = NOW()
+			WHERE j.id IN (SELECT scheduled_job_id FROM claimed)
+		)
+		SELECT r.id, r.uid::text AS uid, r.scheduled_job_id,
+		       j.uid::text AS scheduled_job_uid, j.code AS scheduled_job_code, j.name AS scheduled_job_name,
+		       r.trigger_mode, r.scheduled_for, r.started_at, r.finished_at, r.status, r.worker_id,
+		       COALESCE(r.error_message, '') AS error_message, r.result_summary, r.created_at, r.updated_at
+		FROM scheduled_job_runs r
+		INNER JOIN scheduled_jobs j ON j.id = r.scheduled_job_id
+		INNER JOIN claimed c ON c.id = r.id
+	`, now.UTC(), workerID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return RunRecord{}, sql.ErrNoRows
+		}
+		return RunRecord{}, fmt.Errorf("claim pending scheduler run: %w", err)
+	}
+	return decodeRunRow(row)
+}
+
+func (r *SQLRepository) FinalizeJobRun(ctx context.Context, params FinalizeRunParams) (RunRecord, error) {
+	resultSummary, err := json.Marshal(cloneJSONMap(params.ResultSummary))
+	if err != nil {
+		return RunRecord{}, fmt.Errorf("marshal scheduler run final summary: %w", err)
+	}
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return RunRecord{}, fmt.Errorf("begin scheduler finalize tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var jobID int64
+	if err := tx.GetContext(ctx, &jobID, `
+		UPDATE scheduled_job_runs
+		SET status = $2,
+		    finished_at = $3,
+		    error_message = $4,
+		    result_summary = $5::jsonb,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING scheduled_job_id
+	`, params.RunID, params.Status, params.FinishedAt.UTC(), params.ErrorMessage, string(resultSummary)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return RunRecord{}, sql.ErrNoRows
+		}
+		return RunRecord{}, fmt.Errorf("update scheduler run final state: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE scheduled_jobs
+		SET last_run_at = $2,
+		    last_success_at = CASE WHEN $3::timestamptz IS NULL THEN last_success_at ELSE $3 END,
+		    last_failure_at = CASE WHEN $4::timestamptz IS NULL THEN last_failure_at ELSE $4 END,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, jobID, params.LastRunAt.UTC(), params.LastSuccessAt, params.LastFailureAt); err != nil {
+		return RunRecord{}, fmt.Errorf("update scheduler job final timestamps: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return RunRecord{}, fmt.Errorf("commit scheduler finalize tx: %w", err)
+	}
+	return r.GetRunByID(ctx, params.RunID)
+}
+
 func resolveJobSortColumn(field string) string {
 	switch field {
 	case "code":
@@ -469,6 +707,7 @@ func decodeRow(row recordRow) (Record, error) {
 		NextRunAt:           row.NextRunAt,
 		LastSuccessAt:       row.LastSuccessAt,
 		LastFailureAt:       row.LastFailureAt,
+		LatestRunStatus:     row.LatestRunStatus,
 		CreatedAt:           row.CreatedAt,
 		UpdatedAt:           row.UpdatedAt,
 	}, nil
@@ -543,7 +782,9 @@ func (r *memoryRepository) ListScheduledJobs(_ context.Context, query ListQuery)
 		if q.Category != "" && job.JobCategory != q.Category {
 			continue
 		}
-		items = append(items, cloneRecord(job))
+		cloned := cloneRecord(job)
+		cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
+		items = append(items, cloned)
 	}
 
 	sortJobs(items, q.SortField, q.SortOrder)
@@ -558,7 +799,9 @@ func (r *memoryRepository) GetScheduledJobByID(_ context.Context, id int64) (Rec
 	defer r.mu.RUnlock()
 	for _, item := range r.jobs {
 		if item.ID == id {
-			return cloneRecord(item), nil
+			cloned := cloneRecord(item)
+			cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
+			return cloned, nil
 		}
 	}
 	return Record{}, sql.ErrNoRows
@@ -611,7 +854,9 @@ func (r *memoryRepository) UpdateScheduledJob(_ context.Context, params UpdatePa
 		r.jobs[index].Config = cloneJSONMap(params.Config)
 		r.jobs[index].NextRunAt = cloneTimePtr(params.NextRunAt)
 		r.jobs[index].UpdatedAt = time.Now().UTC()
-		return cloneRecord(r.jobs[index]), nil
+		cloned := cloneRecord(r.jobs[index])
+		cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
+		return cloned, nil
 	}
 	return Record{}, sql.ErrNoRows
 }
@@ -626,7 +871,9 @@ func (r *memoryRepository) SetScheduledJobEnabled(_ context.Context, params SetE
 		r.jobs[index].Enabled = params.Enabled
 		r.jobs[index].NextRunAt = cloneTimePtr(params.NextRunAt)
 		r.jobs[index].UpdatedAt = time.Now().UTC()
-		return cloneRecord(r.jobs[index]), nil
+		cloned := cloneRecord(r.jobs[index])
+		cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
+		return cloned, nil
 	}
 	return Record{}, sql.ErrNoRows
 }
@@ -698,6 +945,134 @@ func (r *memoryRepository) CreateJobRun(_ context.Context, params CreateRunParam
 	r.nextRunID++
 	r.runs = append(r.runs, record)
 	return cloneRunRecord(record), nil
+}
+
+func (r *memoryRepository) ListDueScheduledJobs(_ context.Context, now time.Time, limit int) ([]Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if limit <= 0 {
+		limit = 1
+	}
+	items := make([]Record, 0, limit)
+	for _, job := range r.jobs {
+		if !job.Enabled || job.NextRunAt == nil || job.NextRunAt.After(now.UTC()) {
+			continue
+		}
+		cloned := cloneRecord(job)
+		cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
+		items = append(items, cloned)
+	}
+	sortJobs(items, "nextRunAt", "asc")
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
+func (r *memoryRepository) HasActiveJobRuns(_ context.Context, jobID int64) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasActiveRunsLocked(jobID), nil
+}
+
+func (r *memoryRepository) DispatchScheduledJob(_ context.Context, params DispatchJobParams) (RunRecord, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for index := range r.jobs {
+		job := &r.jobs[index]
+		if job.ID != params.JobID {
+			continue
+		}
+		if !job.Enabled || job.NextRunAt == nil || job.NextRunAt.After(params.ScheduledFor.UTC()) {
+			return RunRecord{}, false, nil
+		}
+		if !job.AllowConcurrentRuns && r.hasActiveRunsLocked(job.ID) {
+			return RunRecord{}, false, nil
+		}
+		now := time.Now().UTC()
+		record := RunRecord{
+			ID:               r.nextRunID,
+			UID:              params.RunUID,
+			ScheduledJobID:   job.ID,
+			ScheduledJobUID:  job.UID,
+			ScheduledJobCode: job.Code,
+			ScheduledJobName: job.Name,
+			TriggerMode:      params.TriggerMode,
+			ScheduledFor:     params.ScheduledFor.UTC(),
+			Status:           RunStatusPending,
+			ResultSummary:    cloneJSONMap(params.ResultSummary),
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+		r.nextRunID++
+		r.runs = append(r.runs, record)
+		job.NextRunAt = cloneTimePtr(params.NextRunAt)
+		job.UpdatedAt = now
+		return cloneRunRecord(record), true, nil
+	}
+	return RunRecord{}, false, nil
+}
+
+func (r *memoryRepository) ClaimNextPendingRun(_ context.Context, now time.Time, workerID int64) (RunRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var selectedIndex = -1
+	for index := range r.runs {
+		run := r.runs[index]
+		if run.Status != RunStatusPending {
+			continue
+		}
+		job := r.lookupJobLocked(run.ScheduledJobID)
+		if job == nil {
+			continue
+		}
+		if !job.AllowConcurrentRuns && r.hasRunningRunLocked(run.ScheduledJobID, run.ID) {
+			continue
+		}
+		if selectedIndex < 0 ||
+			run.ScheduledFor.Before(r.runs[selectedIndex].ScheduledFor) ||
+			(run.ScheduledFor.Equal(r.runs[selectedIndex].ScheduledFor) && run.ID < r.runs[selectedIndex].ID) {
+			selectedIndex = index
+		}
+	}
+	if selectedIndex < 0 {
+		return RunRecord{}, sql.ErrNoRows
+	}
+	startedAt := now.UTC()
+	r.runs[selectedIndex].Status = RunStatusRunning
+	r.runs[selectedIndex].WorkerID = &workerID
+	r.runs[selectedIndex].StartedAt = &startedAt
+	r.runs[selectedIndex].UpdatedAt = startedAt
+	if job := r.lookupJobLocked(r.runs[selectedIndex].ScheduledJobID); job != nil {
+		job.LastRunAt = &startedAt
+		job.UpdatedAt = startedAt
+	}
+	return cloneRunRecord(r.runs[selectedIndex]), nil
+}
+
+func (r *memoryRepository) FinalizeJobRun(_ context.Context, params FinalizeRunParams) (RunRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for index := range r.runs {
+		if r.runs[index].ID != params.RunID {
+			continue
+		}
+		finishedAt := params.FinishedAt.UTC()
+		r.runs[index].Status = params.Status
+		r.runs[index].FinishedAt = &finishedAt
+		r.runs[index].ErrorMessage = params.ErrorMessage
+		r.runs[index].ResultSummary = cloneJSONMap(params.ResultSummary)
+		r.runs[index].UpdatedAt = finishedAt
+		if job := r.lookupJobLocked(r.runs[index].ScheduledJobID); job != nil {
+			lastRunAt := params.LastRunAt.UTC()
+			job.LastRunAt = &lastRunAt
+			job.LastSuccessAt = cloneTimePtr(params.LastSuccessAt)
+			job.LastFailureAt = cloneTimePtr(params.LastFailureAt)
+			job.UpdatedAt = finishedAt
+		}
+		return cloneRunRecord(r.runs[index]), nil
+	}
+	return RunRecord{}, sql.ErrNoRows
 }
 
 func matchesJobFilter(job Record, filter string) bool {
@@ -781,6 +1156,50 @@ func compareTimePtr(left *time.Time, right *time.Time) int {
 	default:
 		return left.Compare(*right)
 	}
+}
+
+func (r *memoryRepository) lookupJobLocked(jobID int64) *Record {
+	for index := range r.jobs {
+		if r.jobs[index].ID == jobID {
+			return &r.jobs[index]
+		}
+	}
+	return nil
+}
+
+func (r *memoryRepository) hasActiveRunsLocked(jobID int64) bool {
+	for _, run := range r.runs {
+		if run.ScheduledJobID == jobID && (run.Status == RunStatusPending || run.Status == RunStatusRunning) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *memoryRepository) hasRunningRunLocked(jobID int64, excludeID int64) bool {
+	for _, run := range r.runs {
+		if run.ScheduledJobID == jobID && run.ID != excludeID && run.Status == RunStatusRunning {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *memoryRepository) latestRunStatusLocked(jobID int64) string {
+	var latest *RunRecord
+	for index := range r.runs {
+		run := &r.runs[index]
+		if run.ScheduledJobID != jobID {
+			continue
+		}
+		if latest == nil || run.UpdatedAt.After(latest.UpdatedAt) || (run.UpdatedAt.Equal(latest.UpdatedAt) && run.ID > latest.ID) {
+			latest = run
+		}
+	}
+	if latest == nil {
+		return ""
+	}
+	return latest.Status
 }
 
 func cloneRecord(item Record) Record {

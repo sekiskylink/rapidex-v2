@@ -112,6 +112,19 @@ export function SchedulerJobRunsPage() {
     }
   }
 
+  const queueRunNow = async () => {
+    try {
+      await apiRequest(`/scheduler/jobs/${jobId}/run-now`, { method: 'POST' })
+      notify.success('Scheduled job run queued.')
+      setReloadToken((value) => value + 1)
+    } catch (error) {
+      await handleAppError(error, {
+        fallbackMessage: 'Unable to queue scheduled job run.',
+        notifier: notify,
+      })
+    }
+  }
+
   const columns = React.useMemo<GridColDef<RunRecord>[]>(
     () => [
       { field: 'uid', headerName: 'Run UID', minWidth: 220, flex: 1.1 },
@@ -161,6 +174,11 @@ export function SchedulerJobRunsPage() {
           {Number.isFinite(jobId) ? (
             <Button variant="outlined" onClick={() => void navigate({ to: '/scheduler/$jobId', params: { jobId: String(jobId) } })}>
               Edit Job
+            </Button>
+          ) : null}
+          {Number.isFinite(jobId) ? (
+            <Button variant="outlined" onClick={() => void queueRunNow()}>
+              Run Now
             </Button>
           ) : null}
           <Button variant="outlined" onClick={() => void navigate({ to: '/scheduler' })}>

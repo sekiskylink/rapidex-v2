@@ -236,3 +236,12 @@ sukumad:
       claim_timeout_seconds: 60
     retention:
       interval_seconds: 300
+  scheduler:
+    enabled: true
+    dispatcher:
+      enabled: true
+      interval_seconds: 15
+      batch_size: 10
+    worker:
+      interval_seconds: 5
+      batch_size: 5

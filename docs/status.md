@@ -1,5 +1,60 @@
 # Status
 
+## Milestone — Scheduler Runtime and Usable Scheduler UI (Complete)
+
+### What changed
+- Implemented the actual scheduler runtime in the worker process:
+  - added a dispatcher loop under [backend/internal/sukumad/scheduler](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/scheduler) that wakes on a configurable interval, finds due enabled jobs, safely locks due rows, creates pending `scheduled_job_runs`, advances `next_run_at`, and skips duplicate dispatch when another active run already exists for non-concurrent jobs.
+  - added scheduler runtime configuration under [backend/internal/config/config.go](/Users/sam/projects/go/sukumadpro/backend/internal/config/config.go) and [backend/config/config.yaml](/Users/sam/projects/go/sukumadpro/backend/config/config.yaml).
+  - wired the dispatcher and scheduler-run worker into [backend/cmd/worker/main.go](/Users/sam/projects/go/sukumadpro/backend/cmd/worker/main.go) so startup/shutdown follow the existing worker lifecycle and context cancellation.
+- Extended scheduler run execution:
+  - added worker type `scheduler.run` in [backend/internal/sukumad/worker](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/worker).
+  - added pending-run claiming, running/final status transitions, worker ownership, lifecycle timestamp updates, and result/error persistence for `scheduled_job_runs`.
+  - improved worker shutdown handling so context cancellation stops worker runs cleanly instead of marking them failed.
+- Added a typed scheduler job-handler registry in [backend/internal/sukumad/scheduler/registry.go](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/scheduler/registry.go) and registered:
+  - `metadata_sync`
+  - `export_pending_requests`
+  - `reconciliation_pull`
+  - `scheduled_backfill`
+  - `archive_old_requests`
+  - `purge_old_logs`
+  - `mark_stuck_requests`
+  - `cleanup_orphaned_records`
+- Completed Scheduler UI parity in both clients:
+  - Scheduler list now shows latest run status in both [web/src/pages/SchedulerJobsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/SchedulerJobsPage.tsx) and [desktop/frontend/src/pages/SchedulerJobsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/SchedulerJobsPage.tsx).
+  - Scheduler create/edit forms now expose registered job types and allow `Run Now` from edit pages.
+  - Scheduler runs pages now allow `Run Now` directly from run history pages and continue to support run-detail viewing.
+- Updated API/docs:
+  - expanded [api/openapi.yaml](/Users/sam/projects/go/sukumadpro/api/openapi.yaml) with concrete scheduler job/run response schemas and regenerated [backend/internal/openapi/generated/openapi.gen.go](/Users/sam/projects/go/sukumadpro/backend/internal/openapi/generated/openapi.gen.go).
+  - extended [docs/notes/scheduler-architecture.md](/Users/sam/projects/go/sukumadpro/docs/notes/scheduler-architecture.md) with dispatcher/worker runtime behavior and concurrency rules.
+- Saved prompt traceability copy in `docs/prompts/2026-04-18-scheduler-runtime-and-ui.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - added scheduler service coverage for due dispatch, duplicate prevention, non-concurrent claim behavior, successful run lifecycle transitions, and unknown job type failures
+  - updated scheduler repository SQL tests for latest-status joins
+  - validated new scheduler config defaults and validation through the existing config suite
+- Web:
+  - updated scheduler page coverage for latest status display and registered job-type selection
+  - reran route and registry smoke coverage
+- Desktop:
+  - updated matching scheduler page coverage for latest status display and registered job-type selection
+  - reran route and registry smoke coverage
+
+### Verification summary
+- Backend full tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx src/routes.test.tsx src/registry/registry.test.ts`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx src/routes.test.tsx src/registry/registry.test.ts`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Scheduler handlers are intentionally placeholder-but-real for now: they decode typed config and return structured `succeeded` or `skipped` summaries, but they do not yet execute the real domain work behind each job type.
+- Existing non-blocking frontend warnings remain in tests/builds:
+  - MUI `anchorEl` warnings in jsdom-based menu/select tests
+  - third-party `'use client'` bundling warnings
+  - Vite chunk-size warnings on both web and desktop builds
+
 ## Milestone — Scheduler Vertical Slice (Complete)
 
 ### What changed

@@ -29,6 +29,7 @@ interface ScheduledJobRecord {
   nextRunAt?: string | null
   lastSuccessAt?: string | null
   lastFailureAt?: string | null
+  latestRunStatus?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -125,6 +126,17 @@ export function SchedulerJobsPage() {
         renderCell: (params: GridRenderCellParams<ScheduledJobRecord, boolean>) => (
           <Chip label={params.value ? 'Enabled' : 'Disabled'} size="small" color={params.value ? 'success' : 'default'} />
         ),
+      },
+      {
+        field: 'latestRunStatus',
+        headerName: 'Latest Status',
+        minWidth: 140,
+        renderCell: (params: GridRenderCellParams<ScheduledJobRecord, string | null | undefined>) => {
+          const value = params.value ?? ''
+          const color =
+            value === 'succeeded' ? 'success' : value === 'failed' ? 'error' : value === 'running' ? 'warning' : value === 'skipped' ? 'default' : 'info'
+          return <Chip label={value || 'No runs'} size="small" color={color} />
+        },
       },
       { field: 'nextRunAt', headerName: 'Next Run', minWidth: 180, flex: 1, valueGetter: (value) => formatDate(String(value ?? '')) },
       { field: 'lastRunAt', headerName: 'Last Run', minWidth: 180, flex: 1, valueGetter: (value) => formatDate(String(value ?? '')) },
