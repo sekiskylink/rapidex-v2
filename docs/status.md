@@ -1,5 +1,56 @@
 # Status
 
+## Milestone — Scheduler Maintenance Jobs End to End (Complete)
+
+### What changed
+- Replaced placeholder maintenance handlers with real scheduler-backed maintenance execution in [backend/internal/sukumad/scheduler](/Users/sam/projects/go/sukumadpro/backend/internal/sukumad/scheduler):
+  - `archive_old_requests` now scans old terminal requests and marks them archived in request maintenance metadata.
+  - `purge_old_logs` now deletes old audit logs, request events, async poll logs, and terminal worker-run rows in bounded batches.
+  - `mark_stuck_requests` now finds stale pending/processing requests and blocks both the request targets and parent request with a scheduler-managed stuck reason.
+  - `cleanup_orphaned_records` now removes old orphaned ingest-file rows whose linked request is absent.
+- Added typed maintenance config validation and normalized summary output:
+  - maintenance job payloads now validate `dryRun`, `batchSize`, `maxAgeDays`, and stale-cutoff fields during scheduler job create/update.
+  - maintenance runs now persist structured `resultSummary` metrics with `scanned_count`, `affected_count`, `archived_count`, `deleted_count`, and `skipped_count`.
+- Added scheduler bootstrap seeding for default maintenance jobs:
+  - startup now ensures the default maintenance jobs exist when `seed.ensure_scheduler_jobs=true`.
+  - seeding is additive only; existing jobs are left unchanged so operators can continue editing or disabling them through the UI/API.
+- Improved Scheduler UX parity in both clients:
+  - scheduler forms in [web/src/pages/SchedulerJobFormPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/SchedulerJobFormPage.tsx) and [desktop/frontend/src/pages/SchedulerJobFormPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/SchedulerJobFormPage.tsx) now render typed maintenance config editors and show dry-run state clearly.
+  - scheduler runs pages in [web/src/pages/SchedulerJobRunsPage.tsx](/Users/sam/projects/go/sukumadpro/web/src/pages/SchedulerJobRunsPage.tsx) and [desktop/frontend/src/pages/SchedulerJobRunsPage.tsx](/Users/sam/projects/go/sukumadpro/desktop/frontend/src/pages/SchedulerJobRunsPage.tsx) now show clearer status badges, error alerts, dry-run chips, and structured summary counts.
+  - scheduler jobs lists in both clients use clearer latest-status badges.
+- Added maintenance-job documentation in [docs/notes/scheduler-maintenance-jobs.md](/Users/sam/projects/go/sukumadpro/docs/notes/scheduler-maintenance-jobs.md).
+- Saved prompt traceability copy in `docs/prompts/2026-04-19-scheduler-maintenance-jobs.md` (gitignored).
+
+### Seeded maintenance jobs
+- `archive-old-requests`
+  - daily cron `0 1 * * *`
+- `purge-old-logs`
+  - weekly cron `0 2 * * 0`
+- `mark-stuck-requests`
+  - interval `10m`
+
+### Added or updated tests
+- Backend:
+  - added maintenance handler coverage for all four real maintenance job types
+  - added maintenance-config validation coverage
+  - added default maintenance-job seeding coverage
+- Web:
+  - updated scheduler form coverage for typed maintenance config submission
+- Desktop:
+  - updated matching scheduler form coverage for typed maintenance config submission
+
+### Verification summary
+- Backend focused tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/scheduler ./internal/config ./cmd/api`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx`)
+
+### Known follow-ups
+- Scheduler maintenance jobs currently use conservative first-pass behavior:
+  - request archiving marks maintenance metadata but does not move rows into a separate archive table.
+  - orphan cleanup currently targets orphaned terminal ingest-file rows only.
+- Existing non-blocking frontend warnings remain in scheduler tests:
+  - MUI `anchorEl` warnings in jsdom menu/select interactions.
+
 ## Milestone — Scheduler Runtime and Usable Scheduler UI (Complete)
 
 ### What changed

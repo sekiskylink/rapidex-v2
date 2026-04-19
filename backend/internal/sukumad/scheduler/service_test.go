@@ -53,6 +53,29 @@ func TestCreateScheduledJobRejectsInvalidTimezone(t *testing.T) {
 	}
 }
 
+func TestCreateScheduledJobRejectsInvalidMaintenanceConfig(t *testing.T) {
+	svc := NewService(NewRepository())
+
+	_, err := svc.CreateScheduledJob(context.Background(), CreateInput{
+		Code:         "purge-logs",
+		Name:         "Purge Logs",
+		JobCategory:  JobCategoryMaintenance,
+		JobType:      "purge_old_logs",
+		ScheduleType: ScheduleTypeCron,
+		ScheduleExpr: "0 2 * * *",
+		Timezone:     "UTC",
+		Enabled:      true,
+		Config: map[string]any{
+			"dryRun":     false,
+			"batchSize":  0,
+			"maxAgeDays": -1,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected validation error for maintenance config")
+	}
+}
+
 func TestRunNowCreatesPendingManualRun(t *testing.T) {
 	now := time.Date(2026, 4, 18, 13, 0, 0, 0, time.UTC)
 	svc := NewService(NewRepository()).WithClock(func() time.Time { return now })

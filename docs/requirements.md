@@ -1068,4 +1068,25 @@ This milestone introduces the first Scheduler slice for SukumadPro and must be i
   - scheduler route/page smoke coverage
   - API-backed scheduler list/form interactions at a basic level
 
+### 18.9 Maintenance Job Expectations
+- Maintenance scheduler job types must support typed config validation on create and update.
+- Maintenance job config payloads must support fields appropriate to the job type, including:
+  - `dryRun`
+  - `batchSize`
+  - `maxAgeDays`
+  - `staleCutoffMinutes`
+  - `staleCutoffHours`
+- Maintenance handlers must execute real backend work and return structured `resultSummary` metrics including:
+  - `scanned_count`
+  - `affected_count`
+  - `archived_count`
+  - `deleted_count`
+  - `skipped_count`
+- Scheduler forms in both web and desktop must render typed maintenance config editors instead of requiring raw JSON for maintenance jobs.
+- Scheduler run details in both clients must surface:
+  - run status clearly
+  - dry-run state clearly
+  - structured maintenance summary metrics
+- The system should support default maintenance-job seeding on bootstrap/startup without preventing later edits or disablement through the normal Scheduler APIs.
+
 # END (Authoritative)

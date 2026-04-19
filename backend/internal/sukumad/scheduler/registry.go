@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 type JobHandler interface {
@@ -23,30 +24,18 @@ func NewHandlerRegistry() *HandlerRegistry {
 
 func NewDefaultHandlerRegistry() *HandlerRegistry {
 	registry := NewHandlerRegistry()
-	registry.Register("metadata_sync", typedHandler[metadataSyncConfig](func(_ context.Context, exec JobExecution, cfg metadataSyncConfig) (JobResult, error) {
+	registry.Register("metadata_sync", typedHandlerWithValidate[metadataSyncConfig](func(_ context.Context, exec JobExecution, cfg metadataSyncConfig) (JobResult, error) {
 		return placeholderSucceeded(exec, "metadata_sync", cfg), nil
-	}))
-	registry.Register("export_pending_requests", typedHandler[exportPendingRequestsConfig](func(_ context.Context, exec JobExecution, cfg exportPendingRequestsConfig) (JobResult, error) {
+	}, nil))
+	registry.Register("export_pending_requests", typedHandlerWithValidate[exportPendingRequestsConfig](func(_ context.Context, exec JobExecution, cfg exportPendingRequestsConfig) (JobResult, error) {
 		return placeholderSkipped(exec, "export_pending_requests", cfg, "export pending requests is not implemented yet"), nil
-	}))
-	registry.Register("reconciliation_pull", typedHandler[reconciliationPullConfig](func(_ context.Context, exec JobExecution, cfg reconciliationPullConfig) (JobResult, error) {
+	}, nil))
+	registry.Register("reconciliation_pull", typedHandlerWithValidate[reconciliationPullConfig](func(_ context.Context, exec JobExecution, cfg reconciliationPullConfig) (JobResult, error) {
 		return placeholderSkipped(exec, "reconciliation_pull", cfg, "reconciliation pull is not implemented yet"), nil
-	}))
-	registry.Register("scheduled_backfill", typedHandler[scheduledBackfillConfig](func(_ context.Context, exec JobExecution, cfg scheduledBackfillConfig) (JobResult, error) {
+	}, nil))
+	registry.Register("scheduled_backfill", typedHandlerWithValidate[scheduledBackfillConfig](func(_ context.Context, exec JobExecution, cfg scheduledBackfillConfig) (JobResult, error) {
 		return placeholderSkipped(exec, "scheduled_backfill", cfg, "scheduled backfill is not implemented yet"), nil
-	}))
-	registry.Register("archive_old_requests", typedHandler[archiveOldRequestsConfig](func(_ context.Context, exec JobExecution, cfg archiveOldRequestsConfig) (JobResult, error) {
-		return placeholderSucceeded(exec, "archive_old_requests", cfg), nil
-	}))
-	registry.Register("purge_old_logs", typedHandler[purgeOldLogsConfig](func(_ context.Context, exec JobExecution, cfg purgeOldLogsConfig) (JobResult, error) {
-		return placeholderSucceeded(exec, "purge_old_logs", cfg), nil
-	}))
-	registry.Register("mark_stuck_requests", typedHandler[markStuckRequestsConfig](func(_ context.Context, exec JobExecution, cfg markStuckRequestsConfig) (JobResult, error) {
-		return placeholderSucceeded(exec, "mark_stuck_requests", cfg), nil
-	}))
-	registry.Register("cleanup_orphaned_records", typedHandler[cleanupOrphanedRecordsConfig](func(_ context.Context, exec JobExecution, cfg cleanupOrphanedRecordsConfig) (JobResult, error) {
-		return placeholderSucceeded(exec, "cleanup_orphaned_records", cfg), nil
-	}))
+	}, nil))
 	return registry
 }
 
@@ -72,12 +61,26 @@ func (r *HandlerRegistry) Lookup(jobType string) JobHandler {
 	return r.handlers[strings.ToLower(strings.TrimSpace(jobType))]
 }
 
+func (r *HandlerRegistry) ValidateConfig(jobType string, config map[string]any) map[string]any {
+	handler := r.Lookup(jobType)
+	validator, ok := handler.(jobConfigValidator)
+	if !ok {
+		return nil
+	}
+	return validator.ValidateConfig(config)
+}
+
 type typedJobHandler[T any] struct {
-	run func(context.Context, JobExecution, T) (JobResult, error)
+	run      func(context.Context, JobExecution, T) (JobResult, error)
+	validate func(T) map[string]any
 }
 
 func typedHandler[T any](run func(context.Context, JobExecution, T) (JobResult, error)) JobHandler {
-	return typedJobHandler[T]{run: run}
+	return typedHandlerWithValidate(run, nil)
+}
+
+func typedHandlerWithValidate[T any](run func(context.Context, JobExecution, T) (JobResult, error), validate func(T) map[string]any) JobHandler {
+	return typedJobHandler[T]{run: run, validate: validate}
 }
 
 func (h typedJobHandler[T]) Execute(ctx context.Context, exec JobExecution) (JobResult, error) {
@@ -86,6 +89,17 @@ func (h typedJobHandler[T]) Execute(ctx context.Context, exec JobExecution) (Job
 		return JobResult{}, err
 	}
 	return h.run(ctx, exec, cfg)
+}
+
+func (h typedJobHandler[T]) ValidateConfig(input map[string]any) map[string]any {
+	cfg, err := decodeTypedConfig[T](input)
+	if err != nil {
+		return map[string]any{"config": []string{err.Error()}}
+	}
+	if h.validate == nil {
+		return nil
+	}
+	return h.validate(cfg)
 }
 
 func decodeTypedConfig[T any](input map[string]any) (T, error) {
@@ -125,37 +139,53 @@ type scheduledBackfillConfig struct {
 }
 
 type archiveOldRequestsConfig struct {
-	OlderThanDays int  `json:"olderThanDays"`
-	BatchSize     int  `json:"batchSize"`
-	DryRun        bool `json:"dryRun"`
+	MaxAgeDays int  `json:"maxAgeDays"`
+	BatchSize  int  `json:"batchSize"`
+	DryRun     bool `json:"dryRun"`
 }
 
 type purgeOldLogsConfig struct {
-	OlderThanDays int  `json:"olderThanDays"`
-	BatchSize     int  `json:"batchSize"`
-	DryRun        bool `json:"dryRun"`
+	MaxAgeDays int  `json:"maxAgeDays"`
+	BatchSize  int  `json:"batchSize"`
+	DryRun     bool `json:"dryRun"`
 }
 
 type markStuckRequestsConfig struct {
-	OlderThanMinutes int  `json:"olderThanMinutes"`
-	Limit            int  `json:"limit"`
-	DryRun           bool `json:"dryRun"`
+	StaleCutoffMinutes int  `json:"staleCutoffMinutes"`
+	StaleCutoffHours   int  `json:"staleCutoffHours"`
+	BatchSize          int  `json:"batchSize"`
+	DryRun             bool `json:"dryRun"`
 }
 
 type cleanupOrphanedRecordsConfig struct {
-	BatchSize int  `json:"batchSize"`
-	DryRun    bool `json:"dryRun"`
+	MaxAgeDays int  `json:"maxAgeDays"`
+	BatchSize  int  `json:"batchSize"`
+	DryRun     bool `json:"dryRun"`
+}
+
+func (c markStuckRequestsConfig) effectiveCutoffMinutes() int {
+	if c.StaleCutoffMinutes > 0 {
+		return c.StaleCutoffMinutes
+	}
+	if c.StaleCutoffHours > 0 {
+		return c.StaleCutoffHours * 60
+	}
+	return 0
+}
+
+func (c markStuckRequestsConfig) staleCutoff() time.Duration {
+	return time.Duration(c.effectiveCutoffMinutes()) * time.Minute
 }
 
 func placeholderSucceeded(exec JobExecution, jobType string, cfg any) JobResult {
 	return JobResult{
 		Status: RunStatusSucceeded,
 		ResultSummary: map[string]any{
-			"jobType":      jobType,
-			"runUid":       exec.Run.UID,
-			"implemented":  false,
-			"placeholder":  true,
-			"message":      "Placeholder handler executed successfully",
+			"jobType":        jobType,
+			"runUid":         exec.Run.UID,
+			"implemented":    false,
+			"placeholder":    true,
+			"message":        "Placeholder handler executed successfully",
 			"acceptedConfig": cfg,
 		},
 	}

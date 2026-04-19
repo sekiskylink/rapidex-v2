@@ -1,5 +1,5 @@
 import React from 'react'
-import { Alert, Box, Button, Dialog, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Dialog, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
@@ -47,6 +47,29 @@ function formatDate(value?: string | null) {
     return value
   }
   return parsed.toLocaleString()
+}
+
+function renderStatusChip(status: string) {
+  const normalized = status.trim().toLowerCase()
+  const color =
+    normalized === 'succeeded'
+      ? 'success'
+      : normalized === 'failed' || normalized === 'cancelled'
+        ? 'error'
+        : normalized === 'running'
+          ? 'warning'
+          : normalized === 'pending'
+            ? 'info'
+            : 'default'
+  return <Chip label={status || 'Unknown'} size="small" color={color} />
+}
+
+function getSummaryMetric(summary: Record<string, unknown>, key: string) {
+  const value = summary[key]
+  if (typeof value === 'number') {
+    return value
+  }
+  return 0
 }
 
 export function SchedulerJobRunsPage() {
@@ -129,7 +152,7 @@ export function SchedulerJobRunsPage() {
     () => [
       { field: 'uid', headerName: 'Run UID', minWidth: 220, flex: 1.1 },
       { field: 'triggerMode', headerName: 'Trigger', minWidth: 120 },
-      { field: 'status', headerName: 'Status', minWidth: 130 },
+      { field: 'status', headerName: 'Status', minWidth: 130, renderCell: (params: GridRenderCellParams<RunRecord, string>) => renderStatusChip(params.value ?? '') },
       { field: 'scheduledFor', headerName: 'Scheduled For', minWidth: 180, flex: 1, valueGetter: (value) => formatDate(String(value ?? '')) },
       { field: 'startedAt', headerName: 'Started', minWidth: 180, flex: 1, valueGetter: (value) => formatDate(String(value ?? '')) },
       { field: 'finishedAt', headerName: 'Finished', minWidth: 180, flex: 1, valueGetter: (value) => formatDate(String(value ?? '')) },
@@ -220,11 +243,22 @@ export function SchedulerJobRunsPage() {
           {selectedRun ? (
             <Stack spacing={1.5} sx={{ py: 1 }}>
               <Typography variant="body2">Run UID: {selectedRun.uid}</Typography>
-              <Typography variant="body2">Status: {selectedRun.status}</Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2">Status:</Typography>
+                {renderStatusChip(selectedRun.status)}
+                {selectedRun.resultSummary?.dryRun ? <Chip label="Dry Run" size="small" color="warning" variant="outlined" /> : null}
+              </Stack>
               <Typography variant="body2">Scheduled For: {formatDate(selectedRun.scheduledFor)}</Typography>
               <Typography variant="body2">Started: {formatDate(selectedRun.startedAt)}</Typography>
               <Typography variant="body2">Finished: {formatDate(selectedRun.finishedAt)}</Typography>
-              <Typography variant="body2">Error: {selectedRun.errorMessage || '-'}</Typography>
+              {selectedRun.errorMessage ? <Alert severity="error">{selectedRun.errorMessage}</Alert> : null}
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
+                <Chip label={`Scanned ${getSummaryMetric(selectedRun.resultSummary, 'scanned_count')}`} size="small" />
+                <Chip label={`Affected ${getSummaryMetric(selectedRun.resultSummary, 'affected_count')}`} size="small" />
+                <Chip label={`Archived ${getSummaryMetric(selectedRun.resultSummary, 'archived_count')}`} size="small" />
+                <Chip label={`Deleted ${getSummaryMetric(selectedRun.resultSummary, 'deleted_count')}`} size="small" />
+                <Chip label={`Skipped ${getSummaryMetric(selectedRun.resultSummary, 'skipped_count')}`} size="small" />
+              </Stack>
               <TextField
                 label="Result Summary"
                 value={JSON.stringify(selectedRun.resultSummary ?? {}, null, 2)}

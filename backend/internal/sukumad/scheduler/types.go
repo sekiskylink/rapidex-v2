@@ -159,14 +159,14 @@ type DispatchJobParams struct {
 }
 
 type FinalizeRunParams struct {
-	RunID          int64
-	Status         string
-	FinishedAt     time.Time
-	ErrorMessage   string
-	ResultSummary  map[string]any
-	LastRunAt      time.Time
-	LastSuccessAt  *time.Time
-	LastFailureAt  *time.Time
+	RunID         int64
+	Status        string
+	FinishedAt    time.Time
+	ErrorMessage  string
+	ResultSummary map[string]any
+	LastRunAt     time.Time
+	LastSuccessAt *time.Time
+	LastFailureAt *time.Time
 }
 
 type DispatchCycleResult struct {
@@ -228,6 +228,7 @@ type UpdateInput struct {
 type Repository interface {
 	ListScheduledJobs(ctx context.Context, query ListQuery) (ListResult, error)
 	GetScheduledJobByID(ctx context.Context, id int64) (Record, error)
+	GetScheduledJobByCode(ctx context.Context, code string) (Record, error)
 	CreateScheduledJob(ctx context.Context, params CreateParams) (Record, error)
 	UpdateScheduledJob(ctx context.Context, params UpdateParams) (Record, error)
 	SetScheduledJobEnabled(ctx context.Context, params SetEnabledParams) (Record, error)

@@ -48,6 +48,21 @@ function formatDate(value?: string | null) {
   return parsed.toLocaleString()
 }
 
+function renderStatusChip(value?: string | null) {
+  const status = (value ?? '').trim().toLowerCase()
+  const color =
+    status === 'succeeded'
+      ? 'success'
+      : status === 'failed' || status === 'cancelled'
+        ? 'error'
+        : status === 'running'
+          ? 'warning'
+          : status === 'pending'
+            ? 'info'
+            : 'default'
+  return <Chip label={value || 'No runs'} size="small" color={color} />
+}
+
 export function SchedulerJobsPage() {
   const notify = useAppNotify()
   const navigate = useNavigate()
@@ -135,12 +150,7 @@ export function SchedulerJobsPage() {
         field: 'latestRunStatus',
         headerName: 'Latest Status',
         minWidth: 140,
-        renderCell: (params: GridRenderCellParams<ScheduledJobRecord, string | null | undefined>) => {
-          const value = params.value ?? ''
-          const color =
-            value === 'succeeded' ? 'success' : value === 'failed' ? 'error' : value === 'running' ? 'warning' : value === 'skipped' ? 'default' : 'info'
-          return <Chip label={value || 'No runs'} size="small" color={color} />
-        },
+        renderCell: (params: GridRenderCellParams<ScheduledJobRecord, string | null | undefined>) => renderStatusChip(params.value),
       },
       {
         field: 'nextRunAt',

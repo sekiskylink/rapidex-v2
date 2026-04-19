@@ -217,6 +217,30 @@ func (r *SQLRepository) GetScheduledJobByID(ctx context.Context, id int64) (Reco
 	return decodeRow(row)
 }
 
+func (r *SQLRepository) GetScheduledJobByCode(ctx context.Context, code string) (Record, error) {
+	var row recordRow
+	if err := r.db.GetContext(ctx, &row, `
+		SELECT j.id, j.uid::text AS uid, j.code, j.name, j.description, j.job_category, j.job_type, j.schedule_type, j.schedule_expr,
+		       j.timezone, j.enabled, j.allow_concurrent_runs, j.config, j.last_run_at, j.next_run_at, j.last_success_at, j.last_failure_at,
+		       COALESCE(latest.status, '') AS latest_run_status, j.created_at, j.updated_at
+		FROM scheduled_jobs j
+		LEFT JOIN LATERAL (
+			SELECT r.status
+			FROM scheduled_job_runs r
+			WHERE r.scheduled_job_id = j.id
+			ORDER BY COALESCE(r.finished_at, r.started_at, r.created_at) DESC, r.id DESC
+			LIMIT 1
+		) latest ON TRUE
+		WHERE j.code = $1
+	`, strings.TrimSpace(code)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, sql.ErrNoRows
+		}
+		return Record{}, fmt.Errorf("get scheduled job by code: %w", err)
+	}
+	return decodeRow(row)
+}
+
 func (r *SQLRepository) CreateScheduledJob(ctx context.Context, params CreateParams) (Record, error) {
 	configValue, err := json.Marshal(cloneJSONMap(params.Config))
 	if err != nil {
@@ -799,6 +823,19 @@ func (r *memoryRepository) GetScheduledJobByID(_ context.Context, id int64) (Rec
 	defer r.mu.RUnlock()
 	for _, item := range r.jobs {
 		if item.ID == id {
+			cloned := cloneRecord(item)
+			cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
+			return cloned, nil
+		}
+	}
+	return Record{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) GetScheduledJobByCode(_ context.Context, code string) (Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, item := range r.jobs {
+		if item.Code == strings.TrimSpace(code) {
 			cloned := cloneRecord(item)
 			cloned.LatestRunStatus = r.latestRunStatusLocked(cloned.ID)
 			return cloned, nil

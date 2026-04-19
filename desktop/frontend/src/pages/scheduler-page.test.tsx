@@ -215,7 +215,7 @@ describe('desktop scheduler pages', () => {
               timezone: 'UTC',
               enabled: true,
               allowConcurrentRuns: true,
-              config: { retainDays: 30 },
+              config: { dryRun: false, batchSize: 500, maxAgeDays: 30 },
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -235,7 +235,7 @@ describe('desktop scheduler pages', () => {
               timezone: 'UTC',
               enabled: true,
               allowConcurrentRuns: true,
-              config: { retainDays: 30 },
+              config: { dryRun: false, batchSize: 500, maxAgeDays: 30 },
               nextRunAt: '2026-04-19T02:00:00Z',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -260,7 +260,8 @@ describe('desktop scheduler pages', () => {
     fireEvent.mouseDown(screen.getByLabelText('Schedule Type'))
     fireEvent.click(await screen.findByRole('option', { name: 'Cron' }))
     fireEvent.change(screen.getByLabelText('Schedule Expression'), { target: { value: '0 2 * * *' } })
-    fireEvent.change(screen.getByLabelText('Config JSON'), { target: { value: '{"retainDays":30}' } })
+    fireEvent.change(screen.getByLabelText('Batch Size'), { target: { value: '250' } })
+    fireEvent.change(screen.getByLabelText('Max Age Days'), { target: { value: '45' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
 
     await waitFor(() => expect(createPayload).not.toBeNull())
@@ -271,7 +272,7 @@ describe('desktop scheduler pages', () => {
       jobType: 'purge_old_logs',
       scheduleType: 'cron',
       scheduleExpr: '0 2 * * *',
-      config: { retainDays: 30 },
+      config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
     })
   })
 })

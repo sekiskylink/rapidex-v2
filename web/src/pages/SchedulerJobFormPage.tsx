@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   FormControlLabel,
   MenuItem,
   Stack,
@@ -30,6 +31,7 @@ interface ScheduledJobRecord {
   allowConcurrentRuns: boolean
   config: Record<string, unknown>
   nextRunAt?: string | null
+  latestRunStatus?: string | null
 }
 
 interface SchedulerJobFormState {
@@ -71,6 +73,94 @@ const jobTypeOptions = [
   { value: 'cleanup_orphaned_records', label: 'Cleanup Orphaned Records' },
 ] as const
 
+const maintenanceJobTypes = new Set([
+  'archive_old_requests',
+  'purge_old_logs',
+  'mark_stuck_requests',
+  'cleanup_orphaned_records',
+])
+
+interface MaintenanceConfigState {
+  dryRun: boolean
+  batchSize: string
+  maxAgeDays: string
+  staleCutoffMinutes: string
+  staleCutoffHours: string
+}
+
+const defaultMaintenanceConfigs: Record<string, MaintenanceConfigState> = {
+  archive_old_requests: { dryRun: false, batchSize: '100', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
+  purge_old_logs: { dryRun: false, batchSize: '500', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
+  mark_stuck_requests: { dryRun: false, batchSize: '100', maxAgeDays: '', staleCutoffMinutes: '30', staleCutoffHours: '' },
+  cleanup_orphaned_records: { dryRun: false, batchSize: '100', maxAgeDays: '14', staleCutoffMinutes: '', staleCutoffHours: '' },
+}
+
+function isMaintenanceJobType(jobType: string) {
+  return maintenanceJobTypes.has(jobType)
+}
+
+function toStringNumber(value: unknown, fallback = '') {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value
+  }
+  return fallback
+}
+
+function getMaintenanceConfigState(jobType: string, config: Record<string, unknown>): MaintenanceConfigState {
+  const defaults = defaultMaintenanceConfigs[jobType] ?? defaultMaintenanceConfigs.archive_old_requests
+  return {
+    dryRun: Boolean(config.dryRun ?? defaults.dryRun),
+    batchSize: toStringNumber(config.batchSize, defaults.batchSize),
+    maxAgeDays: toStringNumber(config.maxAgeDays, defaults.maxAgeDays),
+    staleCutoffMinutes: toStringNumber(config.staleCutoffMinutes, defaults.staleCutoffMinutes),
+    staleCutoffHours: toStringNumber(config.staleCutoffHours, defaults.staleCutoffHours),
+  }
+}
+
+function parseOptionalInt(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  return Number.parseInt(trimmed, 10)
+}
+
+function buildMaintenanceConfig(jobType: string, config: MaintenanceConfigState) {
+  const payload: Record<string, unknown> = {
+    dryRun: config.dryRun,
+    batchSize: parseOptionalInt(config.batchSize) ?? 0,
+  }
+  if (jobType === 'mark_stuck_requests') {
+    if (config.staleCutoffMinutes.trim()) {
+      payload.staleCutoffMinutes = parseOptionalInt(config.staleCutoffMinutes) ?? 0
+    }
+    if (config.staleCutoffHours.trim()) {
+      payload.staleCutoffHours = parseOptionalInt(config.staleCutoffHours) ?? 0
+    }
+    return payload
+  }
+  payload.maxAgeDays = parseOptionalInt(config.maxAgeDays) ?? 0
+  return payload
+}
+
+function statusChip(status: string) {
+  const normalized = status.trim().toLowerCase()
+  const color =
+    normalized === 'succeeded'
+      ? 'success'
+      : normalized === 'failed' || normalized === 'cancelled'
+        ? 'error'
+        : normalized === 'running'
+          ? 'warning'
+          : normalized === 'pending'
+            ? 'info'
+            : 'default'
+  return <Chip label={status || 'No runs yet'} size="small" color={color} />
+}
+
 function formatDate(value?: string | null) {
   if (!value) {
     return '-'
@@ -93,6 +183,7 @@ export function SchedulerJobFormPage() {
   const [errorMessage, setErrorMessage] = React.useState('')
   const [record, setRecord] = React.useState<ScheduledJobRecord | null>(null)
   const [form, setForm] = React.useState<SchedulerJobFormState>(defaultFormState)
+  const [maintenanceConfig, setMaintenanceConfig] = React.useState<MaintenanceConfigState>(defaultMaintenanceConfigs.archive_old_requests)
 
   React.useEffect(() => {
     if (!isEdit || !jobId) {
@@ -124,6 +215,7 @@ export function SchedulerJobFormPage() {
           allowConcurrentRuns: response.allowConcurrentRuns,
           configText: JSON.stringify(response.config ?? {}, null, 2),
         })
+        setMaintenanceConfig(getMaintenanceConfigState(response.jobType, response.config ?? {}))
       })
       .catch(async (error) => {
         if (!active) {
@@ -150,17 +242,44 @@ export function SchedulerJobFormPage() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  const updateMaintenanceField = <K extends keyof MaintenanceConfigState>(field: K, value: MaintenanceConfigState[K]) => {
+    setMaintenanceConfig((current) => ({ ...current, [field]: value }))
+  }
+
+  const applyJobCategory = (jobCategory: string) => {
+    const nextJobType = jobCategory === 'maintenance'
+      ? (isMaintenanceJobType(form.jobType) ? form.jobType : 'archive_old_requests')
+      : (isMaintenanceJobType(form.jobType) ? 'metadata_sync' : form.jobType)
+    updateField('jobCategory', jobCategory)
+    updateField('jobType', nextJobType)
+    if (isMaintenanceJobType(nextJobType)) {
+      setMaintenanceConfig(getMaintenanceConfigState(nextJobType, {}))
+    }
+  }
+
+  const applyJobType = (jobType: string) => {
+    updateField('jobType', jobType)
+    updateField('jobCategory', isMaintenanceJobType(jobType) ? 'maintenance' : 'integration')
+    if (isMaintenanceJobType(jobType)) {
+      setMaintenanceConfig(getMaintenanceConfigState(jobType, record?.config ?? {}))
+    }
+  }
+
   const handleSubmit = async () => {
     setSaving(true)
     setErrorMessage('')
 
     let configValue: Record<string, unknown> = {}
-    try {
-      configValue = JSON.parse(form.configText || '{}') as Record<string, unknown>
-    } catch {
-      setSaving(false)
-      setErrorMessage('Config JSON must be valid.')
-      return
+    if (isMaintenanceJobType(form.jobType)) {
+      configValue = buildMaintenanceConfig(form.jobType, maintenanceConfig)
+    } else {
+      try {
+        configValue = JSON.parse(form.configText || '{}') as Record<string, unknown>
+      } catch {
+        setSaving(false)
+        setErrorMessage('Config JSON must be valid.')
+        return
+      }
     }
 
     try {
@@ -241,8 +360,12 @@ export function SchedulerJobFormPage() {
 
       {record ? (
         <Alert severity="info">
-          Job UID: {record.uid} | Next run: {formatDate(record.nextRunAt)}
+          Job UID: {record.uid} | Next run: {formatDate(record.nextRunAt)} | Latest status: {statusChip(record.latestRunStatus ?? '')}
         </Alert>
+      ) : null}
+
+      {isMaintenanceJobType(form.jobType) && maintenanceConfig.dryRun ? (
+        <Alert severity="warning">Dry run is enabled. This maintenance job will scan candidates and record a summary without changing data.</Alert>
       ) : null}
 
       <Box
@@ -269,7 +392,7 @@ export function SchedulerJobFormPage() {
           />
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField select label="Job Category" value={form.jobCategory} onChange={(event) => updateField('jobCategory', event.target.value)} fullWidth disabled={loading || saving}>
+            <TextField select label="Job Category" value={form.jobCategory} onChange={(event) => applyJobCategory(event.target.value)} fullWidth disabled={loading || saving}>
               <MenuItem value="integration">Integration</MenuItem>
               <MenuItem value="maintenance">Maintenance</MenuItem>
             </TextField>
@@ -277,7 +400,7 @@ export function SchedulerJobFormPage() {
               select
               label="Job Type"
               value={form.jobType}
-              onChange={(event) => updateField('jobType', event.target.value)}
+              onChange={(event) => applyJobType(event.target.value)}
               fullWidth
               disabled={loading || saving}
               helperText="Scheduler runtime supports the registered scheduler job types."
@@ -316,14 +439,61 @@ export function SchedulerJobFormPage() {
             />
           </Stack>
 
-          <TextField
-            label="Config JSON"
-            value={form.configText}
-            onChange={(event) => updateField('configText', event.target.value)}
-            multiline
-            minRows={10}
-            disabled={loading || saving}
-          />
+          {isMaintenanceJobType(form.jobType) ? (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">Maintenance Configuration</Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField
+                  label="Batch Size"
+                  value={maintenanceConfig.batchSize}
+                  onChange={(event) => updateMaintenanceField('batchSize', event.target.value)}
+                  fullWidth
+                  disabled={loading || saving}
+                />
+                {form.jobType === 'mark_stuck_requests' ? (
+                  <>
+                    <TextField
+                      label="Stale Cutoff Minutes"
+                      value={maintenanceConfig.staleCutoffMinutes}
+                      onChange={(event) => updateMaintenanceField('staleCutoffMinutes', event.target.value)}
+                      fullWidth
+                      disabled={loading || saving}
+                      helperText="Preferred for short scheduler intervals."
+                    />
+                    <TextField
+                      label="Stale Cutoff Hours"
+                      value={maintenanceConfig.staleCutoffHours}
+                      onChange={(event) => updateMaintenanceField('staleCutoffHours', event.target.value)}
+                      fullWidth
+                      disabled={loading || saving}
+                      helperText="Optional alternative to minutes."
+                    />
+                  </>
+                ) : (
+                  <TextField
+                    label="Max Age Days"
+                    value={maintenanceConfig.maxAgeDays}
+                    onChange={(event) => updateMaintenanceField('maxAgeDays', event.target.value)}
+                    fullWidth
+                    disabled={loading || saving}
+                  />
+                )}
+              </Stack>
+              <FormControlLabel
+                control={<Switch checked={maintenanceConfig.dryRun} onChange={(event) => updateMaintenanceField('dryRun', event.target.checked)} disabled={loading || saving} />}
+                label="Dry Run"
+              />
+            </Stack>
+          ) : (
+            <TextField
+              label="Config JSON"
+              value={form.configText}
+              onChange={(event) => updateField('configText', event.target.value)}
+              multiline
+              minRows={10}
+              disabled={loading || saving}
+            />
+          )}
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="flex-end">
             <Button variant="outlined" onClick={() => void navigate({ to: '/scheduler' })} disabled={saving}>

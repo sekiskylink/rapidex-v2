@@ -243,6 +243,20 @@ func run() error {
 		logging.L().Info("dev_admin_seeded", slog.String("username", user.Username), slog.Int64("user_id", user.ID))
 	}
 
+	if cfg.Seed.EnsureSchedulerJobs {
+		seededJobs, err := sukumadSchedulerService.EnsureDefaultMaintenanceJobs(ctx)
+		if err != nil {
+			return fmt.Errorf("seed scheduler jobs: %w", err)
+		}
+		if len(seededJobs) > 0 {
+			codes := make([]string, 0, len(seededJobs))
+			for _, job := range seededJobs {
+				codes = append(codes, job.Code)
+			}
+			logging.L().Info("scheduler_jobs_seeded", slog.Any("codes", codes))
+		}
+	}
+
 	srv := &http.Server{
 		Addr: cfg.Server.Port,
 		Handler: newRouter(AppDeps{

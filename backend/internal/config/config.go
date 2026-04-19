@@ -59,7 +59,8 @@ type Config struct {
 		} `mapstructure:"cors"`
 	} `mapstructure:"security"`
 	Seed struct {
-		EnableDevBootstrap bool `mapstructure:"enable_dev_bootstrap"`
+		EnableDevBootstrap  bool `mapstructure:"enable_dev_bootstrap"`
+		EnsureSchedulerJobs bool `mapstructure:"ensure_scheduler_jobs"`
 	} `mapstructure:"seed"`
 	Modules struct {
 		Flags map[string]bool `mapstructure:"flags"`
@@ -165,7 +166,7 @@ type Config struct {
 			} `mapstructure:"retention"`
 		} `mapstructure:"workers"`
 		Scheduler struct {
-			Enabled bool `mapstructure:"enabled"`
+			Enabled    bool `mapstructure:"enabled"`
 			Dispatcher struct {
 				Enabled         bool `mapstructure:"enabled"`
 				IntervalSeconds int  `mapstructure:"interval_seconds"`
@@ -294,6 +295,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("security.cors.allowed_headers", []string{"Authorization", "Content-Type", "X-API-Token", "X-Request-Id"})
 	v.SetDefault("security.cors.allow_credentials", false)
 	v.SetDefault("seed.enable_dev_bootstrap", false)
+	v.SetDefault("seed.ensure_scheduler_jobs", true)
 	v.SetDefault("modules.flags", map[string]bool{})
 	v.SetDefault("documentation.root_path", "../docs/notes")
 	v.SetDefault("documentation.files", defaultDocumentationFiles())

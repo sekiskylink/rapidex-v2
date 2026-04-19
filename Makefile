@@ -15,10 +15,10 @@ backend-test:
 	cd backend && GOCACHE=/tmp/go-build go test ./...
 
 backend-run:
-	cd backend && GOCACHE=/tmp/go-build go run ./cmd/api
+	cd backend && GOCACHE=/tmp/go-build go run ./cmd/api --config /etc/sukumadpro/config.yaml
 
 backend-worker-run:
-	cd backend && GOCACHE=/tmp/go-build go run ./cmd/worker
+	cd backend && GOCACHE=/tmp/go-build go run ./cmd/worker --config /etc/sukumadpro/config.yaml
 
 generate-openapi:
 	cd backend && GOCACHE=/tmp/go-build go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ../api/oapi-codegen.yaml ../api/openapi.yaml

@@ -29,7 +29,7 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 	if len(auditService) > 0 {
 		auditSvc = auditService[0]
 	}
-	return &Service{
+	service := &Service{
 		repo:         repository,
 		auditService: auditSvc,
 		registry:     NewDefaultHandlerRegistry(),
@@ -37,6 +37,7 @@ func NewService(repository Repository, auditService ...*audit.Service) *Service 
 			return time.Now().UTC()
 		},
 	}
+	return service.WithDefaultMaintenanceHandlers()
 }
 
 func (s *Service) WithClock(clock func() time.Time) *Service {
@@ -49,6 +50,20 @@ func (s *Service) WithClock(clock func() time.Time) *Service {
 func (s *Service) WithRegistry(registry *HandlerRegistry) *Service {
 	if registry != nil {
 		s.registry = registry
+	}
+	return s
+}
+
+func (s *Service) WithDefaultMaintenanceHandlers() *Service {
+	if s == nil {
+		return s
+	}
+	handlers := newMaintenanceHandlers(maintenanceHandlerDependencies{
+		repo: newMaintenanceRepository(s.repo),
+		now:  s.clock,
+	})
+	for jobType, registration := range handlers {
+		s.registry.Register(jobType, registration.handler)
 	}
 	return s
 }
@@ -515,6 +530,13 @@ func (s *Service) normalizeInput(input CreateInput) (CreateInput, *time.Time, ma
 	if _, err := time.LoadLocation(normalized.Timezone); err != nil {
 		details["timezone"] = []string{"must be a valid IANA timezone"}
 	}
+	if len(details) == 0 {
+		if configDetails := s.registry.ValidateConfig(normalized.JobType, normalized.Config); len(configDetails) > 0 {
+			for key, value := range configDetails {
+				details[key] = value
+			}
+		}
+	}
 
 	var nextRunAt *time.Time
 	if len(details) == 0 {
@@ -527,6 +549,76 @@ func (s *Service) normalizeInput(input CreateInput) (CreateInput, *time.Time, ma
 	}
 
 	return normalized, nextRunAt, details
+}
+
+func (s *Service) EnsureDefaultMaintenanceJobs(ctx context.Context) ([]Record, error) {
+	defaults := []CreateInput{
+		{
+			Code:         "archive-old-requests",
+			Name:         "Archive Old Requests",
+			Description:  "Mark old terminal requests as archived for retention review.",
+			JobCategory:  JobCategoryMaintenance,
+			JobType:      "archive_old_requests",
+			ScheduleType: ScheduleTypeCron,
+			ScheduleExpr: "0 1 * * *",
+			Timezone:     "UTC",
+			Enabled:      true,
+			Config: map[string]any{
+				"dryRun":     false,
+				"batchSize":  100,
+				"maxAgeDays": 30,
+			},
+		},
+		{
+			Code:         "purge-old-logs",
+			Name:         "Purge Old Logs",
+			Description:  "Delete aged audit, request-event, poll, and worker log records.",
+			JobCategory:  JobCategoryMaintenance,
+			JobType:      "purge_old_logs",
+			ScheduleType: ScheduleTypeCron,
+			ScheduleExpr: "0 2 * * 0",
+			Timezone:     "UTC",
+			Enabled:      true,
+			Config: map[string]any{
+				"dryRun":     false,
+				"batchSize":  500,
+				"maxAgeDays": 30,
+			},
+		},
+		{
+			Code:         "mark-stuck-requests",
+			Name:         "Mark Stuck Requests",
+			Description:  "Block stale pending or processing requests that have stopped progressing.",
+			JobCategory:  JobCategoryMaintenance,
+			JobType:      "mark_stuck_requests",
+			ScheduleType: ScheduleTypeInterval,
+			ScheduleExpr: "10m",
+			Timezone:     "UTC",
+			Enabled:      true,
+			Config: map[string]any{
+				"dryRun":             false,
+				"batchSize":          100,
+				"staleCutoffMinutes": 30,
+			},
+		},
+	}
+
+	created := make([]Record, 0, len(defaults))
+	for _, def := range defaults {
+		_, err := s.repo.GetScheduledJobByCode(ctx, def.Code)
+		if err == nil {
+			continue
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		record, err := s.CreateScheduledJob(ctx, def)
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, record)
+	}
+	return created, nil
 }
 
 func parseIntervalExpr(expr string) (time.Duration, error) {
