@@ -123,6 +123,7 @@ func run() error {
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
+	sukumadSchedulerService.WithIntegrationServices(sukumadServerService, sukumadRequestService, sukumadDHIS2Service)
 	schedulerRuntime := scheduler.NewRuntime(sukumadSchedulerService, func() scheduler.RuntimeConfig {
 		nextCfg := config.Get().Sukumad.Scheduler
 		return scheduler.RuntimeConfig{
