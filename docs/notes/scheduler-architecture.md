@@ -110,6 +110,8 @@ Scheduler job execution uses a handler registry keyed by `job_type`.
 
 Registered job types:
 
+- `url_call`
+- `request_exchange`
 - `metadata_sync`
 - `export_pending_requests`
 - `reconciliation_pull`
@@ -120,6 +122,12 @@ Registered job types:
 - `cleanup_orphaned_records`
 
 Handlers decode typed config payloads from the stored JSON config and return structured result summaries. Placeholder handlers remain explicit by returning either `succeeded` or `skipped` with a structured summary instead of silently no-oping.
+
+### Integration Handlers
+
+`url_call` executes an outbound call through an existing Integration Server record. It reuses the configured server base URL, HTTP method, headers, URL params, async flag, rate limiting, and response body persistence policy. The scheduler run stores a structured summary with destination server identity, HTTP status, response filtering state, and response summary metadata.
+
+`request_exchange` creates a normal Sukumad exchange request through the existing request service. It accepts server UIDs, source system, payload, submission binding, response policy, URL suffix, and metadata. If no correlation ID is provided, the handler uses `scheduler:<jobCode>:<runUid>`; if an idempotency key prefix is provided, the handler uses `<prefix>:<runUid>`. Existing delivery workers remain responsible for sending the resulting request deliveries.
 
 ## API Surface
 

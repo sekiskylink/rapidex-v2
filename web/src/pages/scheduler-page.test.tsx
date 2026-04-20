@@ -205,4 +205,114 @@ describe('scheduler pages', () => {
       config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
     })
   })
+
+  it('submits URL call scheduled job config through API', async () => {
+    authenticate(['scheduler.read', 'scheduler.write'])
+    let createPayload: Record<string, unknown> | null = null
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/scheduler/jobs' && init?.method === 'POST') {
+        createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return {
+          id: 4,
+          uid: 'sch-4',
+          code: 'url-call',
+          name: 'URL Call',
+          description: '',
+          jobCategory: 'integration',
+          jobType: 'url_call',
+          scheduleType: 'interval',
+          scheduleExpr: '15m',
+          timezone: 'UTC',
+          enabled: true,
+          allowConcurrentRuns: false,
+          config: {},
+        }
+      }
+      if (path === '/scheduler/jobs/4') {
+        return { id: 4, uid: 'sch-4', code: 'url-call', name: 'URL Call', config: {}, latestRunStatus: '' }
+      }
+      return {}
+    })
+
+    renderRoute('/scheduler/new')
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'url-call' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'URL Call' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'URL Call' }))
+    fireEvent.change(screen.getByLabelText('Destination Server UID'), { target: { value: 'srv-uid' } })
+    fireEvent.change(screen.getByLabelText('URL Suffix'), { target: { value: '/api/ping' } })
+    fireEvent.change(screen.getByLabelText('Payload JSON'), { target: { value: '{"ping":true}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'url-call',
+      jobCategory: 'integration',
+      jobType: 'url_call',
+      config: {
+        destinationServerUid: 'srv-uid',
+        urlSuffix: '/api/ping',
+        payloadFormat: 'json',
+        submissionBinding: 'body',
+        payload: { ping: true },
+      },
+    })
+  })
+
+  it('submits request exchange scheduled job config through API', async () => {
+    authenticate(['scheduler.read', 'scheduler.write'])
+    let createPayload: Record<string, unknown> | null = null
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/scheduler/jobs' && init?.method === 'POST') {
+        createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return {
+          id: 5,
+          uid: 'sch-5',
+          code: 'exchange',
+          name: 'Exchange',
+          description: '',
+          jobCategory: 'integration',
+          jobType: 'request_exchange',
+          scheduleType: 'interval',
+          scheduleExpr: '15m',
+          timezone: 'UTC',
+          enabled: true,
+          allowConcurrentRuns: false,
+          config: {},
+        }
+      }
+      if (path === '/scheduler/jobs/5') {
+        return { id: 5, uid: 'sch-5', code: 'exchange', name: 'Exchange', config: {}, latestRunStatus: '' }
+      }
+      return {}
+    })
+
+    renderRoute('/scheduler/new')
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'exchange' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Exchange' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Request Exchange' }))
+    fireEvent.change(screen.getByLabelText('Destination Server UID'), { target: { value: 'srv-uid' } })
+    fireEvent.change(screen.getByLabelText('Additional Destination UIDs'), { target: { value: 'srv-cc-1, srv-cc-2' } })
+    fireEvent.change(screen.getByLabelText('Idempotency Key Prefix'), { target: { value: 'daily' } })
+    fireEvent.change(screen.getByLabelText('Payload JSON'), { target: { value: '{"event":"daily"}' } })
+    fireEvent.change(screen.getByLabelText('Metadata JSON'), { target: { value: '{"owner":"scheduler"}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'exchange',
+      jobType: 'request_exchange',
+      config: {
+        sourceSystem: 'scheduler',
+        destinationServerUid: 'srv-uid',
+        destinationServerUids: ['srv-cc-1', 'srv-cc-2'],
+        idempotencyKeyPrefix: 'daily',
+        payload: { event: 'daily' },
+        metadata: { owner: 'scheduler' },
+      },
+    })
+  })
 })

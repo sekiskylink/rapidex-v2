@@ -1,5 +1,43 @@
 # Status
 
+## Milestone — Scheduler URL Calls and Request Exchanges (Complete)
+
+### What changed
+- Added executable scheduler integration job types:
+  - `url_call` calls a configured Integration Server using the existing outbound/DHIS2 dispatch path, server headers, URL params, rate limiting, and response policy.
+  - `request_exchange` creates a normal Sukumad exchange request through the existing request service so delivery workers handle submission and retries.
+- Added typed scheduler config validation and result summaries for both new job types.
+- Wired scheduler integration handlers into API startup alongside the existing server, request, and outbound submission services.
+- Updated Scheduler forms in both clients with typed editors for URL calls and request exchanges.
+- Added the Scheduler link to the Settings page navigation-label editor in both clients.
+- Updated scheduler requirements and architecture notes.
+- Saved prompt traceability copy in `docs/prompts/2026-04-20-scheduler-url-call-request-exchange.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - URL call config validation and execution through the submitter seam.
+  - Request exchange execution through the request-service seam.
+- Web:
+  - typed URL call and request exchange scheduler form submissions.
+  - Scheduler navigation-label persistence from Settings.
+- Desktop:
+  - matching typed scheduler form submissions.
+  - Scheduler navigation-label persistence from Settings.
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web scheduler tests: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Web route/settings tests: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop scheduler tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Desktop route/settings tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Vite still reports existing bundle-size and third-party `use client` warnings during frontend builds.
+- MUI jsdom `anchorEl` warnings still appear in route/select/menu tests.
+
 ## Milestone — Scheduler Maintenance Jobs End to End (Complete)
 
 ### What changed

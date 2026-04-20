@@ -275,4 +275,167 @@ describe('desktop scheduler pages', () => {
       config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
     })
   })
+
+  it('submits URL call scheduled job config through backend API', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let createPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['scheduler.read', 'scheduler.write'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              id: 4,
+              uid: 'sch-4',
+              code: 'url-call',
+              name: 'URL Call',
+              jobCategory: 'integration',
+              jobType: 'url_call',
+              scheduleType: 'interval',
+              scheduleExpr: '15m',
+              timezone: 'UTC',
+              enabled: true,
+              allowConcurrentRuns: false,
+              config: {},
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/4')) {
+          return new Response(JSON.stringify({ id: 4, uid: 'sch-4', code: 'url-call', name: 'URL Call', config: {} }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/scheduler/new', store)
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'url-call' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'URL Call' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'URL Call' }))
+    fireEvent.change(screen.getByLabelText('Destination Server UID'), { target: { value: 'srv-uid' } })
+    fireEvent.change(screen.getByLabelText('URL Suffix'), { target: { value: '/api/ping' } })
+    fireEvent.change(screen.getByLabelText('Payload JSON'), { target: { value: '{"ping":true}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'url-call',
+      jobType: 'url_call',
+      config: {
+        destinationServerUid: 'srv-uid',
+        urlSuffix: '/api/ping',
+        payload: { ping: true },
+      },
+    })
+  })
+
+  it('submits request exchange scheduled job config through backend API', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let createPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['scheduler.read', 'scheduler.write'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              uid: 'sch-5',
+              code: 'exchange',
+              name: 'Exchange',
+              jobCategory: 'integration',
+              jobType: 'request_exchange',
+              scheduleType: 'interval',
+              scheduleExpr: '15m',
+              timezone: 'UTC',
+              enabled: true,
+              allowConcurrentRuns: false,
+              config: {},
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/5')) {
+          return new Response(JSON.stringify({ id: 5, uid: 'sch-5', code: 'exchange', name: 'Exchange', config: {} }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/scheduler/new', store)
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'exchange' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Exchange' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Request Exchange' }))
+    fireEvent.change(screen.getByLabelText('Destination Server UID'), { target: { value: 'srv-uid' } })
+    fireEvent.change(screen.getByLabelText('Additional Destination UIDs'), { target: { value: 'srv-cc-1, srv-cc-2' } })
+    fireEvent.change(screen.getByLabelText('Payload JSON'), { target: { value: '{"event":"daily"}' } })
+    fireEvent.change(screen.getByLabelText('Metadata JSON'), { target: { value: '{"owner":"scheduler"}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'exchange',
+      jobType: 'request_exchange',
+      config: {
+        sourceSystem: 'scheduler',
+        destinationServerUid: 'srv-uid',
+        destinationServerUids: ['srv-cc-1', 'srv-cc-2'],
+        payload: { event: 'daily' },
+        metadata: { owner: 'scheduler' },
+      },
+    })
+  })
 })

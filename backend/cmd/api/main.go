@@ -191,6 +191,7 @@ func run() error {
 	sukumadObservabilityService.WithDashboardPublisher(sukumadDashboardService)
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithServerService(sukumadServerService).WithEventWriter(sukumadObservabilityService)
+	sukumadSchedulerService.WithIntegrationServices(sukumadServerService, sukumadRequestService, sukumadDHIS2Service)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)

@@ -1006,6 +1006,8 @@ This milestone introduces the first Scheduler slice for SukumadPro and must be i
 ### 18.1 V1 Scope
 - Support scheduled integration jobs.
 - Support maintenance jobs.
+- Support scheduled Integration Server URL calls through configured server records.
+- Support scheduled request exchanges that create normal Sukumad exchange requests for existing delivery workers.
 - Store scheduled job definitions and scheduled job run history in the backend.
 - Expose versioned API endpoints for create, update, list, get, enable/disable, run-now, and run-history retrieval.
 - Add matching Scheduler navigation and placeholder-but-working management pages in both web and desktop clients.
@@ -1083,6 +1085,9 @@ This milestone introduces the first Scheduler slice for SukumadPro and must be i
   - `deleted_count`
   - `skipped_count`
 - Scheduler forms in both web and desktop must render typed maintenance config editors instead of requiring raw JSON for maintenance jobs.
+- Scheduler forms in both web and desktop must render typed config editors for supported executable integration jobs:
+  - `url_call`
+  - `request_exchange`
 - Scheduler run details in both clients must surface:
   - run status clearly
   - dry-run state clearly

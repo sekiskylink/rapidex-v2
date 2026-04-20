@@ -1636,6 +1636,63 @@ describe('app shell routes', () => {
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
   })
 
+  it('updates Scheduler navigation label from settings page', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Admin'],
+              permissions: ['settings.read', 'settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/settings/login-branding')) {
+          return new Response(JSON.stringify({ applicationDisplayName: 'BasePro', loginImageUrl: '' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/settings/module-enablement')) {
+          return new Response(JSON.stringify({ modules: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings', store)
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Scheduler link'), { target: { value: 'Timed Calls' } })
+
+    await waitFor(() => {
+      expect(store.saveSettingsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uiPrefs: expect.objectContaining({
+            navLabels: expect.objectContaining({ scheduler: 'Timed Calls' }),
+          }),
+        }),
+      )
+    })
+  })
+
   it('submits forgot-password request and shows non-enumerating success message', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

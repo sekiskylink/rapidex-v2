@@ -886,6 +886,7 @@ describe('web settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Forest' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Start with side navigation collapsed' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Show footer on authenticated pages' }))
+    fireEvent.change(screen.getByLabelText('Scheduler link'), { target: { value: 'Timed Calls' } })
 
     const rawPrefs = window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY)
     expect(rawPrefs).toBeTruthy()
@@ -894,6 +895,7 @@ describe('web settings page', () => {
         preset: 'forest',
         collapseNavByDefault: true,
         showFooter: false,
+        navLabels: expect.objectContaining({ scheduler: 'Timed Calls' }),
       }),
     )
   })

@@ -63,6 +63,8 @@ const defaultFormState: SchedulerJobFormState = {
 }
 
 const jobTypeOptions = [
+  { value: 'url_call', label: 'URL Call' },
+  { value: 'request_exchange', label: 'Request Exchange' },
   { value: 'metadata_sync', label: 'Metadata Sync' },
   { value: 'export_pending_requests', label: 'Export Pending Requests' },
   { value: 'reconciliation_pull', label: 'Reconciliation Pull' },
@@ -88,6 +90,24 @@ interface MaintenanceConfigState {
   staleCutoffHours: string
 }
 
+interface URLCallConfigState {
+  destinationServerUid: string
+  urlSuffix: string
+  payloadFormat: string
+  submissionBinding: string
+  responseBodyPersistence: string
+  payloadText: string
+}
+
+interface RequestExchangeConfigState extends URLCallConfigState {
+  sourceSystem: string
+  destinationServerUids: string
+  batchId: string
+  correlationId: string
+  idempotencyKeyPrefix: string
+  metadataText: string
+}
+
 const defaultMaintenanceConfigs: Record<string, MaintenanceConfigState> = {
   archive_old_requests: { dryRun: false, batchSize: '100', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
   purge_old_logs: { dryRun: false, batchSize: '500', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
@@ -95,8 +115,35 @@ const defaultMaintenanceConfigs: Record<string, MaintenanceConfigState> = {
   cleanup_orphaned_records: { dryRun: false, batchSize: '100', maxAgeDays: '14', staleCutoffMinutes: '', staleCutoffHours: '' },
 }
 
+const defaultURLCallConfig: URLCallConfigState = {
+  destinationServerUid: '',
+  urlSuffix: '',
+  payloadFormat: 'json',
+  submissionBinding: 'body',
+  responseBodyPersistence: '',
+  payloadText: '{}',
+}
+
+const defaultRequestExchangeConfig: RequestExchangeConfigState = {
+  ...defaultURLCallConfig,
+  sourceSystem: 'scheduler',
+  destinationServerUids: '',
+  batchId: '',
+  correlationId: '',
+  idempotencyKeyPrefix: '',
+  metadataText: '{}',
+}
+
 function isMaintenanceJobType(jobType: string) {
   return maintenanceJobTypes.has(jobType)
+}
+
+function isURLCallJobType(jobType: string) {
+  return jobType === 'url_call'
+}
+
+function isRequestExchangeJobType(jobType: string) {
+  return jobType === 'request_exchange'
 }
 
 function toStringNumber(value: unknown, fallback = '') {
@@ -117,6 +164,36 @@ function getMaintenanceConfigState(jobType: string, config: Record<string, unkno
     maxAgeDays: toStringNumber(config.maxAgeDays, defaults.maxAgeDays),
     staleCutoffMinutes: toStringNumber(config.staleCutoffMinutes, defaults.staleCutoffMinutes),
     staleCutoffHours: toStringNumber(config.staleCutoffHours, defaults.staleCutoffHours),
+  }
+}
+
+function getURLCallConfigState(config: Record<string, unknown>): URLCallConfigState {
+  const payloadFormat = typeof config.payloadFormat === 'string' && config.payloadFormat ? config.payloadFormat : 'json'
+  return {
+    destinationServerUid: typeof config.destinationServerUid === 'string' ? config.destinationServerUid : '',
+    urlSuffix: typeof config.urlSuffix === 'string' ? config.urlSuffix : '',
+    payloadFormat,
+    submissionBinding: typeof config.submissionBinding === 'string' && config.submissionBinding ? config.submissionBinding : 'body',
+    responseBodyPersistence: typeof config.responseBodyPersistence === 'string' ? config.responseBodyPersistence : '',
+    payloadText:
+      payloadFormat === 'text'
+        ? typeof config.payload === 'string'
+          ? config.payload
+          : ''
+        : JSON.stringify(config.payload ?? {}, null, 2),
+  }
+}
+
+function getRequestExchangeConfigState(config: Record<string, unknown>): RequestExchangeConfigState {
+  const base = getURLCallConfigState(config)
+  return {
+    ...base,
+    sourceSystem: typeof config.sourceSystem === 'string' && config.sourceSystem ? config.sourceSystem : 'scheduler',
+    destinationServerUids: Array.isArray(config.destinationServerUids) ? config.destinationServerUids.join(', ') : '',
+    batchId: typeof config.batchId === 'string' ? config.batchId : '',
+    correlationId: typeof config.correlationId === 'string' ? config.correlationId : '',
+    idempotencyKeyPrefix: typeof config.idempotencyKeyPrefix === 'string' ? config.idempotencyKeyPrefix : '',
+    metadataText: JSON.stringify(config.metadata ?? {}, null, 2),
   }
 }
 
@@ -144,6 +221,20 @@ function buildMaintenanceConfig(jobType: string, config: MaintenanceConfigState)
   }
   payload.maxAgeDays = parseOptionalInt(config.maxAgeDays) ?? 0
   return payload
+}
+
+function parsePayloadConfig(payloadFormat: string, payloadText: string) {
+  if (payloadFormat === 'text') {
+    return payloadText
+  }
+  return JSON.parse(payloadText || '{}') as unknown
+}
+
+function splitCSV(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
 }
 
 function statusChip(status: string) {
@@ -184,12 +275,16 @@ export function SchedulerJobFormPage() {
   const [record, setRecord] = React.useState<ScheduledJobRecord | null>(null)
   const [form, setForm] = React.useState<SchedulerJobFormState>(defaultFormState)
   const [maintenanceConfig, setMaintenanceConfig] = React.useState<MaintenanceConfigState>(defaultMaintenanceConfigs.archive_old_requests)
+  const [urlCallConfig, setURLCallConfig] = React.useState<URLCallConfigState>(defaultURLCallConfig)
+  const [requestExchangeConfig, setRequestExchangeConfig] = React.useState<RequestExchangeConfigState>(defaultRequestExchangeConfig)
 
   React.useEffect(() => {
     if (!isEdit || !jobId) {
       setLoading(false)
       setRecord(null)
       setForm(defaultFormState)
+      setURLCallConfig(defaultURLCallConfig)
+      setRequestExchangeConfig(defaultRequestExchangeConfig)
       return
     }
 
@@ -216,6 +311,8 @@ export function SchedulerJobFormPage() {
           configText: JSON.stringify(response.config ?? {}, null, 2),
         })
         setMaintenanceConfig(getMaintenanceConfigState(response.jobType, response.config ?? {}))
+        setURLCallConfig(getURLCallConfigState(response.config ?? {}))
+        setRequestExchangeConfig(getRequestExchangeConfigState(response.config ?? {}))
       })
       .catch(async (error) => {
         if (!active) {
@@ -246,6 +343,14 @@ export function SchedulerJobFormPage() {
     setMaintenanceConfig((current) => ({ ...current, [field]: value }))
   }
 
+  const updateURLCallField = <K extends keyof URLCallConfigState>(field: K, value: URLCallConfigState[K]) => {
+    setURLCallConfig((current) => ({ ...current, [field]: value }))
+  }
+
+  const updateRequestExchangeField = <K extends keyof RequestExchangeConfigState>(field: K, value: RequestExchangeConfigState[K]) => {
+    setRequestExchangeConfig((current) => ({ ...current, [field]: value }))
+  }
+
   const applyJobCategory = (jobCategory: string) => {
     const nextJobType = jobCategory === 'maintenance'
       ? (isMaintenanceJobType(form.jobType) ? form.jobType : 'archive_old_requests')
@@ -254,6 +359,10 @@ export function SchedulerJobFormPage() {
     updateField('jobType', nextJobType)
     if (isMaintenanceJobType(nextJobType)) {
       setMaintenanceConfig(getMaintenanceConfigState(nextJobType, {}))
+    } else if (isURLCallJobType(nextJobType)) {
+      setURLCallConfig(defaultURLCallConfig)
+    } else if (isRequestExchangeJobType(nextJobType)) {
+      setRequestExchangeConfig(defaultRequestExchangeConfig)
     }
   }
 
@@ -262,6 +371,10 @@ export function SchedulerJobFormPage() {
     updateField('jobCategory', isMaintenanceJobType(jobType) ? 'maintenance' : 'integration')
     if (isMaintenanceJobType(jobType)) {
       setMaintenanceConfig(getMaintenanceConfigState(jobType, record?.config ?? {}))
+    } else if (isURLCallJobType(jobType)) {
+      setURLCallConfig(getURLCallConfigState(record?.config ?? {}))
+    } else if (isRequestExchangeJobType(jobType)) {
+      setRequestExchangeConfig(getRequestExchangeConfigState(record?.config ?? {}))
     }
   }
 
@@ -272,6 +385,42 @@ export function SchedulerJobFormPage() {
     let configValue: Record<string, unknown> = {}
     if (isMaintenanceJobType(form.jobType)) {
       configValue = buildMaintenanceConfig(form.jobType, maintenanceConfig)
+    } else if (isURLCallJobType(form.jobType)) {
+      try {
+        configValue = {
+          destinationServerUid: urlCallConfig.destinationServerUid,
+          urlSuffix: urlCallConfig.urlSuffix,
+          payloadFormat: urlCallConfig.payloadFormat,
+          submissionBinding: urlCallConfig.submissionBinding,
+          responseBodyPersistence: urlCallConfig.responseBodyPersistence,
+          payload: parsePayloadConfig(urlCallConfig.payloadFormat, urlCallConfig.payloadText),
+        }
+      } catch {
+        setSaving(false)
+        setErrorMessage('Payload JSON must be valid.')
+        return
+      }
+    } else if (isRequestExchangeJobType(form.jobType)) {
+      try {
+        configValue = {
+          sourceSystem: requestExchangeConfig.sourceSystem,
+          destinationServerUid: requestExchangeConfig.destinationServerUid,
+          destinationServerUids: splitCSV(requestExchangeConfig.destinationServerUids),
+          batchId: requestExchangeConfig.batchId,
+          correlationId: requestExchangeConfig.correlationId,
+          idempotencyKeyPrefix: requestExchangeConfig.idempotencyKeyPrefix,
+          urlSuffix: requestExchangeConfig.urlSuffix,
+          payloadFormat: requestExchangeConfig.payloadFormat,
+          submissionBinding: requestExchangeConfig.submissionBinding,
+          responseBodyPersistence: requestExchangeConfig.responseBodyPersistence,
+          payload: parsePayloadConfig(requestExchangeConfig.payloadFormat, requestExchangeConfig.payloadText),
+          metadata: JSON.parse(requestExchangeConfig.metadataText || '{}') as Record<string, unknown>,
+        }
+      } catch {
+        setSaving(false)
+        setErrorMessage('Payload and metadata JSON must be valid.')
+        return
+      }
     } else {
       try {
         configValue = JSON.parse(form.configText || '{}') as Record<string, unknown>
@@ -482,6 +631,116 @@ export function SchedulerJobFormPage() {
               <FormControlLabel
                 control={<Switch checked={maintenanceConfig.dryRun} onChange={(event) => updateMaintenanceField('dryRun', event.target.checked)} disabled={loading || saving} />}
                 label="Dry Run"
+              />
+            </Stack>
+          ) : isURLCallJobType(form.jobType) ? (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">URL Call Configuration</Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField
+                  label="Destination Server UID"
+                  value={urlCallConfig.destinationServerUid}
+                  onChange={(event) => updateURLCallField('destinationServerUid', event.target.value)}
+                  fullWidth
+                  disabled={loading || saving}
+                />
+                <TextField
+                  label="URL Suffix"
+                  value={urlCallConfig.urlSuffix}
+                  onChange={(event) => updateURLCallField('urlSuffix', event.target.value)}
+                  fullWidth
+                  disabled={loading || saving}
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField select label="Payload Format" value={urlCallConfig.payloadFormat} onChange={(event) => updateURLCallField('payloadFormat', event.target.value)} fullWidth disabled={loading || saving}>
+                  <MenuItem value="json">JSON</MenuItem>
+                  <MenuItem value="text">Text</MenuItem>
+                </TextField>
+                <TextField select label="Submission Binding" value={urlCallConfig.submissionBinding} onChange={(event) => updateURLCallField('submissionBinding', event.target.value)} fullWidth disabled={loading || saving}>
+                  <MenuItem value="body">Body</MenuItem>
+                  <MenuItem value="query">Query</MenuItem>
+                </TextField>
+                <TextField select label="Response Body Persistence" value={urlCallConfig.responseBodyPersistence} onChange={(event) => updateURLCallField('responseBodyPersistence', event.target.value)} fullWidth disabled={loading || saving}>
+                  <MenuItem value="">Server default</MenuItem>
+                  <MenuItem value="filter">Filter</MenuItem>
+                  <MenuItem value="save">Save</MenuItem>
+                  <MenuItem value="discard">Discard</MenuItem>
+                </TextField>
+              </Stack>
+              <TextField
+                label={urlCallConfig.payloadFormat === 'text' ? 'Payload Text' : 'Payload JSON'}
+                value={urlCallConfig.payloadText}
+                onChange={(event) => updateURLCallField('payloadText', event.target.value)}
+                multiline
+                minRows={8}
+                disabled={loading || saving}
+              />
+            </Stack>
+          ) : isRequestExchangeJobType(form.jobType) ? (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">Request Exchange Configuration</Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField
+                  label="Source System"
+                  value={requestExchangeConfig.sourceSystem}
+                  onChange={(event) => updateRequestExchangeField('sourceSystem', event.target.value)}
+                  fullWidth
+                  disabled={loading || saving}
+                />
+                <TextField
+                  label="Destination Server UID"
+                  value={requestExchangeConfig.destinationServerUid}
+                  onChange={(event) => updateRequestExchangeField('destinationServerUid', event.target.value)}
+                  fullWidth
+                  disabled={loading || saving}
+                />
+                <TextField
+                  label="Additional Destination UIDs"
+                  value={requestExchangeConfig.destinationServerUids}
+                  onChange={(event) => updateRequestExchangeField('destinationServerUids', event.target.value)}
+                  fullWidth
+                  disabled={loading || saving}
+                  helperText="Comma-separated optional CC destinations."
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField label="Batch ID" value={requestExchangeConfig.batchId} onChange={(event) => updateRequestExchangeField('batchId', event.target.value)} fullWidth disabled={loading || saving} />
+                <TextField label="Correlation ID" value={requestExchangeConfig.correlationId} onChange={(event) => updateRequestExchangeField('correlationId', event.target.value)} fullWidth disabled={loading || saving} helperText="Blank uses scheduler job/run IDs." />
+                <TextField label="Idempotency Key Prefix" value={requestExchangeConfig.idempotencyKeyPrefix} onChange={(event) => updateRequestExchangeField('idempotencyKeyPrefix', event.target.value)} fullWidth disabled={loading || saving} />
+              </Stack>
+              <TextField label="URL Suffix" value={requestExchangeConfig.urlSuffix} onChange={(event) => updateRequestExchangeField('urlSuffix', event.target.value)} fullWidth disabled={loading || saving} />
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField select label="Payload Format" value={requestExchangeConfig.payloadFormat} onChange={(event) => updateRequestExchangeField('payloadFormat', event.target.value)} fullWidth disabled={loading || saving}>
+                  <MenuItem value="json">JSON</MenuItem>
+                  <MenuItem value="text">Text</MenuItem>
+                </TextField>
+                <TextField select label="Submission Binding" value={requestExchangeConfig.submissionBinding} onChange={(event) => updateRequestExchangeField('submissionBinding', event.target.value)} fullWidth disabled={loading || saving}>
+                  <MenuItem value="body">Body</MenuItem>
+                  <MenuItem value="query">Query</MenuItem>
+                </TextField>
+                <TextField select label="Response Body Persistence" value={requestExchangeConfig.responseBodyPersistence} onChange={(event) => updateRequestExchangeField('responseBodyPersistence', event.target.value)} fullWidth disabled={loading || saving}>
+                  <MenuItem value="">Server default</MenuItem>
+                  <MenuItem value="filter">Filter</MenuItem>
+                  <MenuItem value="save">Save</MenuItem>
+                  <MenuItem value="discard">Discard</MenuItem>
+                </TextField>
+              </Stack>
+              <TextField
+                label={requestExchangeConfig.payloadFormat === 'text' ? 'Payload Text' : 'Payload JSON'}
+                value={requestExchangeConfig.payloadText}
+                onChange={(event) => updateRequestExchangeField('payloadText', event.target.value)}
+                multiline
+                minRows={8}
+                disabled={loading || saving}
+              />
+              <TextField
+                label="Metadata JSON"
+                value={requestExchangeConfig.metadataText}
+                onChange={(event) => updateRequestExchangeField('metadataText', event.target.value)}
+                multiline
+                minRows={4}
+                disabled={loading || saving}
               />
             </Stack>
           ) : (

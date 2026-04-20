@@ -12,6 +12,9 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/delivery"
+	requests "basepro/backend/internal/sukumad/request"
+	sukumadserver "basepro/backend/internal/sukumad/server"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -66,6 +69,34 @@ func (s *Service) WithDefaultMaintenanceHandlers() *Service {
 		s.registry.Register(jobType, registration.handler)
 	}
 	return s
+}
+
+func (s *Service) WithIntegrationHandlers(deps integrationHandlerDependencies) *Service {
+	if s == nil {
+		return s
+	}
+	for jobType, registration := range newIntegrationHandlers(deps) {
+		s.registry.Register(jobType, registration.handler)
+	}
+	return s
+}
+
+func (s *Service) WithIntegrationServices(
+	serverLookup interface {
+		GetServerByUID(context.Context, string) (sukumadserver.Record, error)
+	},
+	requestCreator interface {
+		CreateExternalRequest(context.Context, requests.ExternalCreateInput) (requests.CreateResult, error)
+	},
+	submitter interface {
+		Submit(context.Context, delivery.DispatchInput) (delivery.DispatchResult, error)
+	},
+) *Service {
+	return s.WithIntegrationHandlers(integrationHandlerDependencies{
+		serverLookup:   serverLookup,
+		requestCreator: requestCreator,
+		submitter:      submitter,
+	})
 }
 
 func (s *Service) ListScheduledJobs(ctx context.Context, query ListQuery) (ListResult, error) {

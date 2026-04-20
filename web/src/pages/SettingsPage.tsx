@@ -67,6 +67,7 @@ const navigationLabelFields = [
   { id: 'requests', label: 'Requests link' },
   { id: 'deliveries', label: 'Deliveries link' },
   { id: 'jobs', label: 'Jobs link' },
+  { id: 'scheduler', label: 'Scheduler link' },
   { id: 'observability', label: 'Observability link' },
   { id: 'documentation', label: 'Documentation link' },
 ] as const
