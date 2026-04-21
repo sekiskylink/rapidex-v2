@@ -1,5 +1,53 @@
 # Status
 
+## Milestone — Rapidex RapidPro Reporter Sync and Messaging (Complete)
+
+### What changed
+- Added a RapidPro client under `backend/internal/sukumad/rapidex/rapidpro` to handle contacts, groups, messages, and broadcasts using the existing Integration Servers configuration via reserved server code `rapidpro`.
+- Extended the Rapidex reporter service, repository, and routes with:
+  - single reporter sync
+  - bulk reporter sync
+  - single reporter SMS send
+  - bulk reporter broadcast
+- Implemented reporter sync as an upsert flow:
+  - use local `rapidpro_uuid` when available
+  - otherwise look up by normalized `tel:` URN
+  - create when missing
+  - persist the resolved or created UUID back to `reporters.rapidpro_uuid`
+- Added automatic RapidPro group resolution/creation from local reporter group names during sync and continued to track local `synced` state.
+- Added scheduler job type `rapidpro_reporter_sync` with incremental watermarking from the previous successful run and default seeding through scheduler startup.
+- Updated both web and desktop Reporters pages with row actions and bulk actions for RapidPro sync/SMS/broadcast workflows, and exposed the new scheduler job type in both scheduler forms.
+- Updated both web and desktop navigation so each visible link uses a distinct icon, including the Sukumad parent section and Rapidex org-unit/reporter links.
+- Added durable implementation notes in `docs/notes/rapidex-rapidpro-reporter-sync.md`.
+- Saved prompt traceability copy in `docs/prompts/2026-04-21-rapidex-rapidpro-reporters.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter service coverage for contact creation persistence and incremental dry-run sync behavior
+  - scheduler seed coverage for the default RapidPro reporter sync job
+  - updated server service tests for the extended integration-server repository contract
+- Web:
+  - reporter page coverage for row sync and bulk broadcast flows
+  - scheduler form coverage for `rapidpro_reporter_sync` config submission
+- Desktop:
+  - matching reporter page coverage for RapidPro actions
+  - matching scheduler form coverage for `rapidpro_reporter_sync`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI warnings remain in frontend tests:
+  - `anchorEl` warnings in menu/select interactions
+  - controlled/uncontrolled select warnings in scheduler form tests
+- Existing Vite third-party `'use client'` and chunk-size warnings still appear during web and desktop frontend builds.
+
 ## Milestone — Rapidex Org Unit and Reporter Enrichment (Complete)
 
 ### What changed

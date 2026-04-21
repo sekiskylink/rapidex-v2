@@ -156,6 +156,22 @@ func (r *SQLRepository) GetServerByUID(ctx context.Context, uid string) (Record,
 	return decodeRow(row)
 }
 
+func (r *SQLRepository) GetServerByCode(ctx context.Context, code string) (Record, error) {
+	var row recordRow
+	if err := r.db.GetContext(ctx, &row, `
+		SELECT id, uid::text AS uid, name, code, system_type, base_url, endpoint_type, http_method,
+		       use_async, parse_responses, response_body_persistence, headers, url_params, suspended, created_at, updated_at, created_by
+		FROM integration_servers
+		WHERE LOWER(code) = LOWER($1)
+	`, strings.TrimSpace(code)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Record{}, sql.ErrNoRows
+		}
+		return Record{}, fmt.Errorf("get integration server by code: %w", err)
+	}
+	return decodeRow(row)
+}
+
 func (r *SQLRepository) CreateServer(ctx context.Context, params CreateParams) (Record, error) {
 	headers, err := json.Marshal(cloneStringMap(params.Headers))
 	if err != nil {
@@ -425,6 +441,19 @@ func (r *memoryRepository) GetServerByUID(_ context.Context, uid string) (Record
 
 	for _, item := range r.items {
 		if item.UID == strings.TrimSpace(uid) {
+			return cloneRecord(item), nil
+		}
+	}
+	return Record{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) GetServerByCode(_ context.Context, code string) (Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	normalized := strings.TrimSpace(code)
+	for _, item := range r.items {
+		if strings.EqualFold(item.Code, normalized) {
 			return cloneRecord(item), nil
 		}
 	}

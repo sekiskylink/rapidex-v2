@@ -44,6 +44,13 @@ import {
   EventAvailableRoundedIcon,
   VisibilityRoundedIcon,
   VpnKeyRoundedIcon,
+  DnsRoundedIcon,
+  ReceiptLongRoundedIcon,
+  LocalShippingRoundedIcon,
+  WorkOutlineRoundedIcon,
+  ArticleRoundedIcon,
+  ApartmentRoundedIcon,
+  PersonRoundedIcon,
 } from '../ui/icons'
 import { PalettePresetPicker } from '../ui/theme/PalettePresetPicker'
 import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
@@ -159,15 +166,15 @@ export function AppShell() {
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     permissions: <VpnKeyRoundedIcon fontSize="small" />,
     audit: <FactCheckRoundedIcon fontSize="small" />,
-    servers: <AccountBalanceWalletRoundedIcon fontSize="small" />,
-    requests: <BadgeRoundedIcon fontSize="small" />,
-    deliveries: <EventAvailableRoundedIcon fontSize="small" />,
-    jobs: <AdminPanelSettingsRoundedIcon fontSize="small" />,
+    servers: <DnsRoundedIcon fontSize="small" />,
+    requests: <ReceiptLongRoundedIcon fontSize="small" />,
+    deliveries: <LocalShippingRoundedIcon fontSize="small" />,
+    jobs: <WorkOutlineRoundedIcon fontSize="small" />,
     scheduler: <EventAvailableRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
-    documentation: <FactCheckRoundedIcon fontSize="small" />,
-    orgunits: <AccountBalanceWalletRoundedIcon fontSize="small" />,
-    reporters: <GroupRoundedIcon fontSize="small" />,
+    documentation: <ArticleRoundedIcon fontSize="small" />,
+    orgunits: <ApartmentRoundedIcon fontSize="small" />,
+    reporters: <PersonRoundedIcon fontSize="small" />,
   }
   const activeDrawerWidth = collapsed ? miniDrawerWidth : drawerWidth
 

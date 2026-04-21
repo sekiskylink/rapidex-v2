@@ -23,6 +23,7 @@ import { alpha } from '@mui/material/styles'
 import MenuIcon from '@mui/icons-material/Menu'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
+import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded'
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded'
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded'
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
@@ -34,11 +35,13 @@ import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded'
 import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded'
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
 import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded'
+import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded'
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
 import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded'
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
@@ -145,7 +148,7 @@ export function AppShell() {
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
-    sukumad: <DnsRoundedIcon fontSize="small" />,
+    sukumad: <AccountBalanceWalletRoundedIcon fontSize="small" />,
     users: <GroupRoundedIcon fontSize="small" />,
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
     permissions: <VpnKeyRoundedIcon fontSize="small" />,
@@ -157,8 +160,8 @@ export function AppShell() {
     scheduler: <ScheduleRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
     documentation: <ArticleRoundedIcon fontSize="small" />,
-    orgunits: <DnsRoundedIcon fontSize="small" />,
-    reporters: <GroupRoundedIcon fontSize="small" />,
+    orgunits: <ApartmentRoundedIcon fontSize="small" />,
+    reporters: <PersonRoundedIcon fontSize="small" />,
   }
 
   const closeMenus = () => {

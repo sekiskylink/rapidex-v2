@@ -438,4 +438,82 @@ describe('desktop scheduler pages', () => {
       },
     })
   })
+
+  it('submits RapidPro reporter sync scheduled job config through backend API', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let createPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['scheduler.read', 'scheduler.write'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              id: 6,
+              uid: 'sch-6',
+              code: 'rapidpro-reporter-sync',
+              name: 'RapidPro Reporter Sync',
+              jobCategory: 'integration',
+              jobType: 'rapidpro_reporter_sync',
+              scheduleType: 'interval',
+              scheduleExpr: '30m',
+              timezone: 'UTC',
+              enabled: true,
+              allowConcurrentRuns: false,
+              config: {},
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/6')) {
+          return new Response(JSON.stringify({ id: 6, uid: 'sch-6', code: 'rapidpro-reporter-sync', name: 'RapidPro Reporter Sync', config: {} }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/scheduler/new', store)
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'rapidpro-reporter-sync' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'RapidPro Reporter Sync' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'RapidPro Reporter Sync' }))
+    fireEvent.change(screen.getByLabelText('Batch Size'), { target: { value: '150' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'rapidpro-reporter-sync',
+      jobType: 'rapidpro_reporter_sync',
+      config: {
+        dryRun: false,
+        batchSize: 150,
+        onlyActive: true,
+      },
+    })
+  })
 })

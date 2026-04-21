@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -17,6 +18,7 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
+import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { apiRequest } from '../lib/api'
 
 interface Reporter {
@@ -59,9 +61,13 @@ type ReporterFormState = {
   whatsapp: string
   telegram: string
   orgUnitId: string
-  rapidProUuid: string
   isActive: boolean
   groups: string[]
+}
+
+type MessageDialogState = {
+  mode: 'single' | 'bulk'
+  reporter?: Reporter | null
 }
 
 const emptyForm: ReporterFormState = {
@@ -70,7 +76,6 @@ const emptyForm: ReporterFormState = {
   whatsapp: '',
   telegram: '',
   orgUnitId: '',
-  rapidProUuid: '',
   isActive: true,
   groups: [],
 }
@@ -85,7 +90,6 @@ function toForm(reporter?: Reporter | null): ReporterFormState {
     whatsapp: reporter.whatsapp ?? '',
     telegram: reporter.telegram ?? '',
     orgUnitId: reporter.orgUnitId ? String(reporter.orgUnitId) : '',
-    rapidProUuid: reporter.rapidProUuid ?? '',
     isActive: reporter.isActive,
     groups: reporter.groups ?? [],
   }
@@ -94,12 +98,16 @@ function toForm(reporter?: Reporter | null): ReporterFormState {
 export function ReportersPage() {
   const [reporters, setReporters] = React.useState<Reporter[]>([])
   const [orgUnits, setOrgUnits] = React.useState<OrgUnit[]>([])
+  const [selectedIds, setSelectedIds] = React.useState<number[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Reporter | null>(null)
   const [form, setForm] = React.useState<ReporterFormState>(emptyForm)
   const [submitting, setSubmitting] = React.useState(false)
+  const [messageDialog, setMessageDialog] = React.useState<MessageDialogState | null>(null)
+  const [messageText, setMessageText] = React.useState('')
+  const [messageSending, setMessageSending] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -111,6 +119,7 @@ export function ReportersPage() {
       ])
       setReporters(reporterResponse.items ?? [])
       setOrgUnits(orgUnitResponse.items ?? [])
+      setSelectedIds((current) => current.filter((id) => (reporterResponse.items ?? []).some((reporter) => reporter.id === id)))
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load reporters.')
     } finally {
@@ -122,10 +131,44 @@ export function ReportersPage() {
     void load()
   }, [load])
 
+  const selectedCount = selectedIds.length
+  const selectedReporters = reporters.filter((reporter) => selectedIds.includes(reporter.id))
+
   const columns = React.useMemo<GridColDef<Reporter>[]>(
     () => [
+      {
+        field: 'selected',
+        headerName: '',
+        width: 64,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => (
+          <Checkbox
+            checked={selectedIds.includes(row.id)}
+            inputProps={{ 'aria-label': `Select reporter ${row.name}` }}
+            onChange={() => {
+              setSelectedIds((current) =>
+                current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id],
+              )
+            }}
+          />
+        ),
+      },
       { field: 'name', headerName: 'Reporter', flex: 1, minWidth: 180 },
       { field: 'telephone', headerName: 'Telephone', width: 150 },
+      {
+        field: 'syncStatus',
+        headerName: 'Sync Status',
+        width: 150,
+        sortable: false,
+        renderCell: ({ row }) => (
+          <Chip
+            label={row.synced && row.rapidProUuid ? 'Synced' : 'Pending'}
+            color={row.synced && row.rapidProUuid ? 'success' : 'default'}
+            size="small"
+          />
+        ),
+      },
       { field: 'rapidProUuid', headerName: 'RapidPro UUID', flex: 1, minWidth: 180 },
       {
         field: 'orgUnitId',
@@ -139,22 +182,29 @@ export function ReportersPage() {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 170,
+        width: 120,
         sortable: false,
         filterable: false,
         renderCell: ({ row }) => (
-          <Stack direction="row" spacing={1}>
-            <Button size="small" onClick={() => openDialog(row)}>
-              Edit
-            </Button>
-            <Button size="small" color="error" onClick={() => void deleteReporter(row)}>
-              Delete
-            </Button>
-          </Stack>
+          <AdminRowActions
+            rowLabel={row.name}
+            actions={[
+              { id: 'edit', label: 'Edit', icon: 'edit', onClick: () => openDialog(row) },
+              { id: 'sync', label: 'Sync to RapidPro', onClick: () => void syncReporter(row.id) },
+              { id: 'send', label: 'Send SMS', onClick: () => openMessageDialog('single', row) },
+              {
+                id: 'delete',
+                label: 'Delete',
+                icon: 'delete',
+                destructive: true,
+                onClick: () => void deleteReporter(row),
+              },
+            ]}
+          />
         ),
       },
     ],
-    [orgUnits],
+    [orgUnits, selectedIds],
   )
 
   function openDialog(reporter?: Reporter) {
@@ -173,6 +223,20 @@ export function ReportersPage() {
     setForm(emptyForm)
   }
 
+  function openMessageDialog(mode: 'single' | 'bulk', reporter?: Reporter | null) {
+    setMessageDialog({ mode, reporter: reporter ?? null })
+    setMessageText('')
+    setError('')
+  }
+
+  function closeMessageDialog() {
+    if (messageSending) {
+      return
+    }
+    setMessageDialog(null)
+    setMessageText('')
+  }
+
   async function submitReporter() {
     setSubmitting(true)
     setError('')
@@ -186,7 +250,6 @@ export function ReportersPage() {
           whatsapp: form.whatsapp.trim(),
           telegram: form.telegram.trim(),
           orgUnitId: Number(form.orgUnitId),
-          rapidProUuid: form.rapidProUuid.trim(),
           isActive: form.isActive,
           groups: form.groups,
           synced: editing?.synced ?? false,
@@ -217,6 +280,56 @@ export function ReportersPage() {
     }
   }
 
+  async function syncReporter(id: number) {
+    setError('')
+    try {
+      await apiRequest(`/reporters/${id}/sync`, { method: 'POST', body: '{}' })
+      await load()
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync reporter.')
+    }
+  }
+
+  async function syncSelected() {
+    setError('')
+    try {
+      await apiRequest('/reporters/bulk/sync', {
+        method: 'POST',
+        body: JSON.stringify({ reporterIds: selectedIds }),
+      })
+      await load()
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync selected reporters.')
+    }
+  }
+
+  async function submitMessage() {
+    if (!messageDialog) {
+      return
+    }
+    setMessageSending(true)
+    setError('')
+    try {
+      if (messageDialog.mode === 'single' && messageDialog.reporter) {
+        await apiRequest(`/reporters/${messageDialog.reporter.id}/send-message`, {
+          method: 'POST',
+          body: JSON.stringify({ text: messageText.trim() }),
+        })
+      } else {
+        await apiRequest('/reporters/bulk/broadcast', {
+          method: 'POST',
+          body: JSON.stringify({ reporterIds: selectedIds, text: messageText.trim() }),
+        })
+      }
+      closeMessageDialog()
+      await load()
+    } catch (messageError) {
+      setError(messageError instanceof Error ? messageError.message : 'Unable to send message.')
+    } finally {
+      setMessageSending(false)
+    }
+  }
+
   return (
     <Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
@@ -224,12 +337,26 @@ export function ReportersPage() {
           <Typography variant="h4" component="h1">
             Reporters
           </Typography>
-          <Typography color="text.secondary">RapidPro contacts mapped to reporting facilities.</Typography>
+          <Typography color="text.secondary">Manage local reporters, RapidPro contact sync, and outbound SMS.</Typography>
         </Box>
-        <Button variant="contained" onClick={() => openDialog()}>
-          New Reporter
-        </Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Button variant="outlined" onClick={() => void syncSelected()} disabled={selectedCount === 0}>
+            Sync Selected
+          </Button>
+          <Button variant="outlined" onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
+            Broadcast to Selected
+          </Button>
+          <Button variant="contained" onClick={() => openDialog()}>
+            New Reporter
+          </Button>
+        </Stack>
       </Stack>
+
+      {selectedCount > 0 ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {selectedCount} reporter{selectedCount === 1 ? '' : 's'} selected.
+        </Alert>
+      ) : null}
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
@@ -266,7 +393,7 @@ export function ReportersPage() {
                 </MenuItem>
               ))}
             </TextField>
-            <TextField label="RapidPro UUID" value={form.rapidProUuid} onChange={(event) => setForm({ ...form, rapidProUuid: event.target.value })} />
+            <TextField label="RapidPro UUID" value={editing?.rapidProUuid ?? 'Generated by sync'} InputProps={{ readOnly: true }} />
             <Autocomplete
               multiple
               freeSolo
@@ -289,13 +416,39 @@ export function ReportersPage() {
               InputProps={{ readOnly: true }}
             />
             <TextField label="Total Reports" value={editing?.totalReports ?? 0} InputProps={{ readOnly: true }} />
-            <TextField label="Synced" value={editing ? String(editing.synced) : 'Derived later'} InputProps={{ readOnly: true }} />
+            <TextField label="Synced" value={editing ? String(editing.synced) : 'Pending'} InputProps={{ readOnly: true }} />
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog} disabled={submitting}>Cancel</Button>
           <Button onClick={() => void submitReporter()} disabled={submitting || !form.name.trim() || !form.telephone.trim() || !form.orgUnitId} variant="contained">
             {editing ? 'Save' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(messageDialog)} onClose={closeMessageDialog} fullWidth maxWidth="sm">
+        <DialogTitle>{messageDialog?.mode === 'single' ? 'Send SMS' : 'Broadcast to Selected Reporters'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography color="text.secondary">
+              {messageDialog?.mode === 'single'
+                ? `Send a message to ${messageDialog.reporter?.name ?? 'the selected reporter'}.`
+                : `Send a broadcast to ${selectedReporters.length} selected reporter${selectedReporters.length === 1 ? '' : 's'}.`}
+            </Typography>
+            <TextField
+              label="Message"
+              multiline
+              minRows={4}
+              value={messageText}
+              onChange={(event) => setMessageText(event.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeMessageDialog} disabled={messageSending}>Cancel</Button>
+          <Button onClick={() => void submitMessage()} disabled={messageSending || !messageText.trim()} variant="contained">
+            {messageDialog?.mode === 'single' ? 'Send SMS' : 'Send Broadcast'}
           </Button>
         </DialogActions>
       </Dialog>

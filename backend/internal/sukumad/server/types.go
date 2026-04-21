@@ -85,6 +85,7 @@ type Repository interface {
 	ListServers(ctx context.Context, query ListQuery) (ListResult, error)
 	GetServerByID(ctx context.Context, id int64) (Record, error)
 	GetServerByUID(ctx context.Context, uid string) (Record, error)
+	GetServerByCode(ctx context.Context, code string) (Record, error)
 	CreateServer(ctx context.Context, params CreateParams) (Record, error)
 	UpdateServer(ctx context.Context, params UpdateParams) (Record, error)
 	DeleteServer(ctx context.Context, id int64) error

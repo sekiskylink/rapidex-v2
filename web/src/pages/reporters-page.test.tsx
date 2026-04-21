@@ -170,7 +170,6 @@ describe('reporters page', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Telephone' }), { target: { value: '+256700000001' } })
     fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Facility' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Kampala Health Centre' }))
-    fireEvent.change(within(dialog).getByRole('textbox', { name: 'RapidPro UUID' }), { target: { value: 'rapidpro-11' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(createPayload).not.toBeNull())
@@ -178,13 +177,13 @@ describe('reporters page', () => {
       name: 'Alice Reporter',
       telephone: '+256700000001',
       orgUnitId: 2,
-      rapidProUuid: 'rapidpro-11',
     })
     expect(createPayload).not.toHaveProperty('smsCode')
     expect(createPayload).not.toHaveProperty('mtuuid')
+    expect(createPayload).not.toHaveProperty('rapidProUuid')
   })
 
-  it('edit reporter omits backend-managed payload fields and hides backend-managed inputs', async () => {
+  it('edit reporter keeps backend-managed RapidPro fields read-only', async () => {
     authenticate(['reporters.read', 'reporters.write'])
     let updatePayload: Record<string, unknown> | null = null
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
@@ -203,7 +202,8 @@ describe('reporters page', () => {
 
     renderRoute('/reporters')
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     const dialog = await screen.findByRole('dialog', { name: 'Edit Reporter' })
     expect(within(dialog).queryByLabelText('SMS Code')).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText('MT UUID')).not.toBeInTheDocument()
@@ -212,18 +212,61 @@ describe('reporters page', () => {
     expect(within(dialog).queryByLabelText('Updated At')).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText('Last Login At')).not.toBeInTheDocument()
 
-    fireEvent.change(within(dialog).getByRole('textbox', { name: 'RapidPro UUID' }), { target: { value: 'rapidpro-updated' } })
+    expect(within(dialog).getByDisplayValue('rapidpro-11')).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Alice Reporter Updated' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(updatePayload).not.toBeNull())
     expect(updatePayload).toMatchObject({
       uid: 'rep-11',
-      rapidProUuid: 'rapidpro-updated',
+      name: 'Alice Reporter Updated',
       totalReports: 12,
       lastReportingDate: '2026-04-10T09:00:00Z',
       lastLoginAt: '2026-04-13T08:00:00Z',
     })
     expect(updatePayload).not.toHaveProperty('smsCode')
     expect(updatePayload).not.toHaveProperty('mtuuid')
+    expect(updatePayload).not.toHaveProperty('rapidProUuid')
+  })
+
+  it('supports row sync and bulk broadcast actions', async () => {
+    authenticate(['reporters.read', 'reporters.write'])
+    let syncPayload: Record<string, unknown> | null = null
+    let broadcastPayload: Record<string, unknown> | null = null
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/11/sync' && init?.method === 'POST') {
+        syncPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return { reporter: buildReporter(), operation: 'updated' }
+      }
+      if (path === '/reporters/bulk/broadcast' && init?.method === 'POST') {
+        broadcastPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return { reporterIds: [11], message: 'Test broadcast' }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
+    await waitFor(() => expect(syncPayload).toEqual({}))
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select reporter Alice Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Broadcast to Selected' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Broadcast to Selected Reporters' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Test broadcast' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send Broadcast' }))
+
+    await waitFor(() => expect(broadcastPayload).not.toBeNull())
+    expect(broadcastPayload).toMatchObject({
+      reporterIds: [11],
+      text: 'Test broadcast',
+    })
   })
 })

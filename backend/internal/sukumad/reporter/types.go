@@ -73,3 +73,35 @@ type ListResult struct {
 	Page     int        `json:"page"`
 	PageSize int        `json:"pageSize"`
 }
+
+type SyncResult struct {
+	Reporter   Reporter `json:"reporter"`
+	Operation  string   `json:"operation"`
+	GroupCount int      `json:"groupCount"`
+}
+
+type SyncBatchResult struct {
+	Requested     int        `json:"requested"`
+	Scanned       int        `json:"scanned"`
+	Synced        int        `json:"synced"`
+	Created       int        `json:"created"`
+	Updated       int        `json:"updated"`
+	Failed        int        `json:"failed"`
+	FailedIDs     []int64    `json:"failedIds,omitempty"`
+	FailedNames   []string   `json:"failedNames,omitempty"`
+	Reporters     []Reporter `json:"reporters,omitempty"`
+	WatermarkFrom *time.Time `json:"watermarkFrom,omitempty"`
+	WatermarkTo   *time.Time `json:"watermarkTo,omitempty"`
+	DryRun        bool       `json:"dryRun"`
+	OnlyActive    bool       `json:"onlyActive"`
+}
+
+type MessageResult struct {
+	Reporter Reporter `json:"reporter"`
+	Message  string   `json:"message"`
+}
+
+type BroadcastResult struct {
+	ReporterIDs []int64 `json:"reporterIds"`
+	Message     string  `json:"message"`
+}

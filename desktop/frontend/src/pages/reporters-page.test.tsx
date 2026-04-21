@@ -176,7 +176,7 @@ describe('desktop reporters page', () => {
     expect(screen.getByText('Kampala Health Centre')).toBeInTheDocument()
   })
 
-  it('create and edit reporter flows omit backend-managed fields', async () => {
+  it('create, edit, and messaging flows use the RapidPro actions workflow', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -191,6 +191,8 @@ describe('desktop reporters page', () => {
 
     let createPayload: Record<string, unknown> | null = null
     let updatePayload: Record<string, unknown> | null = null
+    let syncPayload: Record<string, unknown> | null = null
+    let broadcastPayload: Record<string, unknown> | null = null
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/api/v1/auth/me')) {
@@ -224,6 +226,14 @@ describe('desktop reporters page', () => {
         updatePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
         return new Response(JSON.stringify({ id: 11 }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
+      if (url.endsWith('/api/v1/reporters/11/sync') && init?.method === 'POST') {
+        syncPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return new Response(JSON.stringify({ reporter: buildReporter(), operation: 'updated' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.endsWith('/api/v1/reporters/bulk/broadcast') && init?.method === 'POST') {
+        broadcastPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return new Response(JSON.stringify({ reporterIds: [11], message: 'Test broadcast' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
       if (url.includes('/api/v1/bootstrap')) {
         return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
@@ -245,7 +255,6 @@ describe('desktop reporters page', () => {
     fireEvent.change(within(createDialog).getByRole('textbox', { name: 'Telephone' }), { target: { value: '+256700000001' } })
     fireEvent.mouseDown(within(createDialog).getByRole('combobox', { name: 'Facility' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Kampala Health Centre' }))
-    fireEvent.change(within(createDialog).getByRole('textbox', { name: 'RapidPro UUID' }), { target: { value: 'rapidpro-11' } })
     fireEvent.click(within(createDialog).getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(createPayload).not.toBeNull())
@@ -253,12 +262,13 @@ describe('desktop reporters page', () => {
       name: 'Alice Reporter',
       telephone: '+256700000001',
       orgUnitId: 2,
-      rapidProUuid: 'rapidpro-11',
     })
     expect(createPayload).not.toHaveProperty('smsCode')
     expect(createPayload).not.toHaveProperty('mtuuid')
+    expect(createPayload).not.toHaveProperty('rapidProUuid')
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Edit Reporter' })
     expect(within(editDialog).queryByLabelText('SMS Code')).not.toBeInTheDocument()
     expect(within(editDialog).queryByLabelText('MT UUID')).not.toBeInTheDocument()
@@ -266,18 +276,36 @@ describe('desktop reporters page', () => {
     expect(within(editDialog).queryByLabelText('Created At')).not.toBeInTheDocument()
     expect(within(editDialog).queryByLabelText('Updated At')).not.toBeInTheDocument()
     expect(within(editDialog).queryByLabelText('Last Login At')).not.toBeInTheDocument()
-    fireEvent.change(within(editDialog).getByRole('textbox', { name: 'RapidPro UUID' }), { target: { value: 'rapidpro-updated' } })
+    expect(within(editDialog).getByDisplayValue('rapidpro-11')).toBeInTheDocument()
+    fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Alice Reporter Updated' } })
     fireEvent.click(within(editDialog).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(updatePayload).not.toBeNull())
     expect(updatePayload).toMatchObject({
       uid: 'rep-11',
-      rapidProUuid: 'rapidpro-updated',
+      name: 'Alice Reporter Updated',
       totalReports: 12,
       lastReportingDate: '2026-04-10T09:00:00Z',
       lastLoginAt: '2026-04-13T08:00:00Z',
     })
     expect(updatePayload).not.toHaveProperty('smsCode')
     expect(updatePayload).not.toHaveProperty('mtuuid')
+    expect(updatePayload).not.toHaveProperty('rapidProUuid')
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
+    await waitFor(() => expect(syncPayload).toEqual({}))
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select reporter Alice Reporter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Broadcast to Selected' }))
+    const messageDialog = await screen.findByRole('dialog', { name: 'Broadcast to Selected Reporters' })
+    fireEvent.change(within(messageDialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Test broadcast' } })
+    fireEvent.click(within(messageDialog).getByRole('button', { name: 'Send Broadcast' }))
+
+    await waitFor(() => expect(broadcastPayload).not.toBeNull())
+    expect(broadcastPayload).toMatchObject({
+      reporterIds: [11],
+      text: 'Test broadcast',
+    })
   }, 20000)
 })

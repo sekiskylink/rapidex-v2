@@ -32,6 +32,7 @@ import (
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/orgunit"
+	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
@@ -176,7 +177,9 @@ func run() error {
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
 	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database))
-	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database))
+	sukumadRapidProClient := rapidpro.NewClient(nil)
+	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database), auditService).
+		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient)
 	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()
@@ -198,6 +201,7 @@ func run() error {
 	sukumadDeliveryService.WithAsyncService(sukumadAsyncService).WithEventWriter(sukumadObservabilityService)
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithServerService(sukumadServerService).WithEventWriter(sukumadObservabilityService)
 	sukumadSchedulerService.WithIntegrationServices(sukumadServerService, sukumadRequestService, sukumadDHIS2Service)
+	sukumadSchedulerService.WithRapidProReporterSyncService(sukumadReporterService)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
@@ -255,6 +259,11 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("seed scheduler jobs: %w", err)
 		}
+		integrationJobs, err := sukumadSchedulerService.EnsureDefaultIntegrationJobs(ctx)
+		if err != nil {
+			return fmt.Errorf("seed integration scheduler jobs: %w", err)
+		}
+		seededJobs = append(seededJobs, integrationJobs...)
 		if len(seededJobs) > 0 {
 			codes := make([]string, 0, len(seededJobs))
 			for _, job := range seededJobs {

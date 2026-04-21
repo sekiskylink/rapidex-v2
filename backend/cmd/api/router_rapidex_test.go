@@ -106,6 +106,15 @@ func (r *rapidexReporterRepo) GetByContactUUID(context.Context, string) (reporte
 func (r *rapidexReporterRepo) GetByPhoneNumber(context.Context, string) (reporter.Reporter, error) {
 	return reporter.Reporter{}, nil
 }
+func (r *rapidexReporterRepo) ListByIDs(context.Context, []int64) ([]reporter.Reporter, error) {
+	return []reporter.Reporter{}, nil
+}
+func (r *rapidexReporterRepo) ListUpdatedSince(context.Context, *time.Time, int, bool) ([]reporter.Reporter, error) {
+	return []reporter.Reporter{}, nil
+}
+func (r *rapidexReporterRepo) UpdateRapidProStatus(_ context.Context, id int64, rapidProUUID string, synced bool) (reporter.Reporter, error) {
+	return reporter.Reporter{ID: id, RapidProUUID: rapidProUUID, Synced: synced}, nil
+}
 func (r *rapidexReporterRepo) Create(_ context.Context, item reporter.Reporter) (reporter.Reporter, error) {
 	item.ID = 1
 	return item, nil

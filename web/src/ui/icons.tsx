@@ -55,8 +55,20 @@ export const BadgeRoundedIcon = makeIcon(
 export const EventAvailableRoundedIcon = makeIcon(
   'M16 10.53c-.29-.29-.77-.29-1.06 0l-4.35 4.35L9 13.29c-.29-.29-.77-.29-1.06 0s-.29.77 0 1.06l1.94 1.94c.39.39 1.02.39 1.41 0l4.7-4.7c.3-.29.3-.77.01-1.06M19 3h-1V2c0-.55-.45-1-1-1s-1 .45-1 1v1H8V2c0-.55-.45-1-1-1s-1 .45-1 1v1H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m-1 16H6c-.55 0-1-.45-1-1V8h14v10c0 .55-.45 1-1 1',
 )
+export const DnsRoundedIcon = makeIcon(
+  'M20 13H4c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2m-8 5H4v-3h8zm8-10H4c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v3c0 1.1-.9 2-2 2m0 1H4c-1.1 0-2 .9-2 2v1h20v-1c0-1.1-.9-2-2-2',
+)
+export const ReceiptLongRoundedIcon = makeIcon(
+  'M21 2.91 19.09 1 18 2.09 16 4.09 14 2.09 12 4.09 10 2.09 8 4.09 6 2.09 4.91 1 3 2.91V21l1.91-1.91L6 17.91l2 2 2-2 2 2 2-2 2 2 2-2 1.09 1.09L21 21zM19 17H5V6h14zm-10-1h6v-2H9zm0-4h6v-2H9zm8-4H7v2h10z',
+)
+export const LocalShippingRoundedIcon = makeIcon(
+  'M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5zm-14 9.5c-.83 0-1.5-.67-1.5-1.5S5.17 14.5 6 14.5s1.5.67 1.5 1.5S6.83 17.5 6 17.5m13.5-8 1.96 2.5H17V9.5zm-1.5 8c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5',
+)
 export const ScheduleRoundedIcon = makeIcon(
   'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m0 16H5V8h14zm-7-9h-1v5l4.25 2.52.75-1.23-3.25-1.94z',
+)
+export const WorkOutlineRoundedIcon = makeIcon(
+  'M14 6V4h-4v2zM4 8h16v10H4zm16-2h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2',
 )
 
 export const AccountBalanceWalletRoundedIcon = makeIcon(
@@ -82,4 +94,13 @@ export const AdminPanelSettingsRoundedIcon = makeIcon(
 )
 export const VpnKeyRoundedIcon = makeIcon(
   'M7 14a5 5 0 1 1 4.9-6H22v3h-2v2h-2v2h-2.1A5 5 0 0 1 7 14m0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+)
+export const ArticleRoundedIcon = makeIcon(
+  'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m-4 14H7v-2h8zm2-4H7v-2h10zm0-4H7V7h10z',
+)
+export const ApartmentRoundedIcon = makeIcon(
+  'M17 11V3H7v4H3v14h18V11zm-8 8H7v-2h2zm0-4H7v-2h2zm0-4H7V9h2zm4 8h-2v-2h2zm0-4h-2v-2h2zm0-4h-2V9h2zm0-4h-2V5h2zm4 12h-2v-2h2zm0-4h-2v-2h2z',
+)
+export const PersonRoundedIcon = makeIcon(
+  'M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4m0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4',
 )

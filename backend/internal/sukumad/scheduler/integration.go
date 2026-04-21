@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
 
 const (
-	JobTypeURLCall         = "url_call"
-	JobTypeRequestExchange = "request_exchange"
+	JobTypeURLCall              = "url_call"
+	JobTypeRequestExchange      = "request_exchange"
+	JobTypeRapidProReporterSync = "rapidpro_reporter_sync"
 )
 
 type integrationHandlerDependencies struct {
@@ -26,6 +29,9 @@ type integrationHandlerDependencies struct {
 	}
 	submitter interface {
 		Submit(context.Context, delivery.DispatchInput) (delivery.DispatchResult, error)
+	}
+	reporterSyncer interface {
+		SyncUpdatedSince(context.Context, *time.Time, int, bool, bool) (reporter.SyncBatchResult, error)
 	}
 }
 
@@ -53,6 +59,12 @@ type requestExchangeConfig struct {
 	Metadata                map[string]any `json:"metadata"`
 }
 
+type rapidProReporterSyncConfig struct {
+	BatchSize  int  `json:"batchSize"`
+	DryRun     bool `json:"dryRun"`
+	OnlyActive bool `json:"onlyActive"`
+}
+
 func newIntegrationHandlers(deps integrationHandlerDependencies) map[string]typedRegistration {
 	return map[string]typedRegistration{
 		JobTypeURLCall: {
@@ -64,6 +76,11 @@ func newIntegrationHandlers(deps integrationHandlerDependencies) map[string]type
 			handler: typedHandlerWithValidate[requestExchangeConfig](func(ctx context.Context, exec JobExecution, cfg requestExchangeConfig) (JobResult, error) {
 				return runRequestExchange(ctx, exec, cfg, deps)
 			}, validateRequestExchangeConfig),
+		},
+		JobTypeRapidProReporterSync: {
+			handler: typedHandlerWithValidate[rapidProReporterSyncConfig](func(ctx context.Context, exec JobExecution, cfg rapidProReporterSyncConfig) (JobResult, error) {
+				return runRapidProReporterSync(ctx, exec, cfg, deps)
+			}, validateRapidProReporterSyncConfig),
 		},
 	}
 }
@@ -157,6 +174,30 @@ func runRequestExchange(ctx context.Context, exec JobExecution, cfg requestExcha
 	}, nil
 }
 
+func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidProReporterSyncConfig, deps integrationHandlerDependencies) (JobResult, error) {
+	if deps.reporterSyncer == nil {
+		return JobResult{}, fmt.Errorf("rapidpro reporter sync service is not configured")
+	}
+	result, err := deps.reporterSyncer.SyncUpdatedSince(ctx, exec.Job.LastSuccessAt, cfg.BatchSize, cfg.OnlyActive, cfg.DryRun)
+	summary := map[string]any{
+		"jobType":       JobTypeRapidProReporterSync,
+		"runUid":        exec.Run.UID,
+		"watermarkFrom": exec.Job.LastSuccessAt,
+		"watermarkTo":   result.WatermarkTo,
+		"scannedCount":  result.Scanned,
+		"syncedCount":   result.Synced,
+		"createdCount":  result.Created,
+		"updatedCount":  result.Updated,
+		"failedCount":   result.Failed,
+		"dryRun":        cfg.DryRun,
+		"onlyActive":    cfg.OnlyActive,
+	}
+	if err != nil {
+		return JobResult{ResultSummary: summary}, err
+	}
+	return JobResult{Status: RunStatusSucceeded, ResultSummary: summary}, nil
+}
+
 func validateURLCallConfig(cfg urlCallConfig) map[string]any {
 	details := map[string]any{}
 	if strings.TrimSpace(cfg.DestinationServerUID) == "" {
@@ -182,6 +223,14 @@ func validateRequestExchangeConfig(cfg requestExchangeConfig) map[string]any {
 		if _, err := json.Marshal(cfg.Metadata); err != nil {
 			details["config.metadata"] = []string{"must be valid JSON"}
 		}
+	}
+	return detailsOrNil(details)
+}
+
+func validateRapidProReporterSyncConfig(cfg rapidProReporterSyncConfig) map[string]any {
+	details := map[string]any{}
+	if cfg.BatchSize <= 0 {
+		details["config.batchSize"] = []string{"must be greater than zero"}
 	}
 	return detailsOrNil(details)
 }

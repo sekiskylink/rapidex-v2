@@ -106,6 +106,91 @@ func (r *PgRepository) GetByPhoneNumber(ctx context.Context, phone string) (Repo
 	return r.getByWhere(ctx, "telephone = $1", phone)
 }
 
+func (r *PgRepository) ListByIDs(ctx context.Context, ids []int64) ([]Reporter, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(`
+		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
+		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
+		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
+		FROM reporters
+		WHERE id IN (?)
+		ORDER BY name ASC, id ASC
+	`, ids)
+	if err != nil {
+		return nil, err
+	}
+	query = r.db.Rebind(query)
+	rows := []reporterRow{}
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, err
+	}
+	items := convertReporterRows(rows)
+	if err := r.hydrateGroups(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *PgRepository) ListUpdatedSince(ctx context.Context, since *time.Time, limit int, onlyActive bool) ([]Reporter, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	whereParts := []string{}
+	args := make([]any, 0, 2)
+	if since != nil {
+		whereParts = append(whereParts, "updated_at > ?")
+		args = append(args, since.UTC())
+	}
+	if onlyActive {
+		whereParts = append(whereParts, "is_active = TRUE")
+	}
+	where := ""
+	if len(whereParts) > 0 {
+		where = "WHERE " + strings.Join(whereParts, " AND ")
+	}
+	query := fmt.Sprintf(`
+		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
+		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
+		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
+		FROM reporters
+		%s
+		ORDER BY updated_at ASC, id ASC
+		LIMIT %d
+	`, where, limit)
+	rows := []reporterRow{}
+	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(query), args...); err != nil {
+		return nil, err
+	}
+	items := convertReporterRows(rows)
+	if err := r.hydrateGroups(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *PgRepository) UpdateRapidProStatus(ctx context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error) {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE reporters
+		SET contact_uuid = $2,
+		    rapidpro_uuid = $2,
+		    synced = $3
+		WHERE id = $1
+	`, id, strings.TrimSpace(rapidProUUID), synced)
+	if err != nil {
+		return Reporter{}, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return Reporter{}, err
+	}
+	if rows == 0 {
+		return Reporter{}, sql.ErrNoRows
+	}
+	return r.GetByID(ctx, id)
+}
+
 func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {

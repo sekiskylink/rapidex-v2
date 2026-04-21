@@ -22,6 +22,8 @@ import (
 	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/ingest"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/rapidex/rapidpro"
+	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
 	"basepro/backend/internal/sukumad/scheduler"
@@ -108,6 +110,8 @@ func run() error {
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	sukumadRequestService := requests.NewService(requests.NewRepository(database), auditService)
 	sukumadSchedulerService := scheduler.NewService(scheduler.NewRepository(database), auditService)
+	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database), auditService).
+		WithRapidProIntegration(sukumadServerService, rapidpro.NewClient(nil))
 	sukumadIngestService := ingest.NewService(ingest.NewRepository(database), sukumadRequestService, auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
@@ -124,6 +128,7 @@ func run() error {
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
 	sukumadSchedulerService.WithIntegrationServices(sukumadServerService, sukumadRequestService, sukumadDHIS2Service)
+	sukumadSchedulerService.WithRapidProReporterSyncService(sukumadReporterService)
 	schedulerRuntime := scheduler.NewRuntime(sukumadSchedulerService, func() scheduler.RuntimeConfig {
 		nextCfg := config.Get().Sukumad.Scheduler
 		return scheduler.RuntimeConfig{

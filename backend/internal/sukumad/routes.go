@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/middleware"
 	"basepro/backend/internal/rbac"
@@ -397,12 +398,12 @@ func registerReporterRoutes(
 	group.POST("/reporters", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
 		var input reporter.Reporter
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
 		created, err := service.Create(c.Request.Context(), input)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusCreated, created)
@@ -410,18 +411,18 @@ func registerReporterRoutes(
 	group.PUT("/reporters/:id", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
 			return
 		}
 		var input reporter.Reporter
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
 		input.ID = id
 		updated, err := service.Update(c.Request.Context(), input)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, updated)
@@ -429,14 +430,78 @@ func registerReporterRoutes(
 	group.DELETE("/reporters/:id", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
 			return
 		}
 		if err := service.Delete(c.Request.Context(), id); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.Status(http.StatusNoContent)
+	})
+	group.POST("/reporters/:id/sync", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
+			return
+		}
+		result, err := service.SyncReporter(c.Request.Context(), id)
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
+	group.POST("/reporters/:id/send-message", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
+			return
+		}
+		var payload struct {
+			Text string `json:"text"`
+		}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+			return
+		}
+		result, err := service.SendMessage(c.Request.Context(), id, payload.Text)
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
+	group.POST("/reporters/bulk/sync", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		var payload struct {
+			ReporterIDs []int64 `json:"reporterIds"`
+		}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+			return
+		}
+		result, err := service.SyncReporters(c.Request.Context(), payload.ReporterIDs)
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
+	group.POST("/reporters/bulk/broadcast", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		var payload struct {
+			ReporterIDs []int64 `json:"reporterIds"`
+			Text        string  `json:"text"`
+		}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+			return
+		}
+		result, err := service.BroadcastMessage(c.Request.Context(), payload.ReporterIDs, payload.Text)
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
 	})
 }
 

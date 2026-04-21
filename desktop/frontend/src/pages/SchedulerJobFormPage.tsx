@@ -64,6 +64,7 @@ const defaultFormState: SchedulerJobFormState = {
 const jobTypeOptions = [
   { value: 'url_call', label: 'URL Call' },
   { value: 'request_exchange', label: 'Request Exchange' },
+  { value: 'rapidpro_reporter_sync', label: 'RapidPro Reporter Sync' },
   { value: 'metadata_sync', label: 'Metadata Sync' },
   { value: 'export_pending_requests', label: 'Export Pending Requests' },
   { value: 'reconciliation_pull', label: 'Reconciliation Pull' },
@@ -107,6 +108,12 @@ interface RequestExchangeConfigState extends URLCallConfigState {
   metadataText: string
 }
 
+interface RapidProReporterSyncConfigState {
+  dryRun: boolean
+  batchSize: string
+  onlyActive: boolean
+}
+
 const defaultMaintenanceConfigs: Record<string, MaintenanceConfigState> = {
   archive_old_requests: { dryRun: false, batchSize: '100', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
   purge_old_logs: { dryRun: false, batchSize: '500', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
@@ -133,6 +140,12 @@ const defaultRequestExchangeConfig: RequestExchangeConfigState = {
   metadataText: '{}',
 }
 
+const defaultRapidProReporterSyncConfig: RapidProReporterSyncConfigState = {
+  dryRun: false,
+  batchSize: '100',
+  onlyActive: true,
+}
+
 function isMaintenanceJobType(jobType: string) {
   return maintenanceJobTypes.has(jobType)
 }
@@ -143,6 +156,10 @@ function isURLCallJobType(jobType: string) {
 
 function isRequestExchangeJobType(jobType: string) {
   return jobType === 'request_exchange'
+}
+
+function isRapidProReporterSyncJobType(jobType: string) {
+  return jobType === 'rapidpro_reporter_sync'
 }
 
 function toStringNumber(value: unknown, fallback = '') {
@@ -196,6 +213,14 @@ function getRequestExchangeConfigState(config: Record<string, unknown>): Request
   }
 }
 
+function getRapidProReporterSyncConfigState(config: Record<string, unknown>): RapidProReporterSyncConfigState {
+  return {
+    dryRun: Boolean(config.dryRun ?? defaultRapidProReporterSyncConfig.dryRun),
+    batchSize: toStringNumber(config.batchSize, defaultRapidProReporterSyncConfig.batchSize),
+    onlyActive: Boolean(config.onlyActive ?? defaultRapidProReporterSyncConfig.onlyActive),
+  }
+}
+
 function parseOptionalInt(value: string) {
   const trimmed = value.trim()
   if (!trimmed) {
@@ -234,6 +259,14 @@ function splitCSV(value: string) {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function buildRapidProReporterSyncConfig(config: RapidProReporterSyncConfigState) {
+  return {
+    dryRun: config.dryRun,
+    batchSize: parseOptionalInt(config.batchSize) ?? 0,
+    onlyActive: config.onlyActive,
+  }
 }
 
 function statusChip(status: string) {
@@ -276,6 +309,7 @@ export function SchedulerJobFormPage() {
   const [maintenanceConfig, setMaintenanceConfig] = React.useState<MaintenanceConfigState>(defaultMaintenanceConfigs.archive_old_requests)
   const [urlCallConfig, setURLCallConfig] = React.useState<URLCallConfigState>(defaultURLCallConfig)
   const [requestExchangeConfig, setRequestExchangeConfig] = React.useState<RequestExchangeConfigState>(defaultRequestExchangeConfig)
+  const [rapidProReporterSyncConfig, setRapidProReporterSyncConfig] = React.useState<RapidProReporterSyncConfigState>(defaultRapidProReporterSyncConfig)
 
   React.useEffect(() => {
     if (!isEdit || !jobId) {
@@ -284,6 +318,7 @@ export function SchedulerJobFormPage() {
       setForm(defaultFormState)
       setURLCallConfig(defaultURLCallConfig)
       setRequestExchangeConfig(defaultRequestExchangeConfig)
+      setRapidProReporterSyncConfig(defaultRapidProReporterSyncConfig)
       return
     }
 
@@ -313,6 +348,7 @@ export function SchedulerJobFormPage() {
         setMaintenanceConfig(getMaintenanceConfigState(response.jobType, response.config ?? {}))
         setURLCallConfig(getURLCallConfigState(response.config ?? {}))
         setRequestExchangeConfig(getRequestExchangeConfigState(response.config ?? {}))
+        setRapidProReporterSyncConfig(getRapidProReporterSyncConfigState(response.config ?? {}))
       })
       .catch(async (error) => {
         if (!active) {
@@ -360,6 +396,8 @@ export function SchedulerJobFormPage() {
       setURLCallConfig(defaultURLCallConfig)
     } else if (isRequestExchangeJobType(nextJobType)) {
       setRequestExchangeConfig(defaultRequestExchangeConfig)
+    } else if (isRapidProReporterSyncJobType(nextJobType)) {
+      setRapidProReporterSyncConfig(defaultRapidProReporterSyncConfig)
     }
   }
 
@@ -372,6 +410,8 @@ export function SchedulerJobFormPage() {
       setURLCallConfig(getURLCallConfigState(record?.config ?? {}))
     } else if (isRequestExchangeJobType(jobType)) {
       setRequestExchangeConfig(getRequestExchangeConfigState(record?.config ?? {}))
+    } else if (isRapidProReporterSyncJobType(jobType)) {
+      setRapidProReporterSyncConfig(getRapidProReporterSyncConfigState(record?.config ?? {}))
     }
   }
 
@@ -418,6 +458,8 @@ export function SchedulerJobFormPage() {
         setErrorMessage('Payload and metadata JSON must be valid.')
         return
       }
+    } else if (isRapidProReporterSyncJobType(form.jobType)) {
+      configValue = buildRapidProReporterSyncConfig(rapidProReporterSyncConfig)
     } else {
       try {
         configValue = JSON.parse(form.configText || '{}') as Record<string, unknown>
@@ -653,6 +695,36 @@ export function SchedulerJobFormPage() {
               </Stack>
               <TextField label={requestExchangeConfig.payloadFormat === 'text' ? 'Payload Text' : 'Payload JSON'} value={requestExchangeConfig.payloadText} onChange={(event) => updateRequestExchangeField('payloadText', event.target.value)} multiline minRows={8} disabled={loading || saving} />
               <TextField label="Metadata JSON" value={requestExchangeConfig.metadataText} onChange={(event) => updateRequestExchangeField('metadataText', event.target.value)} multiline minRows={4} disabled={loading || saving} />
+            </Stack>
+          ) : isRapidProReporterSyncJobType(form.jobType) ? (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">RapidPro Reporter Sync Configuration</Typography>
+              <TextField
+                label="Batch Size"
+                value={rapidProReporterSyncConfig.batchSize}
+                onChange={(event) => setRapidProReporterSyncConfig((current) => ({ ...current, batchSize: event.target.value }))}
+                disabled={loading || saving}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={rapidProReporterSyncConfig.onlyActive}
+                    onChange={(event) => setRapidProReporterSyncConfig((current) => ({ ...current, onlyActive: event.target.checked }))}
+                    disabled={loading || saving}
+                  />
+                }
+                label="Only Active Reporters"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={rapidProReporterSyncConfig.dryRun}
+                    onChange={(event) => setRapidProReporterSyncConfig((current) => ({ ...current, dryRun: event.target.checked }))}
+                    disabled={loading || saving}
+                  />
+                }
+                label="Dry Run"
+              />
             </Stack>
           ) : (
             <TextField label="Config JSON" value={form.configText} onChange={(event) => updateField('configText', event.target.value)} multiline minRows={10} disabled={loading || saving} />

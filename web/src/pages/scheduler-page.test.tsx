@@ -315,4 +315,53 @@ describe('scheduler pages', () => {
       },
     })
   })
+
+  it('submits RapidPro reporter sync scheduled job config through API', async () => {
+    authenticate(['scheduler.read', 'scheduler.write'])
+    let createPayload: Record<string, unknown> | null = null
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/scheduler/jobs' && init?.method === 'POST') {
+        createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return {
+          id: 6,
+          uid: 'sch-6',
+          code: 'rapidpro-reporter-sync',
+          name: 'RapidPro Reporter Sync',
+          description: '',
+          jobCategory: 'integration',
+          jobType: 'rapidpro_reporter_sync',
+          scheduleType: 'interval',
+          scheduleExpr: '30m',
+          timezone: 'UTC',
+          enabled: true,
+          allowConcurrentRuns: false,
+          config: {},
+        }
+      }
+      if (path === '/scheduler/jobs/6') {
+        return { id: 6, uid: 'sch-6', code: 'rapidpro-reporter-sync', name: 'RapidPro Reporter Sync', config: {}, latestRunStatus: '' }
+      }
+      return {}
+    })
+
+    renderRoute('/scheduler/new')
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'rapidpro-reporter-sync' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'RapidPro Reporter Sync' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'RapidPro Reporter Sync' }))
+    fireEvent.change(screen.getByLabelText('Batch Size'), { target: { value: '150' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'rapidpro-reporter-sync',
+      jobType: 'rapidpro_reporter_sync',
+      config: {
+        dryRun: false,
+        batchSize: 150,
+        onlyActive: true,
+      },
+    })
+  })
 })

@@ -13,6 +13,7 @@ import (
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -96,6 +97,17 @@ func (s *Service) WithIntegrationServices(
 		serverLookup:   serverLookup,
 		requestCreator: requestCreator,
 		submitter:      submitter,
+	})
+}
+
+func (s *Service) WithRapidProReporterSyncService(syncer interface {
+	SyncUpdatedSince(context.Context, *time.Time, int, bool, bool) (reporter.SyncBatchResult, error)
+}) *Service {
+	if s == nil {
+		return s
+	}
+	return s.WithIntegrationHandlers(integrationHandlerDependencies{
+		reporterSyncer: syncer,
 	})
 }
 
@@ -630,6 +642,44 @@ func (s *Service) EnsureDefaultMaintenanceJobs(ctx context.Context) ([]Record, e
 				"dryRun":             false,
 				"batchSize":          100,
 				"staleCutoffMinutes": 30,
+			},
+		},
+	}
+
+	created := make([]Record, 0, len(defaults))
+	for _, def := range defaults {
+		_, err := s.repo.GetScheduledJobByCode(ctx, def.Code)
+		if err == nil {
+			continue
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		record, err := s.CreateScheduledJob(ctx, def)
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, record)
+	}
+	return created, nil
+}
+
+func (s *Service) EnsureDefaultIntegrationJobs(ctx context.Context) ([]Record, error) {
+	defaults := []CreateInput{
+		{
+			Code:         "rapidpro-reporter-sync",
+			Name:         "RapidPro Reporter Sync",
+			Description:  "Synchronize Rapidex reporters to RapidPro contacts incrementally.",
+			JobCategory:  JobCategoryIntegration,
+			JobType:      JobTypeRapidProReporterSync,
+			ScheduleType: ScheduleTypeInterval,
+			ScheduleExpr: "30m",
+			Timezone:     "UTC",
+			Enabled:      true,
+			Config: map[string]any{
+				"dryRun":     false,
+				"batchSize":  100,
+				"onlyActive": true,
 			},
 		},
 	}
