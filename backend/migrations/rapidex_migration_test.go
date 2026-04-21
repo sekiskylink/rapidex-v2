@@ -8,12 +8,12 @@ import (
 )
 
 func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
-	files, err := filepath.Glob("2026*.sql")
+	files, err := filepath.Glob("00002[6-9]_*.sql")
 	if err != nil {
 		t.Fatalf("glob migrations: %v", err)
 	}
 	if len(files) == 0 {
-		t.Fatal("expected rapidex 2026 migrations")
+		t.Fatal("expected numbered rapidex migrations")
 	}
 
 	seen := map[string]map[string]bool{}
@@ -42,7 +42,7 @@ func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
 }
 
 func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
-	firstUp := readMigration(t, "202604210001_create_orgunits_and_reporters.up.sql")
+	firstUp := readMigration(t, "000026_create_orgunits_and_reporters.up.sql")
 	for _, fragment := range []string{
 		"CREATE TABLE org_units",
 		"id BIGSERIAL PRIMARY KEY",
@@ -56,7 +56,7 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 		}
 	}
 
-	firstDown := readMigration(t, "202604210001_create_orgunits_and_reporters.down.sql")
+	firstDown := readMigration(t, "000026_create_orgunits_and_reporters.down.sql")
 	for _, fragment := range []string{
 		"DROP TABLE IF EXISTS reporters",
 		"DROP TABLE IF EXISTS org_units",
@@ -66,7 +66,7 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 		}
 	}
 
-	userOrgUp := readMigration(t, "202604210003_create_user_org_units.up.sql")
+	userOrgUp := readMigration(t, "000028_create_user_org_units.up.sql")
 	for _, fragment := range []string{
 		"CREATE TABLE user_org_units",
 		"user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE",
@@ -77,7 +77,7 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 		}
 	}
 
-	enrichedUp := readMigration(t, "202604210004_enrich_orgunits_and_reporters.up.sql")
+	enrichedUp := readMigration(t, "000029_enrich_orgunits_and_reporters.up.sql")
 	for _, fragment := range []string{
 		"ADD COLUMN IF NOT EXISTS short_name",
 		"ADD COLUMN IF NOT EXISTS hierarchy_level",
@@ -91,7 +91,7 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 		}
 	}
 
-	enrichedDown := readMigration(t, "202604210004_enrich_orgunits_and_reporters.down.sql")
+	enrichedDown := readMigration(t, "000029_enrich_orgunits_and_reporters.down.sql")
 	for _, fragment := range []string{
 		"DROP TABLE IF EXISTS reporter_groups",
 		"DROP COLUMN IF EXISTS hierarchy_level",

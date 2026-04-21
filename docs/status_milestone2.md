@@ -11,7 +11,7 @@ This milestone introduces the foundational domain modules required for Rapidex v
   * Repository functions enforce uniqueness of contact UUIDs and phone numbers.
   * Service functions validate required fields and set timestamps.
   * Handlers expose CRUD endpoints.
-* Added an initial database migration (`backend/migrations/202604210001_create_orgunits_and_reporters.sql`) to create `org_units` and `reporters` tables, including indexes and foreign keys.
+* Added an initial database migration (`backend/migrations/000026_create_orgunits_and_reporters.sql`) to create `org_units` and `reporters` tables, including indexes and foreign keys.
 * Added placeholder React pages for managing organisation units and reporters in both the web and desktop clients (`web/src/pages/OrgUnitsPage.tsx`, `web/src/pages/ReportersPage.tsx`, and corresponding desktop pages).  These stubs will be replaced with full tree views and management forms in a future milestone.
 * Added this status entry to document the milestone’s completion and to guide the next phase.
 

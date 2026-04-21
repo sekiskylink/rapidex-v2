@@ -8,7 +8,7 @@ This milestone introduces the ability to synchronise organisation units from a D
   * Fetches organisation units from DHIS2 via the `/api/organisationUnits.json` endpoint, requesting only the necessary fields (id, code, name, parent) to minimise payload size.
   * Upserts each unit into the local database using the existing repository, computing materialised paths based on parent records.
   * Accepts a configurable DHIS2 base URL and API token for authentication.
-* Added a new database migration (`backend/migrations/202604210002_add_orgunit_sync_state.sql`) that creates an `org_unit_sync_state` table with a single row used to track the timestamp of the last successful sync.
+* Added a new database migration (`backend/migrations/000027_add_orgunit_sync_state.sql`) that creates an `org_unit_sync_state` table with a single row used to track the timestamp of the last successful sync.
 * Documentation for this milestone has been added, summarising changes and next steps.
 
 ### Added/updated tests

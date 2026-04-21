@@ -4,7 +4,7 @@
 
 ### What changed
 - Enriched the existing Rapidex `org_units` and `reporters` schema with the additional organisation-unit, reporter, and reporter-group fields needed from the DHIS2-style reference SQL.
-- Added migration `202604210004_enrich_orgunits_and_reporters` to:
+- Added migration `000029_enrich_orgunits_and_reporters` to:
   - extend organisation units with short name, hierarchy metadata, contact fields, JSON metadata, opening date, soft-delete, and sync timestamp fields
   - extend reporters with richer contact/integration/reporting fields
   - create `reporter_groups`
