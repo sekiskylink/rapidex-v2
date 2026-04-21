@@ -1,5 +1,6 @@
 # Prompt traceability (do not commit)
 docs/prompts/
+docs/plans/
 
 # Backend
 backend/.env

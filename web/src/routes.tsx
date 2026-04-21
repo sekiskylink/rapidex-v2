@@ -20,10 +20,12 @@ import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
 import { NotAuthorizedPage } from './pages/NotAuthorizedPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ObservabilityPage } from './pages/ObservabilityPage'
+import { OrgUnitsPage } from './pages/OrgUnitsPage'
 import { PermissionsPage } from './pages/PermissionsPage'
 import { DeliveriesPage } from './pages/DeliveriesPage'
 import { JobsPage } from './pages/JobsPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { ReportersPage } from './pages/ReportersPage'
 import { SchedulerJobFormPage } from './pages/SchedulerJobFormPage'
 import { SchedulerJobsPage } from './pages/SchedulerJobsPage'
 import { SchedulerJobRunsPage } from './pages/SchedulerJobRunsPage'
@@ -355,6 +357,36 @@ const documentationRoute = createRoute({
   },
 })
 
+const orgUnitsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/orgunits',
+  component: () => {
+    const state = getRouteAccessState('/orgunits', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <OrgUnitsPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/orgunits') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const reportersRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/reporters',
+  component: () => {
+    const state = getRouteAccessState('/reporters', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <ReportersPage />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/reporters') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -376,6 +408,8 @@ const routeTree = rootRoute.addChildren([
     schedulerRunsRoute,
     observabilityRoute,
     documentationRoute,
+    orgUnitsRoute,
+    reportersRoute,
     settingsRoute,
   ]),
 ])

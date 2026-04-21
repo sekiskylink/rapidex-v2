@@ -332,6 +332,65 @@ describe('app shell routes', () => {
     expect(screen.queryByRole('button', { name: 'Servers' })).not.toBeInTheDocument()
   })
 
+  it('renders Rapidex facility and reporter routes when permissions are granted', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 18,
+              username: 'rapidex-operator',
+              roles: ['Staff'],
+              permissions: ['orgunits.read', 'reporters.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/orgunits?') || url.includes('/api/v1/reporters?')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+              page: 0,
+              pageSize: 200,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    const firstRender = renderWithRouter('/orgunits', store)
+    expect(await screen.findByRole('heading', { name: 'Facilities', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Facilities' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reporters' })).toBeInTheDocument()
+
+    firstRender.unmount()
+    renderWithRouter('/reporters', store)
+    expect(await screen.findByRole('heading', { name: 'Reporters', level: 1 })).toBeInTheDocument()
+  })
+
   it('renders Sukumad deliveries route and navigation when permission is granted', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

@@ -12,7 +12,7 @@ server:
     - "wails://wails.localhost:*"
 
 database:
-  dsn: "postgres://postgres:postgres@127.0.0.1:5432/sukumadpro?sslmode=disable"
+  dsn: "postgres://postgres:postgres@127.0.0.1:5432/rapidex?sslmode=disable"
   max_open_conns: 10
   max_idle_conns: 5
   auto_migrate: false
@@ -55,7 +55,7 @@ security:
     allow_credentials: false
 
 seed:
-  enable_dev_bootstrap: false
+  enable_dev_bootstrap: true
   ensure_scheduler_jobs: true
 
 modules:

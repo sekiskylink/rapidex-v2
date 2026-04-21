@@ -95,7 +95,9 @@ export function AppShell() {
       pathname.startsWith('/jobs') ||
       pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
-      pathname.startsWith('/documentation'),
+      pathname.startsWith('/documentation') ||
+      pathname.startsWith('/orgunits') ||
+      pathname.startsWith('/reporters'),
   )
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
@@ -134,7 +136,9 @@ export function AppShell() {
       pathname.startsWith('/jobs') ||
       pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
-      pathname.startsWith('/documentation')
+      pathname.startsWith('/documentation') ||
+      pathname.startsWith('/orgunits') ||
+      pathname.startsWith('/reporters')
     ) {
       setSukumadExpanded(true)
     }
@@ -162,6 +166,8 @@ export function AppShell() {
     scheduler: <EventAvailableRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
     documentation: <FactCheckRoundedIcon fontSize="small" />,
+    orgunits: <AccountBalanceWalletRoundedIcon fontSize="small" />,
+    reporters: <GroupRoundedIcon fontSize="small" />,
   }
   const activeDrawerWidth = collapsed ? miniDrawerWidth : drawerWidth
 

@@ -19,6 +19,8 @@ export type NavigationIconKey =
   | 'scheduler'
   | 'observability'
   | 'documentation'
+  | 'orgunits'
+  | 'reporters'
 export type NavigationGroupKey = 'dashboard' | 'administration' | 'sukumad' | 'settings'
 
 export interface NavigationVisibilityContext {
@@ -152,6 +154,22 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
         icon: 'documentation',
         path: '/documentation',
         group: 'sukumad',
+      },
+      {
+        id: 'orgunits',
+        label: 'Facilities',
+        icon: 'orgunits',
+        path: '/orgunits',
+        group: 'sukumad',
+        requiredPermissions: ['orgunits.read', 'orgunits.write'],
+      },
+      {
+        id: 'reporters',
+        label: 'Reporters',
+        icon: 'reporters',
+        path: '/reporters',
+        group: 'sukumad',
+        requiredPermissions: ['reporters.read', 'reporters.write'],
       },
     ],
   },

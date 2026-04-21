@@ -213,6 +213,48 @@ describe('web auth routes', () => {
     expect(await screen.findByRole('heading', { name: 'BasePro Web', level: 1 })).toBeInTheDocument()
   })
 
+  it('renders Rapidex facility and reporter routes when permissions are granted', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 77,
+        username: 'rapidex-user',
+        roles: ['Staff'],
+        permissions: ['orgunits.read', 'reporters.read'],
+      },
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/orgunits?') || url.includes('/reporters?')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    const firstRender = renderWithRouter('/orgunits')
+    expect(await screen.findByRole('heading', { name: 'Facilities', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
+    expect(screen.getByRole('button', { name: 'Facilities' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reporters' })).toBeInTheDocument()
+
+    firstRender.unmount()
+    renderWithRouter('/reporters')
+    expect(await screen.findByRole('heading', { name: 'Reporters', level: 1 })).toBeInTheDocument()
+  })
+
   it('applies local navigation visibility and label preferences', async () => {
     window.localStorage.setItem(
       UI_PREFERENCES_STORAGE_KEY,

@@ -134,7 +134,9 @@ export function AppShell() {
       pathname.startsWith('/jobs') ||
       pathname.startsWith('/scheduler') ||
       pathname.startsWith('/observability') ||
-      pathname.startsWith('/documentation')
+      pathname.startsWith('/documentation') ||
+      pathname.startsWith('/orgunits') ||
+      pathname.startsWith('/reporters')
     ) {
       setSukumadExpanded(true)
     }
@@ -155,6 +157,8 @@ export function AppShell() {
     scheduler: <ScheduleRoundedIcon fontSize="small" />,
     observability: <VisibilityRoundedIcon fontSize="small" />,
     documentation: <ArticleRoundedIcon fontSize="small" />,
+    orgunits: <DnsRoundedIcon fontSize="small" />,
+    reporters: <GroupRoundedIcon fontSize="small" />,
   }
 
   const closeMenus = () => {

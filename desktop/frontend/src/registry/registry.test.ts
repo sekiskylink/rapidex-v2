@@ -27,6 +27,8 @@ describe('desktop registries', () => {
       'scheduler',
       'observability',
       'documentation',
+      'orgunits',
+      'reporters',
     ])
     expect(moduleEnablementRegistry.every((item) => item.enabledByDefault)).toBe(true)
   })
@@ -47,6 +49,8 @@ describe('desktop registries', () => {
         'jobs.read',
         'scheduler.read',
         'observability.read',
+        'orgunits.read',
+        'reporters.read',
       ]),
     )
   })
@@ -64,6 +68,8 @@ describe('desktop registries', () => {
       'scheduler',
       'observability',
       'documentation',
+      'orgunits',
+      'reporters',
     ])
     expect(moduleRegistry.find((item) => item.id === 'administration')?.navItems).toEqual([
       'users',
@@ -78,7 +84,7 @@ describe('desktop registries', () => {
     const admin = authenticatedNavigationRegistry.find((item) => item.id === 'administration')
     expect(admin?.children?.map((item) => item.id)).toEqual(['users', 'roles', 'permissions', 'audit', 'settings'])
     const sukumad = authenticatedNavigationRegistry.find((item) => item.id === 'sukumad')
-    expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'scheduler', 'observability', 'documentation'])
+    expect(sukumad?.children?.map((item) => item.id)).toEqual(['servers', 'requests', 'deliveries', 'jobs', 'scheduler', 'observability', 'documentation', 'orgunits', 'reporters'])
   })
 
   it('enforces navigation access from required permissions', () => {

@@ -19,6 +19,10 @@ const (
 	PermissionSchedulerRead     = "scheduler.read"
 	PermissionSchedulerWrite    = "scheduler.write"
 	PermissionObservabilityRead = "observability.read"
+	PermissionOrgUnitsRead      = "orgunits.read"
+	PermissionOrgUnitsWrite     = "orgunits.write"
+	PermissionReportersRead     = "reporters.read"
+	PermissionReportersWrite    = "reporters.write"
 )
 
 type PermissionDefinition struct {
@@ -166,6 +170,34 @@ func BasePermissionRegistry() []PermissionDefinition {
 			Module:      "observability",
 			Category:    "Sukumad",
 		},
+		{
+			Key:         PermissionOrgUnitsRead,
+			Label:       "Facilities: Read",
+			Description: "View Rapidex organisation units and facility hierarchy.",
+			Module:      "orgunits",
+			Category:    "Rapidex",
+		},
+		{
+			Key:         PermissionOrgUnitsWrite,
+			Label:       "Facilities: Write",
+			Description: "Create and update Rapidex organisation units and facilities.",
+			Module:      "orgunits",
+			Category:    "Rapidex",
+		},
+		{
+			Key:         PermissionReportersRead,
+			Label:       "Reporters: Read",
+			Description: "View Rapidex reporters and facility assignments.",
+			Module:      "reporters",
+			Category:    "Rapidex",
+		},
+		{
+			Key:         PermissionReportersWrite,
+			Label:       "Reporters: Write",
+			Description: "Create and update Rapidex reporters and facility assignments.",
+			Module:      "reporters",
+			Category:    "Rapidex",
+		},
 	}
 }
 
@@ -275,6 +307,28 @@ func BaseModuleRegistry() []ModuleDefinition {
 			Permissions: []string{},
 			NavItems:    []string{"documentation"},
 		},
+		{
+			ID:       "orgunits",
+			Label:    "Facilities",
+			NavGroup: "sukumad",
+			BasePath: "/orgunits",
+			Permissions: []string{
+				PermissionOrgUnitsRead,
+				PermissionOrgUnitsWrite,
+			},
+			NavItems: []string{"orgunits"},
+		},
+		{
+			ID:       "reporters",
+			Label:    "Reporters",
+			NavGroup: "sukumad",
+			BasePath: "/reporters",
+			Permissions: []string{
+				PermissionReportersRead,
+				PermissionReportersWrite,
+			},
+			NavItems: []string{"reporters"},
+		},
 	}
 }
 
@@ -296,6 +350,10 @@ func ModuleIDForPermission(permission string) (string, bool) {
 		return "scheduler", true
 	case PermissionObservabilityRead:
 		return "observability", true
+	case PermissionOrgUnitsRead, PermissionOrgUnitsWrite:
+		return "orgunits", true
+	case PermissionReportersRead, PermissionReportersWrite:
+		return "reporters", true
 	default:
 		return "", false
 	}

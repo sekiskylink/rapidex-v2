@@ -127,4 +127,26 @@ export const moduleRegistry = [
       description: 'Authenticated markdown documentation browser.',
     },
   },
+  {
+    id: 'orgunits',
+    label: 'Facilities',
+    navGroup: 'sukumad',
+    basePath: '/orgunits',
+    permissions: ['orgunits.read', 'orgunits.write'],
+    navItems: ['orgunits'],
+    metadata: {
+      description: 'Rapidex organisation units and facility hierarchy.',
+    },
+  },
+  {
+    id: 'reporters',
+    label: 'Reporters',
+    navGroup: 'sukumad',
+    basePath: '/reporters',
+    permissions: ['reporters.read', 'reporters.write'],
+    navItems: ['reporters'],
+    metadata: {
+      description: 'Rapidex reporter management.',
+    },
+  },
 ] as const satisfies readonly ModuleDefinition[]

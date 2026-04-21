@@ -1,5 +1,48 @@
 # Status
 
+## Milestone — Rapidex Migrations and UI Hookup (Complete)
+
+### What changed
+- Replaced the broken single-file 2026 Rapidex migrations with proper `.up.sql` / `.down.sql` migration pairs for:
+  - organisation units/facilities and reporters
+  - org-unit sync state
+  - user org-unit assignments
+- Added migration tests that require 2026 Rapidex migrations to have up/down pairs and key schema/rollback fragments.
+- Wired Rapidex organisation units/facilities, reporters, and user org-unit assignments into the backend API through existing Sukumad/BasePro routing, auth, RBAC, and module enablement.
+- Added Rapidex RBAC/module registry entries for `orgunits.read`, `orgunits.write`, `reporters.read`, and `reporters.write`.
+- Hooked Facilities and Reporters into both web and desktop authenticated navigation/routes using the existing AppShell and API clients.
+- Added first-pass Facilities and Reporters pages in both clients with authenticated API-backed list/create surfaces.
+- Added durable implementation notes in `docs/notes/rapidex-migrations-ui-hookup.md`.
+- Saved prompt traceability copy in `docs/prompts/2026-04-21-rapidex-migrations-ui-hookup.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - migration up/down pairing and schema checks
+  - Rapidex route auth/RBAC coverage
+  - updated RBAC and module-enable registry expectations
+- Web:
+  - route smoke coverage for Facilities and Reporters
+  - updated registry coverage for Rapidex modules, permissions, and navigation
+- Desktop:
+  - matching route smoke coverage for Facilities and Reporters
+  - updated registry coverage for Rapidex modules, permissions, and navigation
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Rapidex engine validation and exchange-request creation remain deferred to the next Rapidex milestone.
+- User org-unit descendant scoping is persisted but not yet fully enforced across all facility/reporter queries.
+- Existing non-blocking warnings remain in frontend tests/builds:
+  - MUI `anchorEl` and controlled-select warnings in jsdom tests
+  - Vite third-party `use client` and chunk-size warnings
+
 ## Milestone — Scheduler URL Calls and Request Exchanges (Complete)
 
 ### What changed

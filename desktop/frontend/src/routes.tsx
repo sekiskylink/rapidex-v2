@@ -21,10 +21,12 @@ import { LoginPage } from './pages/LoginPage'
 import { ModuleDisabledPage } from './pages/ModuleDisabledPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ObservabilityPage } from './pages/ObservabilityPage'
+import { OrgUnitsPage } from './pages/OrgUnitsPage'
 import { PermissionsPage } from './pages/PermissionsPage'
 import { DeliveriesPage } from './pages/DeliveriesPage'
 import { JobsPage } from './pages/JobsPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { ReportersPage } from './pages/ReportersPage'
 import { SchedulerJobFormPage } from './pages/SchedulerJobFormPage'
 import { SchedulerJobsPage } from './pages/SchedulerJobsPage'
 import { SchedulerJobRunsPage } from './pages/SchedulerJobRunsPage'
@@ -460,6 +462,30 @@ function DocumentationRoutePage() {
   return <ForbiddenPage />
 }
 
+function OrgUnitsRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/orgunits')
+  if (accessState === 'allowed') {
+    return <OrgUnitsPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/orgunits') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function ReportersRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/reporters')
+  if (accessState === 'allowed') {
+    return <ReportersPage />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/reporters') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -602,6 +628,18 @@ const documentationRoute = createRoute({
   component: DocumentationRoutePage,
 })
 
+const orgUnitsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/orgunits',
+  component: OrgUnitsRoutePage,
+})
+
+const reportersRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/reporters',
+  component: ReportersRoutePage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
@@ -625,6 +663,8 @@ const routeTree = rootRoute.addChildren([
     schedulerRunsRoute,
     observabilityRoute,
     documentationRoute,
+    orgUnitsRoute,
+    reportersRoute,
   ]),
 ])
 

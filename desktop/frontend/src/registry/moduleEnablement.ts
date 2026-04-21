@@ -101,6 +101,20 @@ export const moduleEnablementRegistry = [
     description: 'Authenticated markdown documentation browser.',
     scope: 'full-stack',
   },
+  {
+    moduleId: 'orgunits',
+    flagKey: 'modules.orgunits.enabled',
+    enabledByDefault: true,
+    description: 'Rapidex organisation unit and facility hierarchy surfaces.',
+    scope: 'full-stack',
+  },
+  {
+    moduleId: 'reporters',
+    flagKey: 'modules.reporters.enabled',
+    enabledByDefault: true,
+    description: 'Rapidex reporter management surfaces.',
+    scope: 'full-stack',
+  },
 ] as const satisfies readonly ModuleEnablementDefinition[]
 
 interface ModuleEnablementSnapshot {

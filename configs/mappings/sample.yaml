@@ -1,0 +1,13 @@
+flow_uuid: 11111111-2222-3333-4444-555555555555
+flow_name: Sample Flow
+dataset: DHIS2_DATASET_UID
+org_unit_var: facility_code
+period_var: reporting_period
+payload_aoc: DEFAULT_AOC_UID
+mappings:
+  - field: indicator_one
+    data_element: DE_UID_1
+    category_option_combo: COC_UID_1
+  - field: indicator_two
+    data_element: DE_UID_2
+    attribute_option_combo: AOC_UID_2

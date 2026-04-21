@@ -123,6 +123,22 @@ var registry = []Definition{
 		Scope:            ScopeFullStack,
 		AdminControl:     AdminControlRuntime,
 	},
+	{
+		ModuleID:         "orgunits",
+		FlagKey:          "modules.orgunits.enabled",
+		EnabledByDefault: true,
+		Description:      "Rapidex organisation unit and facility hierarchy surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlRuntime,
+	},
+	{
+		ModuleID:         "reporters",
+		FlagKey:          "modules.reporters.enabled",
+		EnabledByDefault: true,
+		Description:      "Rapidex reporter management surfaces.",
+		Scope:            ScopeFullStack,
+		AdminControl:     AdminControlRuntime,
+	},
 }
 
 func Definitions() []Definition {

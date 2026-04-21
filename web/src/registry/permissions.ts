@@ -154,6 +154,38 @@ export const permissionRegistry: readonly PermissionDefinition[] = [
     category: 'Sukumad',
     moduleEnablementId: 'observability',
   },
+  {
+    key: 'orgunits.read',
+    label: 'Facilities: Read',
+    description: 'View Rapidex organisation units and facility hierarchy.',
+    module: 'orgunits',
+    category: 'Rapidex',
+    moduleEnablementId: 'orgunits',
+  },
+  {
+    key: 'orgunits.write',
+    label: 'Facilities: Write',
+    description: 'Create and update Rapidex organisation units and facilities.',
+    module: 'orgunits',
+    category: 'Rapidex',
+    moduleEnablementId: 'orgunits',
+  },
+  {
+    key: 'reporters.read',
+    label: 'Reporters: Read',
+    description: 'View Rapidex reporters and facility assignments.',
+    module: 'reporters',
+    category: 'Rapidex',
+    moduleEnablementId: 'reporters',
+  },
+  {
+    key: 'reporters.write',
+    label: 'Reporters: Write',
+    description: 'Create and update Rapidex reporters and facility assignments.',
+    module: 'reporters',
+    category: 'Rapidex',
+    moduleEnablementId: 'reporters',
+  },
 ]
 
 export type PermissionKey = (typeof permissionRegistry)[number]['key']

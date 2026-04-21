@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS reporters;
+DROP TABLE IF EXISTS org_units;

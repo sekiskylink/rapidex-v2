@@ -31,11 +31,14 @@ import (
 	"basepro/backend/internal/sukumad/dhis2"
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/orgunit"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
+	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
 	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/userorg"
 	"basepro/backend/internal/sukumad/worker"
 	"basepro/backend/internal/users"
 )
@@ -172,6 +175,9 @@ func run() error {
 	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
+	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database))
+	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database))
+	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()
 		files := make([]documentation.SourceFile, 0, len(cfg.Documentation.Files))
@@ -302,6 +308,9 @@ func run() error {
 			ObservabilityHandler: observability.NewHandler(sukumadObservabilityService),
 			DashboardHandler:     dashboard.NewHandler(sukumadDashboardService),
 			DocumentationHandler: documentation.NewHandler(sukumadDocumentationService),
+			OrgUnitService:       sukumadOrgUnitService,
+			ReporterService:      sukumadReporterService,
+			UserOrgUnitService:   sukumadUserOrgUnitService,
 		}),
 	}
 

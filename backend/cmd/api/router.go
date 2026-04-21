@@ -19,9 +19,12 @@ import (
 	"basepro/backend/internal/sukumad/delivery"
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/orgunit"
+	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/userorg"
 	"basepro/backend/internal/users"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -55,6 +58,9 @@ type AppDeps struct {
 	ObservabilityHandler *observability.Handler
 	DashboardHandler     *dashboard.Handler
 	DocumentationHandler *documentation.Handler
+	OrgUnitService       *orgunit.Service
+	ReporterService      *reporter.Service
+	UserOrgUnitService   *userorg.Service
 }
 
 func newRouter(deps AppDeps) *gin.Engine {
@@ -211,6 +217,9 @@ func newRouter(deps AppDeps) *gin.Engine {
 		ObservabilityHandler: deps.ObservabilityHandler,
 		DashboardHandler:     deps.DashboardHandler,
 		DocumentationHandler: deps.DocumentationHandler,
+		OrgUnitService:       deps.OrgUnitService,
+		ReporterService:      deps.ReporterService,
+		UserOrgUnitService:   deps.UserOrgUnitService,
 	})
 
 	return r
