@@ -76,6 +76,31 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 			t.Fatalf("expected user org units migration to contain %q", fragment)
 		}
 	}
+
+	enrichedUp := readMigration(t, "202604210004_enrich_orgunits_and_reporters.up.sql")
+	for _, fragment := range []string{
+		"ADD COLUMN IF NOT EXISTS short_name",
+		"ADD COLUMN IF NOT EXISTS hierarchy_level",
+		"ADD COLUMN IF NOT EXISTS attribute_values JSONB",
+		"CREATE TABLE IF NOT EXISTS reporter_groups",
+		"ADD COLUMN IF NOT EXISTS whatsapp",
+		"ADD COLUMN IF NOT EXISTS rapidpro_uuid",
+	} {
+		if !strings.Contains(enrichedUp, fragment) {
+			t.Fatalf("expected enriched rapidex migration to contain %q", fragment)
+		}
+	}
+
+	enrichedDown := readMigration(t, "202604210004_enrich_orgunits_and_reporters.down.sql")
+	for _, fragment := range []string{
+		"DROP TABLE IF EXISTS reporter_groups",
+		"DROP COLUMN IF EXISTS hierarchy_level",
+		"DROP COLUMN IF EXISTS rapidpro_uuid",
+	} {
+		if !strings.Contains(enrichedDown, fragment) {
+			t.Fatalf("expected enriched rapidex rollback to contain %q", fragment)
+		}
+	}
 }
 
 func readMigration(t *testing.T, name string) string {

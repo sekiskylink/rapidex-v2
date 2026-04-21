@@ -1,37 +1,75 @@
 package reporter
 
 import (
-    "time"
+	"encoding/json"
+	"strings"
+	"time"
 )
 
 // Reporter represents a RapidPro contact that has permission to submit reports.
-// Reporters are linked to a single organisation unit via OrgUnitID and may be
-// deactivated without deletion.
 type Reporter struct {
-    ID           int64     `db:"id" json:"id"`
-    UID          string    `db:"uid" json:"uid"`
-    ContactUUID  string    `db:"contact_uuid" json:"contactUuid"`
-    PhoneNumber  string    `db:"phone_number" json:"phoneNumber"`
-    DisplayName  string    `db:"display_name" json:"displayName"`
-    OrgUnitID    int64     `db:"org_unit_id" json:"orgUnitId"`
-    IsActive     bool      `db:"is_active" json:"isActive"`
-    CreatedAt    time.Time `db:"created_at" json:"createdAt"`
-    UpdatedAt    time.Time `db:"updated_at" json:"updatedAt"`
+	ID                int64      `db:"id" json:"id"`
+	UID               string     `db:"uid" json:"uid"`
+	Name              string     `db:"name" json:"name"`
+	Telephone         string     `db:"telephone" json:"telephone"`
+	WhatsApp          string     `db:"whatsapp" json:"whatsapp"`
+	Telegram          string     `db:"telegram" json:"telegram"`
+	OrgUnitID         int64      `db:"org_unit_id" json:"orgUnitId"`
+	ReportingLocation string     `db:"reporting_location" json:"reportingLocation"`
+	DistrictID        *int64     `db:"district_id" json:"districtId,omitempty"`
+	TotalReports      int        `db:"total_reports" json:"totalReports"`
+	LastReportingDate *time.Time `db:"last_reporting_date" json:"lastReportingDate,omitempty"`
+	SMSCode           string     `db:"sms_code" json:"smsCode"`
+	SMSCodeExpiresAt  *time.Time `db:"sms_code_expires_at" json:"smsCodeExpiresAt,omitempty"`
+	MTUUID            string     `db:"mtuuid" json:"mtuuid"`
+	Synced            bool       `db:"synced" json:"synced"`
+	RapidProUUID      string     `db:"rapidpro_uuid" json:"rapidProUuid"`
+	IsActive          bool       `db:"is_active" json:"isActive"`
+	CreatedAt         time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt         time.Time  `db:"updated_at" json:"updatedAt"`
+	LastLoginAt       *time.Time `db:"last_login_at" json:"lastLoginAt,omitempty"`
+	Groups            []string   `json:"groups"`
 }
 
-// ListQuery defines filters for listing reporters.
+func (r *Reporter) UnmarshalJSON(data []byte) error {
+	type reporterAlias Reporter
+	aux := struct {
+		reporterAlias
+		DisplayName string   `json:"displayName"`
+		PhoneNumber string   `json:"phoneNumber"`
+		ContactUUID string   `json:"contactUuid"`
+		GroupNames  []string `json:"groupNames"`
+	}{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*r = Reporter(aux.reporterAlias)
+	if strings.TrimSpace(r.Name) == "" {
+		r.Name = strings.TrimSpace(aux.DisplayName)
+	}
+	if strings.TrimSpace(r.Telephone) == "" {
+		r.Telephone = strings.TrimSpace(aux.PhoneNumber)
+	}
+	if strings.TrimSpace(r.RapidProUUID) == "" {
+		r.RapidProUUID = strings.TrimSpace(aux.ContactUUID)
+	}
+	if len(r.Groups) == 0 && len(aux.GroupNames) > 0 {
+		r.Groups = aux.GroupNames
+	}
+	return nil
+}
+
 type ListQuery struct {
-    Page      int
-    PageSize  int
-    Search    string
-    OrgUnitID *int64
-    OnlyActive bool
+	Page       int
+	PageSize   int
+	Search     string
+	OrgUnitID  *int64
+	OnlyActive bool
 }
 
-// ListResult wraps the paginated Reporter list.
 type ListResult struct {
-    Items    []Reporter `json:"items"`
-    Total    int        `json:"totalCount"`
-    Page     int        `json:"page"`
-    PageSize int        `json:"pageSize"`
+	Items    []Reporter `json:"items"`
+	Total    int        `json:"totalCount"`
+	Page     int        `json:"page"`
+	PageSize int        `json:"pageSize"`
 }

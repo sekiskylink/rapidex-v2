@@ -1,5 +1,49 @@
 # Status
 
+## Milestone — Rapidex Org Unit and Reporter Enrichment (Complete)
+
+### What changed
+- Enriched the existing Rapidex `org_units` and `reporters` schema with the additional organisation-unit, reporter, and reporter-group fields needed from the DHIS2-style reference SQL.
+- Added migration `202604210004_enrich_orgunits_and_reporters` to:
+  - extend organisation units with short name, hierarchy metadata, contact fields, JSON metadata, opening date, soft-delete, and sync timestamp fields
+  - extend reporters with richer contact/integration/reporting fields
+  - create `reporter_groups`
+- Updated the backend Sukumad org-unit and reporter modules so the API now serves the richer payloads through the existing routes and permissions.
+- Switched organisation-unit UID handling to DHIS2-style validation/generation and changed materialized paths to use UID segments instead of numeric IDs.
+- Added backend path/hierarchy recomputation on org-unit create/update, including descendant path updates after reparenting.
+- Added reporter-group persistence plus derived reporter district/reporting-location calculation from organisation-unit hierarchy.
+- Upgraded both web and desktop Facilities and Reporters pages from first-pass list/create screens to CRUD screens with:
+  - edit and delete actions
+  - responsive multi-column dialogs
+  - richer facility and reporter fields
+  - inline reporter-group chip editing
+  - read-only derived/system fields in edit dialogs
+- Added durable implementation notes in `docs/notes/rapidex-orgunit-reporter-enrichment.md`.
+- Saved prompt traceability copy in `docs/prompts/2026-04-21-rapidex-orgunit-reporter-enrichment.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - migration coverage for the new enrichment migration
+  - org-unit service coverage for DHIS2 UID generation/validation defaults
+  - reporter payload normalization coverage for legacy aliases and group normalization
+- Web:
+  - reran the full frontend test suite, including route and page coverage
+- Desktop:
+  - reran the full frontend test suite, including route and page coverage
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing non-blocking MUI/jsdom `anchorEl` and controlled/uncontrolled warnings still appear in unrelated frontend tests.
+- Existing Vite third-party `'use client'` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — Rapidex Migrations and UI Hookup (Complete)
 
 ### What changed
