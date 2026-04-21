@@ -8,9 +8,20 @@ import (
 )
 
 func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
-	files, err := filepath.Glob("00002[6-9]_*.sql")
+	files, err := filepath.Glob("0000{2[6-9],30}_*.sql")
 	if err != nil {
 		t.Fatalf("glob migrations: %v", err)
+	}
+	if len(files) == 0 {
+		files, err = filepath.Glob("00002[6-9]_*.sql")
+		if err != nil {
+			t.Fatalf("glob fallback migrations: %v", err)
+		}
+		extra, err := filepath.Glob("000030_*.sql")
+		if err != nil {
+			t.Fatalf("glob 000030 migrations: %v", err)
+		}
+		files = append(files, extra...)
 	}
 	if len(files) == 0 {
 		t.Fatal("expected numbered rapidex migrations")
@@ -49,6 +60,7 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 		"parent_id BIGINT REFERENCES org_units(id) ON DELETE RESTRICT",
 		"CREATE INDEX idx_org_units_path ON org_units (path)",
 		"CREATE TABLE reporters",
+		"phone_number VARCHAR(32) NOT NULL UNIQUE",
 		"org_unit_id BIGINT NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT",
 	} {
 		if !strings.Contains(firstUp, fragment) {
@@ -100,6 +112,16 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 		if !strings.Contains(enrichedDown, fragment) {
 			t.Fatalf("expected enriched rapidex rollback to contain %q", fragment)
 		}
+	}
+
+	dropContactUp := readMigration(t, "000030_drop_reporter_contact_uuid.up.sql")
+	if !strings.Contains(dropContactUp, "DROP COLUMN IF EXISTS contact_uuid") {
+		t.Fatal("expected contact uuid drop migration to remove contact_uuid")
+	}
+
+	dropContactDown := readMigration(t, "000030_drop_reporter_contact_uuid.down.sql")
+	if !strings.Contains(dropContactDown, "ADD COLUMN IF NOT EXISTS contact_uuid") {
+		t.Fatal("expected contact uuid rollback migration to restore contact_uuid")
 	}
 }
 

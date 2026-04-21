@@ -45,11 +45,9 @@ ALTER TABLE reporters
 
 UPDATE reporters
 SET name = COALESCE(NULLIF(name, ''), display_name),
-    telephone = COALESCE(NULLIF(telephone, ''), phone_number),
-    rapidpro_uuid = COALESCE(NULLIF(rapidpro_uuid, ''), contact_uuid)
+    telephone = COALESCE(NULLIF(telephone, ''), phone_number)
 WHERE COALESCE(name, '') = ''
-   OR COALESCE(telephone, '') = ''
-   OR COALESCE(rapidpro_uuid, '') = '';
+   OR COALESCE(telephone, '') = '';
 
 ALTER TABLE reporters
     ALTER COLUMN name SET NOT NULL,
@@ -57,4 +55,3 @@ ALTER TABLE reporters
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reporters_telephone_unique ON reporters (telephone);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reporters_mtuuid_unique ON reporters (mtuuid) WHERE mtuuid <> '';
-

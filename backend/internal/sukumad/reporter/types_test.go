@@ -10,7 +10,6 @@ func TestReporterUnmarshalAcceptsLegacyAliases(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{
 		"displayName":"Alice Reporter",
 		"phoneNumber":"+256700000001",
-		"contactUuid":"rapidpro-123",
 		"groupNames":["Lead","VHT"]
 	}`), &record); err != nil {
 		t.Fatalf("unmarshal reporter: %v", err)
@@ -21,9 +20,6 @@ func TestReporterUnmarshalAcceptsLegacyAliases(t *testing.T) {
 	}
 	if record.Telephone != "+256700000001" {
 		t.Fatalf("expected phoneNumber alias to populate telephone, got %q", record.Telephone)
-	}
-	if record.RapidProUUID != "rapidpro-123" {
-		t.Fatalf("expected contactUuid alias to populate rapidProUuid, got %q", record.RapidProUUID)
 	}
 	if len(record.Groups) != 2 {
 		t.Fatalf("expected groupNames alias to populate groups, got %#v", record.Groups)

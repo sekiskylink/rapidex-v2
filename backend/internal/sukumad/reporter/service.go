@@ -261,6 +261,10 @@ func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, d
 }
 
 func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResult, error) {
+	reporter.RapidProUUID = strings.TrimSpace(reporter.RapidProUUID)
+	if reporter.RapidProUUID == "" {
+		return SyncResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"rapidProUuid": []string{"is required for synchronization"}})
+	}
 	conn, err := s.rapidProConnection(ctx)
 	if err != nil {
 		return SyncResult{}, err
@@ -276,28 +280,16 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 
 	operation := "updated"
 	upsertInput := rapidpro.UpsertContactInput{
+		UUID:   reporter.RapidProUUID,
 		Name:   reporter.Name,
 		URN:    urn,
 		URNs:   []string{urn},
 		Groups: groupUUIDs,
 	}
-	if strings.TrimSpace(reporter.RapidProUUID) != "" {
-		if _, found, lookupErr := s.rapidProClient.LookupContactByUUID(ctx, conn, reporter.RapidProUUID); lookupErr != nil {
-			return SyncResult{}, lookupErr
-		} else if found {
-			upsertInput.UUID = reporter.RapidProUUID
-		}
-	}
-	if upsertInput.UUID == "" {
-		contact, found, lookupErr := s.rapidProClient.LookupContactByURN(ctx, conn, urn)
-		if lookupErr != nil {
-			return SyncResult{}, lookupErr
-		}
-		if found {
-			upsertInput.UUID = contact.UUID
-		} else {
-			operation = "created"
-		}
+	if _, found, lookupErr := s.rapidProClient.LookupContactByUUID(ctx, conn, reporter.RapidProUUID); lookupErr != nil {
+		return SyncResult{}, lookupErr
+	} else if !found {
+		return SyncResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"rapidProUuid": []string{"contact was not found in RapidPro"}})
 	}
 	contact, err := s.rapidProClient.UpsertContact(ctx, conn, upsertInput)
 	if err != nil {

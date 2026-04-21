@@ -98,8 +98,8 @@ func (r *PgRepository) GetByUID(ctx context.Context, uid string) (Reporter, erro
 	return r.getByWhere(ctx, "uid = $1", uid)
 }
 
-func (r *PgRepository) GetByContactUUID(ctx context.Context, contactUUID string) (Reporter, error) {
-	return r.getByWhere(ctx, "rapidpro_uuid = $1", contactUUID)
+func (r *PgRepository) GetByRapidProUUID(ctx context.Context, rapidProUUID string) (Reporter, error) {
+	return r.getByWhere(ctx, "rapidpro_uuid = $1", rapidProUUID)
 }
 
 func (r *PgRepository) GetByPhoneNumber(ctx context.Context, phone string) (Reporter, error) {
@@ -146,6 +146,7 @@ func (r *PgRepository) ListUpdatedSince(ctx context.Context, since *time.Time, l
 	if onlyActive {
 		whereParts = append(whereParts, "is_active = TRUE")
 	}
+	whereParts = append(whereParts, "COALESCE(rapidpro_uuid, '') <> ''")
 	where := ""
 	if len(whereParts) > 0 {
 		where = "WHERE " + strings.Join(whereParts, " AND ")
@@ -173,8 +174,7 @@ func (r *PgRepository) ListUpdatedSince(ctx context.Context, since *time.Time, l
 func (r *PgRepository) UpdateRapidProStatus(ctx context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error) {
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE reporters
-		SET contact_uuid = $2,
-		    rapidpro_uuid = $2,
+		SET rapidpro_uuid = $2,
 		    synced = $3
 		WHERE id = $1
 	`, id, strings.TrimSpace(rapidProUUID), synced)
@@ -211,14 +211,14 @@ func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter,
 
 	query := `
 		INSERT INTO reporters (
-			uid, contact_uuid, phone_number, display_name, org_unit_id, is_active, created_at, updated_at,
+			uid, phone_number, display_name, org_unit_id, is_active, created_at, updated_at,
 			name, telephone, whatsapp, telegram, reporting_location, district_id, total_reports,
 			last_reporting_date, sms_code, sms_code_expires_at, mtuuid, synced, rapidpro_uuid, last_login_at
 		)
 		VALUES (
-			COALESCE(NULLIF($1, ''), gen_random_uuid()::text), COALESCE(NULLIF($2, ''), gen_random_uuid()::text), $3, $4, $5, $6, $7, $8,
-			$9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19, $20, $21, $22
+			COALESCE(NULLIF($1, ''), gen_random_uuid()::text), $2, $3, $4, $5, $6, $7,
+			$8, $9, $10, $11, $12, $13, $14,
+			$15, $16, $17, $18, $19, $20, $21
 		)
 		RETURNING id, uid
 	`
@@ -226,7 +226,6 @@ func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter,
 		ctx,
 		query,
 		reporter.UID,
-		reporter.RapidProUUID,
 		reporter.Telephone,
 		reporter.Name,
 		reporter.OrgUnitID,
@@ -245,7 +244,7 @@ func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter,
 		reporter.SMSCodeExpiresAt,
 		reporter.MTUUID,
 		reporter.Synced,
-		reporter.RapidProUUID,
+		strings.TrimSpace(reporter.RapidProUUID),
 		reporter.LastLoginAt,
 	).Scan(&reporter.ID, &reporter.UID); err != nil {
 		return Reporter{}, err
@@ -287,29 +286,27 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE reporters
-		SET contact_uuid = COALESCE(NULLIF($1, ''), contact_uuid),
-		    phone_number = $2,
-		    display_name = $3,
-		    org_unit_id = $4,
-		    is_active = $5,
-		    updated_at = $6,
-		    name = $7,
-		    telephone = $8,
-		    whatsapp = $9,
-		    telegram = $10,
-		    reporting_location = $11,
-		    district_id = $12,
-		    total_reports = $13,
-		    last_reporting_date = $14,
-		    sms_code = $15,
-		    sms_code_expires_at = $16,
-		    mtuuid = $17,
-		    synced = $18,
-		    rapidpro_uuid = $19,
-		    last_login_at = $20
-		WHERE id = $21
+		SET phone_number = $1,
+		    display_name = $2,
+		    org_unit_id = $3,
+		    is_active = $4,
+		    updated_at = $5,
+		    name = $6,
+		    telephone = $7,
+		    whatsapp = $8,
+		    telegram = $9,
+		    reporting_location = $10,
+		    district_id = $11,
+		    total_reports = $12,
+		    last_reporting_date = $13,
+		    sms_code = $14,
+		    sms_code_expires_at = $15,
+		    mtuuid = $16,
+		    synced = $17,
+		    rapidpro_uuid = $18,
+		    last_login_at = $19
+		WHERE id = $20
 	`,
-		reporter.RapidProUUID,
 		reporter.Telephone,
 		reporter.Name,
 		reporter.OrgUnitID,
@@ -327,7 +324,7 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 		reporter.SMSCodeExpiresAt,
 		reporter.MTUUID,
 		reporter.Synced,
-		reporter.RapidProUUID,
+		strings.TrimSpace(reporter.RapidProUUID),
 		reporter.LastLoginAt,
 		reporter.ID,
 	)

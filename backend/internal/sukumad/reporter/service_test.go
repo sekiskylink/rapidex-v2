@@ -24,7 +24,7 @@ func (r *reporterServiceRepo) GetByID(_ context.Context, id int64) (Reporter, er
 func (r *reporterServiceRepo) GetByUID(context.Context, string) (Reporter, error) {
 	return Reporter{}, nil
 }
-func (r *reporterServiceRepo) GetByContactUUID(context.Context, string) (Reporter, error) {
+func (r *reporterServiceRepo) GetByRapidProUUID(context.Context, string) (Reporter, error) {
 	return Reporter{}, nil
 }
 func (r *reporterServiceRepo) GetByPhoneNumber(context.Context, string) (Reporter, error) {
@@ -67,18 +67,18 @@ func (s reporterServerLookup) GetServerByCode(context.Context, string) (sukumads
 }
 
 type reporterRapidProClient struct {
-	lookupByURNFound bool
-	messageCalls     int
+	lookupByUUIDFound bool
+	messageCalls      int
 }
 
 func (c *reporterRapidProClient) LookupContactByUUID(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
-	return rapidpro.Contact{}, false, nil
-}
-func (c *reporterRapidProClient) LookupContactByURN(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
-	if !c.lookupByURNFound {
+	if !c.lookupByUUIDFound {
 		return rapidpro.Contact{}, false, nil
 	}
 	return rapidpro.Contact{UUID: "contact-existing"}, true, nil
+}
+func (c *reporterRapidProClient) LookupContactByURN(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
+	return rapidpro.Contact{}, false, nil
 }
 func (c *reporterRapidProClient) UpsertContact(_ context.Context, _ rapidpro.Connection, input rapidpro.UpsertContactInput) (rapidpro.Contact, error) {
 	if input.UUID != "" {
@@ -97,20 +97,21 @@ func (c *reporterRapidProClient) SendBroadcast(context.Context, rapidpro.Connect
 	return rapidpro.Broadcast{}, nil
 }
 
-func TestSyncReporterCreatesRapidProContactAndPersistsUUID(t *testing.T) {
+func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{
 			1: {
-				ID:        1,
-				Name:      "Alice Reporter",
-				Telephone: "+256700000001",
-				OrgUnitID: 2,
-				Groups:    []string{"Lead"},
-				IsActive:  true,
+				ID:           1,
+				Name:         "Alice Reporter",
+				Telephone:    "+256700000001",
+				OrgUnitID:    2,
+				Groups:       []string{"Lead"},
+				RapidProUUID: "contact-existing",
+				IsActive:     true,
 			},
 		},
 	}
-	client := &reporterRapidProClient{}
+	client := &reporterRapidProClient{lookupByUUIDFound: true}
 	service := NewService(repo).
 		WithRapidProIntegration(reporterServerLookup{
 			record: sukumadserver.Record{
@@ -124,10 +125,10 @@ func TestSyncReporterCreatesRapidProContactAndPersistsUUID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sync reporter: %v", err)
 	}
-	if result.Operation != "created" {
-		t.Fatalf("expected create operation, got %q", result.Operation)
+	if result.Operation != "updated" {
+		t.Fatalf("expected update operation, got %q", result.Operation)
 	}
-	if result.Reporter.RapidProUUID != "contact-created" {
+	if result.Reporter.RapidProUUID != "contact-existing" {
 		t.Fatalf("expected persisted contact uuid, got %q", result.Reporter.RapidProUUID)
 	}
 	if !result.Reporter.Synced {
@@ -135,6 +136,35 @@ func TestSyncReporterCreatesRapidProContactAndPersistsUUID(t *testing.T) {
 	}
 	if repo.updateCalls != 1 {
 		t.Fatalf("expected one rapidpro status update, got %d", repo.updateCalls)
+	}
+}
+
+func TestSyncReporterRequiresRapidProUUID(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{lookupByUUIDFound: true}
+	service := NewService(repo).
+		WithRapidProIntegration(reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	if _, err := service.SyncReporter(context.Background(), 1); err == nil {
+		t.Fatal("expected sync reporter to reject empty rapidpro uuid")
+	}
+	if repo.updateCalls != 0 {
+		t.Fatalf("expected no persistence updates, got %d", repo.updateCalls)
 	}
 }
 

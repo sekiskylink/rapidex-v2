@@ -16,7 +16,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 interface Reporter {
   id: number;
   uid: string;
-  contactUuid: string;
+  rapidProUuid: string;
   phoneNumber: string;
   displayName: string;
   orgUnitId: number;
@@ -34,7 +34,7 @@ export default function ReportersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const [contactUuid, setContactUuid] = useState('');
+  const [rapidProUuid, setRapidProUuid] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [orgUnitId, setOrgUnitId] = useState<number | ''>('');
@@ -62,7 +62,7 @@ export default function ReportersPage() {
   }, []);
 
   const handleOpen = () => {
-    setContactUuid('');
+    setRapidProUuid('');
     setPhoneNumber('');
     setDisplayName('');
     setOrgUnitId('');
@@ -72,7 +72,7 @@ export default function ReportersPage() {
   const handleCreate = async () => {
     try {
       const payload = {
-        contactUuid,
+        rapidProUuid,
         phoneNumber,
         displayName,
         orgUnitId: orgUnitId === '' ? null : orgUnitId,
@@ -150,10 +150,10 @@ export default function ReportersPage() {
           <TextField
             autoFocus
             margin="dense"
-            label="Contact UUID"
+            label="RapidPro UUID"
             fullWidth
-            value={contactUuid}
-            onChange={(e) => setContactUuid(e.target.value)}
+            value={rapidProUuid}
+            onChange={(e) => setRapidProUuid(e.target.value)}
           />
           <TextField
             margin="dense"
@@ -187,7 +187,7 @@ export default function ReportersPage() {
           <Button onClick={handleClose}>Cancel</Button>
           <Button
             onClick={handleCreate}
-            disabled={!phoneNumber || !contactUuid || orgUnitId === ''}
+            disabled={!phoneNumber || orgUnitId === ''}
           >
             Create
           </Button>

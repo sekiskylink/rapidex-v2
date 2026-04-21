@@ -100,7 +100,7 @@ func (r *rapidexReporterRepo) GetByID(context.Context, int64) (reporter.Reporter
 func (r *rapidexReporterRepo) GetByUID(context.Context, string) (reporter.Reporter, error) {
 	return reporter.Reporter{}, nil
 }
-func (r *rapidexReporterRepo) GetByContactUUID(context.Context, string) (reporter.Reporter, error) {
+func (r *rapidexReporterRepo) GetByRapidProUUID(context.Context, string) (reporter.Reporter, error) {
 	return reporter.Reporter{}, nil
 }
 func (r *rapidexReporterRepo) GetByPhoneNumber(context.Context, string) (reporter.Reporter, error) {

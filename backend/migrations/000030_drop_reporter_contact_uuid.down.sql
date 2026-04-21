@@ -1,0 +1,2 @@
+ALTER TABLE reporters
+    ADD COLUMN IF NOT EXISTS contact_uuid TEXT NOT NULL DEFAULT '';

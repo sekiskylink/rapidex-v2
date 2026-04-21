@@ -6,7 +6,7 @@ import (
 )
 
 // Repository defines persistence behaviour for reporters.  Implementations should
-// enforce uniqueness of contact UUIDs and phone numbers.
+// enforce required reporter persistence and lookup behaviour.
 type Repository interface {
 	// List returns a page of Reporters matching the provided query.  The search string
 	// should be matched against phone numbers and display names.  If OrgUnitID is
@@ -19,8 +19,8 @@ type Repository interface {
 	// GetByUID fetches a reporter by its UID.
 	GetByUID(ctx context.Context, uid string) (Reporter, error)
 
-	// GetByContactUUID fetches a reporter by its RapidPro contact UUID.
-	GetByContactUUID(ctx context.Context, contactUUID string) (Reporter, error)
+	// GetByRapidProUUID fetches a reporter by its RapidPro contact UUID.
+	GetByRapidProUUID(ctx context.Context, rapidProUUID string) (Reporter, error)
 
 	// GetByPhoneNumber fetches a reporter by its phone number.
 	GetByPhoneNumber(ctx context.Context, phone string) (Reporter, error)

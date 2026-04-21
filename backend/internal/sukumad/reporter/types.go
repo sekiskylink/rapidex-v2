@@ -37,7 +37,6 @@ func (r *Reporter) UnmarshalJSON(data []byte) error {
 		reporterAlias
 		DisplayName string   `json:"displayName"`
 		PhoneNumber string   `json:"phoneNumber"`
-		ContactUUID string   `json:"contactUuid"`
 		GroupNames  []string `json:"groupNames"`
 	}{}
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -49,9 +48,6 @@ func (r *Reporter) UnmarshalJSON(data []byte) error {
 	}
 	if strings.TrimSpace(r.Telephone) == "" {
 		r.Telephone = strings.TrimSpace(aux.PhoneNumber)
-	}
-	if strings.TrimSpace(r.RapidProUUID) == "" {
-		r.RapidProUUID = strings.TrimSpace(aux.ContactUUID)
 	}
 	if len(r.Groups) == 0 && len(aux.GroupNames) > 0 {
 		r.Groups = aux.GroupNames

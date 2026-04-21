@@ -16,7 +16,6 @@ CREATE INDEX idx_org_units_path ON org_units (path);
 CREATE TABLE reporters (
     id BIGSERIAL PRIMARY KEY,
     uid VARCHAR(36) NOT NULL UNIQUE,
-    contact_uuid VARCHAR(36) NOT NULL UNIQUE,
     phone_number VARCHAR(32) NOT NULL UNIQUE,
     display_name VARCHAR(255) NOT NULL,
     org_unit_id BIGINT NOT NULL REFERENCES org_units(id) ON DELETE RESTRICT,
