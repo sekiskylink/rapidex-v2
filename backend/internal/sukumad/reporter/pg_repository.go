@@ -198,21 +198,7 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 		return Reporter{}, err
 	}
 
-	if reporter.UID == "" {
-		reporter.UID = existing.UID
-	}
-	if reporter.TotalReports == 0 && existing.TotalReports != 0 {
-		reporter.TotalReports = existing.TotalReports
-	}
-	if reporter.LastReportingDate == nil {
-		reporter.LastReportingDate = existing.LastReportingDate
-	}
-	if reporter.Synced == false && existing.Synced {
-		reporter.Synced = existing.Synced
-	}
-	if reporter.LastLoginAt == nil {
-		reporter.LastLoginAt = existing.LastLoginAt
-	}
+	reporter = preserveSystemManagedFields(existing, reporter)
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE reporters
@@ -280,6 +266,34 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 	}
 	tx = nil
 	return r.GetByID(ctx, reporter.ID)
+}
+
+func preserveSystemManagedFields(existing Reporter, incoming Reporter) Reporter {
+	if incoming.UID == "" {
+		incoming.UID = existing.UID
+	}
+	if incoming.TotalReports == 0 && existing.TotalReports != 0 {
+		incoming.TotalReports = existing.TotalReports
+	}
+	if incoming.LastReportingDate == nil {
+		incoming.LastReportingDate = existing.LastReportingDate
+	}
+	if incoming.SMSCode == "" {
+		incoming.SMSCode = existing.SMSCode
+	}
+	if incoming.SMSCodeExpiresAt == nil {
+		incoming.SMSCodeExpiresAt = existing.SMSCodeExpiresAt
+	}
+	if incoming.MTUUID == "" {
+		incoming.MTUUID = existing.MTUUID
+	}
+	if incoming.Synced == false && existing.Synced {
+		incoming.Synced = existing.Synced
+	}
+	if incoming.LastLoginAt == nil {
+		incoming.LastLoginAt = existing.LastLoginAt
+	}
+	return incoming
 }
 
 func (r *PgRepository) Delete(ctx context.Context, id int64) error {

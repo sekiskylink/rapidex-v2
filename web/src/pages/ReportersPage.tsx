@@ -59,8 +59,6 @@ type ReporterFormState = {
   whatsapp: string
   telegram: string
   orgUnitId: string
-  smsCode: string
-  mtuuid: string
   rapidProUuid: string
   isActive: boolean
   groups: string[]
@@ -72,8 +70,6 @@ const emptyForm: ReporterFormState = {
   whatsapp: '',
   telegram: '',
   orgUnitId: '',
-  smsCode: '',
-  mtuuid: '',
   rapidProUuid: '',
   isActive: true,
   groups: [],
@@ -89,8 +85,6 @@ function toForm(reporter?: Reporter | null): ReporterFormState {
     whatsapp: reporter.whatsapp ?? '',
     telegram: reporter.telegram ?? '',
     orgUnitId: reporter.orgUnitId ? String(reporter.orgUnitId) : '',
-    smsCode: reporter.smsCode ?? '',
-    mtuuid: reporter.mtuuid ?? '',
     rapidProUuid: reporter.rapidProUuid ?? '',
     isActive: reporter.isActive,
     groups: reporter.groups ?? [],
@@ -192,8 +186,6 @@ export function ReportersPage() {
           whatsapp: form.whatsapp.trim(),
           telegram: form.telegram.trim(),
           orgUnitId: Number(form.orgUnitId),
-          smsCode: form.smsCode.trim(),
-          mtuuid: form.mtuuid.trim(),
           rapidProUuid: form.rapidProUuid.trim(),
           isActive: form.isActive,
           groups: form.groups,
@@ -275,8 +267,6 @@ export function ReportersPage() {
               ))}
             </TextField>
             <TextField label="RapidPro UUID" value={form.rapidProUuid} onChange={(event) => setForm({ ...form, rapidProUuid: event.target.value })} />
-            <TextField label="SMS Code" value={form.smsCode} onChange={(event) => setForm({ ...form, smsCode: event.target.value })} />
-            <TextField label="MT UUID" value={form.mtuuid} onChange={(event) => setForm({ ...form, mtuuid: event.target.value })} />
             <Autocomplete
               multiple
               freeSolo
@@ -299,11 +289,7 @@ export function ReportersPage() {
               InputProps={{ readOnly: true }}
             />
             <TextField label="Total Reports" value={editing?.totalReports ?? 0} InputProps={{ readOnly: true }} />
-            <TextField label="Last Reporting Date" value={editing?.lastReportingDate ?? ''} InputProps={{ readOnly: true }} />
             <TextField label="Synced" value={editing ? String(editing.synced) : 'Derived later'} InputProps={{ readOnly: true }} />
-            <TextField label="Created At" value={editing?.createdAt ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Updated At" value={editing?.updatedAt ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Last Login At" value={editing?.lastLoginAt ?? ''} InputProps={{ readOnly: true }} />
           </Box>
         </DialogContent>
         <DialogActions>
