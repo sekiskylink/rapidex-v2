@@ -275,6 +275,13 @@ func (r *PgRepository) Delete(ctx context.Context, id int64) error {
 	if childCount > 0 {
 		return fmt.Errorf("organisation unit has child units")
 	}
+	var reporterCount int
+	if err := r.db.GetContext(ctx, &reporterCount, `SELECT COUNT(*) FROM reporters WHERE org_unit_id = $1`, id); err != nil {
+		return err
+	}
+	if reporterCount > 0 {
+		return fmt.Errorf("organisation unit has assigned reporters")
+	}
 
 	res, err := r.db.ExecContext(ctx, `DELETE FROM org_units WHERE id = $1`, id)
 	if err != nil {

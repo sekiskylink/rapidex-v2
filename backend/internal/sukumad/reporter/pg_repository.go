@@ -216,7 +216,7 @@ func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter,
 			last_reporting_date, sms_code, sms_code_expires_at, mtuuid, synced, rapidpro_uuid, last_login_at
 		)
 		VALUES (
-			COALESCE(NULLIF($1, ''), gen_random_uuid()::text), $2, $3, $4, $5, $6, $7, $8,
+			COALESCE(NULLIF($1, ''), gen_random_uuid()::text), COALESCE(NULLIF($2, ''), gen_random_uuid()::text), $3, $4, $5, $6, $7, $8,
 			$9, $10, $11, $12, $13, $14, $15,
 			$16, $17, $18, $19, $20, $21, $22
 		)
@@ -287,7 +287,7 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE reporters
-		SET contact_uuid = $1,
+		SET contact_uuid = COALESCE(NULLIF($1, ''), contact_uuid),
 		    phone_number = $2,
 		    display_name = $3,
 		    org_unit_id = $4,

@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -14,6 +15,7 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
+import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { apiRequest } from '../lib/api'
 
 interface OrgUnit {
@@ -72,6 +74,12 @@ const emptyForm: OrgUnitFormState = {
   attributeValuesText: '{}',
 }
 
+const dataGridSx = {
+  '& .MuiDataGrid-columnHeaderTitle': {
+    fontWeight: 700,
+  },
+}
+
 function parseJSONField(value: string, label: string) {
   const trimmed = value.trim()
   if (trimmed === '') {
@@ -116,6 +124,7 @@ export function OrgUnitsPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [viewing, setViewing] = React.useState<OrgUnit | null>(null)
   const [editing, setEditing] = React.useState<OrgUnit | null>(null)
   const [form, setForm] = React.useState<OrgUnitFormState>(emptyForm)
   const [submitting, setSubmitting] = React.useState(false)
@@ -155,18 +164,26 @@ export function OrgUnitsPage() {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 170,
+        width: 110,
         sortable: false,
         filterable: false,
         renderCell: ({ row }) => (
-          <Stack direction="row" spacing={1}>
-            <Button size="small" onClick={() => openDialog(row)}>
-              Edit
-            </Button>
-            <Button size="small" color="error" onClick={() => void deleteOrgUnit(row)}>
-              Delete
-            </Button>
-          </Stack>
+          <AdminRowActions
+            rowLabel={row.name}
+            actions={[
+              { id: 'view', label: 'View details', icon: 'view', onClick: () => setViewing(row) },
+              { id: 'edit', label: 'Edit', icon: 'edit', onClick: () => openDialog(row) },
+              {
+                id: 'delete',
+                label: 'Delete',
+                icon: 'delete',
+                destructive: true,
+                confirmTitle: 'Delete facility',
+                confirmMessage: `Delete ${row.name}? This cannot be undone.`,
+                onClick: () => void deleteOrgUnit(row),
+              },
+            ]}
+          />
         ),
       },
     ],
@@ -224,9 +241,6 @@ export function OrgUnitsPage() {
   }
 
   async function deleteOrgUnit(unit: OrgUnit) {
-    if (!window.confirm(`Delete facility "${unit.name}"?`)) {
-      return
-    }
     setError('')
     try {
       await apiRequest<void>(`/orgunits/${unit.id}`, { method: 'DELETE' })
@@ -265,7 +279,69 @@ export function OrgUnitsPage() {
         disableRowSelectionOnClick
         initialState={{ pagination: { paginationModel: { page: 0, pageSize: 25 } } }}
         pageSizeOptions={[25, 50, 100]}
+        showToolbar
+        slotProps={{
+          toolbar: {
+            csvOptions: {
+              fileName: 'facilities-grid',
+            },
+          },
+        }}
+        sx={dataGridSx}
       />
+
+      <Dialog open={Boolean(viewing)} onClose={() => setViewing(null)} fullWidth maxWidth="md">
+        <DialogTitle>Facility Details</DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              pt: 1,
+              display: 'grid',
+              gap: 2,
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+            }}
+          >
+            <TextField label="Name" value={viewing?.name ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Short Name" value={viewing?.shortName ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Code" value={viewing?.code ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="UID" value={viewing?.uid ?? ''} InputProps={{ readOnly: true }} />
+            <TextField
+              label="Parent"
+              value={viewing?.parentId ? items.find((item) => item.id === viewing.parentId)?.name ?? String(viewing.parentId) : 'None'}
+              InputProps={{ readOnly: true }}
+            />
+            <TextField label="Hierarchy Level" value={viewing?.hierarchyLevel ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Phone Number" value={viewing?.phoneNumber ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Email" value={viewing?.email ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Website URL" value={viewing?.url ?? ''} InputProps={{ readOnly: true }} />
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Chip label={viewing?.deleted ? 'Deleted' : 'Active'} color={viewing?.deleted ? 'warning' : 'success'} size="small" />
+            </Box>
+            <TextField label="Address" value={viewing?.address ?? ''} InputProps={{ readOnly: true }} sx={{ gridColumn: '1 / -1' }} />
+            <TextField label="Description" value={viewing?.description ?? ''} InputProps={{ readOnly: true }} multiline minRows={2} sx={{ gridColumn: '1 / -1' }} />
+            <TextField label="UID Path" value={viewing?.path ?? ''} InputProps={{ readOnly: true }} sx={{ gridColumn: '1 / -1' }} />
+            <TextField label="Opening Date" value={toDateInput(viewing?.openingDate)} InputProps={{ readOnly: true }} />
+            <TextField label="Last Sync Date" value={viewing?.lastSyncDate ? new Date(viewing.lastSyncDate).toLocaleString() : ''} InputProps={{ readOnly: true }} />
+            <TextField
+              label="Extras JSON"
+              value={JSON.stringify(viewing?.extras ?? {}, null, 2)}
+              InputProps={{ readOnly: true }}
+              multiline
+              minRows={4}
+            />
+            <TextField
+              label="Attribute Values JSON"
+              value={JSON.stringify(viewing?.attributeValues ?? {}, null, 2)}
+              InputProps={{ readOnly: true }}
+              multiline
+              minRows={4}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewing(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="lg">
         <DialogTitle>{editing ? 'Edit Facility' : 'New Facility'}</DialogTitle>

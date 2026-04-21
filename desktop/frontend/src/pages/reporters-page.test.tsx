@@ -296,7 +296,7 @@ describe('desktop reporters page', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
     await waitFor(() => expect(syncPayload).toEqual({}))
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select reporter Alice Reporter' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select reporter Alice Reporter' }))
     fireEvent.click(screen.getByRole('button', { name: 'Broadcast to Selected' }))
     const messageDialog = await screen.findByRole('dialog', { name: 'Broadcast to Selected Reporters' })
     fireEvent.change(within(messageDialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Test broadcast' } })

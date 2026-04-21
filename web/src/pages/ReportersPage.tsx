@@ -80,6 +80,12 @@ const emptyForm: ReporterFormState = {
   groups: [],
 }
 
+const dataGridSx = {
+  '& .MuiDataGrid-columnHeaderTitle': {
+    fontWeight: 700,
+  },
+}
+
 function toForm(reporter?: Reporter | null): ReporterFormState {
   if (!reporter) {
     return emptyForm
@@ -102,6 +108,7 @@ export function ReportersPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [viewing, setViewing] = React.useState<Reporter | null>(null)
   const [editing, setEditing] = React.useState<Reporter | null>(null)
   const [form, setForm] = React.useState<ReporterFormState>(emptyForm)
   const [submitting, setSubmitting] = React.useState(false)
@@ -189,6 +196,7 @@ export function ReportersPage() {
           <AdminRowActions
             rowLabel={row.name}
             actions={[
+              { id: 'view', label: 'View details', icon: 'view', onClick: () => setViewing(row) },
               { id: 'edit', label: 'Edit', icon: 'edit', onClick: () => openDialog(row) },
               { id: 'sync', label: 'Sync to RapidPro', onClick: () => void syncReporter(row.id) },
               { id: 'send', label: 'Send SMS', onClick: () => openMessageDialog('single', row) },
@@ -197,6 +205,8 @@ export function ReportersPage() {
                 label: 'Delete',
                 icon: 'delete',
                 destructive: true,
+                confirmTitle: 'Delete reporter',
+                confirmMessage: `Delete ${row.name}? This cannot be undone.`,
                 onClick: () => void deleteReporter(row),
               },
             ]}
@@ -268,9 +278,6 @@ export function ReportersPage() {
   }
 
   async function deleteReporter(reporter: Reporter) {
-    if (!window.confirm(`Delete reporter "${reporter.name}"?`)) {
-      return
-    }
     setError('')
     try {
       await apiRequest<void>(`/reporters/${reporter.id}`, { method: 'DELETE' })
@@ -368,7 +375,56 @@ export function ReportersPage() {
         disableRowSelectionOnClick
         initialState={{ pagination: { paginationModel: { page: 0, pageSize: 25 } } }}
         pageSizeOptions={[25, 50, 100]}
+        showToolbar
+        slotProps={{
+          toolbar: {
+            csvOptions: {
+              fileName: 'reporters-grid',
+            },
+          },
+        }}
+        sx={dataGridSx}
       />
+
+      <Dialog open={Boolean(viewing)} onClose={() => setViewing(null)} fullWidth maxWidth="md">
+        <DialogTitle>Reporter Details</DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              pt: 1,
+              display: 'grid',
+              gap: 2,
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+            }}
+          >
+            <TextField label="Name" value={viewing?.name ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Telephone" value={viewing?.telephone ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="WhatsApp" value={viewing?.whatsapp ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Telegram" value={viewing?.telegram ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="UID" value={viewing?.uid ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="RapidPro UUID" value={viewing?.rapidProUuid ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Facility" value={viewing ? orgUnits.find((unit) => unit.id === viewing.orgUnitId)?.name ?? String(viewing.orgUnitId) : ''} InputProps={{ readOnly: true }} />
+            <TextField label="Reporting Location" value={viewing?.reportingLocation ?? ''} InputProps={{ readOnly: true }} />
+            <TextField
+              label="District"
+              value={viewing?.districtId ? orgUnits.find((unit) => unit.id === viewing.districtId)?.name ?? String(viewing.districtId) : ''}
+              InputProps={{ readOnly: true }}
+            />
+            <TextField label="Last Login" value={viewing?.lastLoginAt ? new Date(viewing.lastLoginAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
+            <TextField label="Total Reports" value={String(viewing?.totalReports ?? 0)} InputProps={{ readOnly: true }} />
+            <TextField label="Last Reporting Date" value={viewing?.lastReportingDate ? new Date(viewing.lastReportingDate).toLocaleString() : ''} InputProps={{ readOnly: true }} />
+            <TextField label="SMS Code" value={viewing?.smsCode ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="SMS Code Expires At" value={viewing?.smsCodeExpiresAt ? new Date(viewing.smsCodeExpiresAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
+            <TextField label="MT UUID" value={viewing?.mtuuid ?? ''} InputProps={{ readOnly: true }} />
+            <TextField label="Created At" value={viewing?.createdAt ? new Date(viewing.createdAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
+            <TextField label="Updated At" value={viewing?.updatedAt ? new Date(viewing.updatedAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
+            <TextField label="Reporter Groups" value={viewing?.groups?.join(', ') ?? ''} InputProps={{ readOnly: true }} sx={{ gridColumn: '1 / -1' }} />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewing(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="lg">
         <DialogTitle>{editing ? 'Edit Reporter' : 'New Reporter'}</DialogTitle>
