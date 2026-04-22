@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<!-- saved from url=(0054)https://rapidpro-mtracpro.health.go.ug/api/v2/messages -->
+<html lang="en-us"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>
+      
+  Messages Endpoint
+
+    </title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <meta name="description" content="RapidPro lets you visually build interactive SMS applications and launch them anywhere in the world.">
+    <meta name="author" content="TextIt">
+    <meta http-equiv="X-UA-Compatible" content="IE=10">
+    
+    
+    <script src="./Messages Endpoint_files/saved_resource"></script>
+    <script src="./Messages Endpoint_files/prettify-min.js"></script>
+<script src="./Messages Endpoint_files/qrious.min.js"></script>
+<script src="./Messages Endpoint_files/prettify-min.js"></script>
+<script src="./Messages Endpoint_files/croppie.js"></script>
+    <script src="./Messages Endpoint_files/utils.js"></script>
+    <script type="text/javascript">
+      function isMobile() {
+        return window.innerWidth < 600;
+      }
+
+      function updateFrameForMobile() {
+        var body = document.querySelector("body");
+        if (body) {
+          if (isMobile()) {
+            body.classList.add("mobile");
+          } else {
+            body.classList.remove("mobile");
+          }
+        }
+      }
+
+      var static_url = "/static/";
+      var org_id = null;
+      var tembaVersion = "";
+      var params = "";
+      var anon_org = asBool("False");
+      var menuSelection = "";
+
+      function handleMenuReady() {
+        var selection = window.location.pathname.split("/").filter(function(path) {
+          return !!path
+        });
+        var menu = document.querySelector("temba-menu");
+        if (menu && menuSelection) {
+          menu.setFocusedItem(menuSelection);
+        }
+      }
+
+      function handleMenuListSelection(evt) {
+        document.activeElement.blur();
+
+        const selected = evt.detail.selected;
+        if (selected.url) {
+          spaGet(selected.url);
+        } else if (selected.type == "workspace") {
+          handleWorkspaceChanged(selected.id);
+        }
+      }
+
+      // set our initial title
+      document.addEventListener("DOMContentLoaded", function(event) {
+        const titleText = document.querySelector("#title-text");
+        if (titleText) {
+          document.title = titleText.innerText;
+        }
+
+        updateFrameForMobile();
+
+        if (isMobile()) {
+          var menu = document.querySelector("temba-menu");
+          if (menu) {
+            menu.collapsed = true;
+          }
+        }
+
+        window.addEventListener('resize', function(event) {
+          updateFrameForMobile();
+        });
+      });
+
+      document.addEventListener("temba-workspace-settings", function(event) {
+        spaGet('/org/workspace');
+        var menu = document.querySelector('temba-menu');
+        if (menu) {
+          menu.click();
+        }
+      });
+
+      document.addEventListener('temba-open-tab', function(event) {
+        const item = event.detail;
+        if (item.href) {
+          window.open(item.href, '_blank');
+        }
+      });
+    </script>
+    
+      <script src="./Messages Endpoint_files/temba.js"></script>
+<script src="./Messages Endpoint_files/frame.js"></script>
+<script src="./Messages Endpoint_files/labels.js"></script>
+    
+    
+    
+    
+      <link type="image/ico" rel="shortcut icon" href="https://rapidpro-mtracpro.health.go.ug/static/images/favicon.ico">
+    
+    
+  
+      <link rel="stylesheet" href="./Messages Endpoint_files/css">
+      <link type="text/css" rel="stylesheet" href="./Messages Endpoint_files/tailwind.css"><link type="text/css" rel="stylesheet" href="./Messages Endpoint_files/temba-components.css"><link type="text/css" rel="stylesheet" href="./Messages Endpoint_files/frame.css"><link type="text/css" rel="stylesheet" href="./Messages Endpoint_files/mobile.css"><style>
+          #error-dialog {
+            --header-bg: var(--color-alert);
+          }
+
+          * {
+            font-synthesis: none !important;
+
+          }
+        </style>
+    
+  <style type="text/css">
+    .content-card {
+      margin-top: 8em;
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+      background: transparent;
+    }
+  </style>
+
+    
+
+  </head>
+  
+    <body class="bg-gradient" id="pageBody" data-new-gr-c-s-check-loaded="14.1284.0" data-gr-ext-installed="">
+      
+        <script src="./Messages Endpoint_files/temba-components.js"></script>
+      
+      
+        <temba-store globals="/api/v2/globals.json" completion="/mr/docs/en-us/editor.json" languages="/org/languages/" fields="/api/v2/fields.json" groups="/api/v2/groups.json" workspace="/api/v2/workspace.json" shortcuts="/api/internal/shortcuts.json" users="/api/v2/users.json"><template shadowrootmode="open"><!----></template>
+        </temba-store>
+      
+      <div class="flex flex-col h-full">
+        
+        
+        <!-- Content -->
+        
+  
+  
+    
+                    
+  
+  <link rel="stylesheet" type="text/css" href="./Messages Endpoint_files/prettify.css">
+  <link rel="stylesheet" type="text/css" href="./Messages Endpoint_files/codemirror.css">
+  <style>
+    .main-logo {
+      margin: 1.5em;
+    }
+
+    .content-card {
+      width: 80%;
+    }
+
+    .content-main li {
+      margin: 0.4em 0em;
+    }
+
+    .content-main ul {
+      margin-top: 1em;
+      margin-bottom: 1em;
+    }
+
+    code {
+      padding: 0.2em 0.5em;
+      font-size: 0.9em;
+    }
+
+    .card {
+      padding: 0;
+      margin: 1em 2em;
+    }
+
+    .page-content {
+      max-width: 100%;
+    }
+
+    .button-form {
+      float: right;
+    }
+
+    #get-form {
+      margin-left: 5px;
+    }
+
+    .form-horizontal .form-actions {
+      margin-top: 0px;
+      margin-bottom: 0px;
+      padding-top: 0px;
+      padding-bottom: 0px;
+    }
+
+    .nav.nav-tabs {
+      margin-bottom: 0px;
+    }
+
+    pre {
+      line-height: 18px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .CodeMirror {
+      background: #fff;
+      border: 1px solid #eee;
+      margin-bottom: 10px;
+      height: 200px;
+    }
+
+    .str,
+    .atv {
+      color: teal;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5 {
+      color: #444;
+      padding: 0;
+      text-transform: none;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: 24px;
+      line-height: 40px;
+    }
+
+    h2 {
+      font-size: 42px;
+    }
+
+    h3 {
+      font-size: 26px;
+    }
+
+    h5 {
+      margin-bottom: 5px;
+    }
+
+    ul,
+    ol {
+      padding: 0;
+      margin: 0 0 10px 25px;
+    }
+
+
+    strong {
+      font-weight: bold;
+    }
+  </style>
+
+  
+  
+    
+                    
+  
+  <script src="./Messages Endpoint_files/prettify-min.js"></script>
+  <script>
+    document.querySelectorAll('pre').forEach(function(pre) {
+      if (pre.querySelector('code')) {
+        prettyPrint();
+      }
+    });
+  </script>
+
+  <div class="background"></div>
+  <div class="flex flex-col h-full z-10 overflow-y-auto">
+    <div class="top flex-shrink flex-grow">
+      
+      
+    </div>
+    <div class="middle flex flex-row mb-10">
+      <div class="flex-grow"></div>
+      <div class="card content-card">
+        <div class="flex justify-between items-center">
+          <div class="brand">
+            
+              <img class="no-nav-logo" style="max-height:4em;
+                          margin: 1em 0" src="./Messages Endpoint_files/logo-dark.svg">
+            
+          </div>
+          <div class="top-right">
+            
+            
+          </div>
+        </div>
+        
+          
+            
+          
+          
+  <div id="content" class="px-8 pb-8">
+    <div class="content-main">
+      <div class="flex mb-8">
+        <div class="flex-grow page-title">Messages Endpoint</div>
+        <div>
+          
+  <a class="button-light ml-4" href="https://rapidpro-mtracpro.health.go.ug/api/v2/">Endpoints</a>
+  <a class="button-light ml-4" href="https://rapidpro-mtracpro.health.go.ug/api/v2/explorer/">Explorer</a>
+
+        </div>
+      </div>
+      <p>This endpoint allows you to list messages in your account.</p>
+<h3 id="listing-messages">Listing Messages</h3>
+<p>A <code>GET</code> returns the messages for your organization, filtering them as needed. Each message has the following
+attributes:</p>
+<ul>
+<li><strong>id</strong> - the ID of the message (int), filterable as <code>id</code>.</li>
+<li><strong>broadcast</strong> - the id of the broadcast (int).</li>
+<li><strong>contact</strong> - the UUID and name of the contact (object).</li>
+<li><strong>urn</strong> - the URN of the sender or receiver, depending on direction (string).</li>
+<li><strong>channel</strong> - the UUID and name of the channel that handled this message (object).</li>
+<li><strong>direction</strong> - the direction of the message (one of <code>incoming</code> or <code>outgoing</code>).</li>
+<li><strong>type</strong> - the type of the message (one of <code>text</code>, <code>optin</code> or <code>voice</code>).</li>
+<li><strong>status</strong> - the status of the message, one of:<ul>
+<li><code>queued</code> - incoming that has not yet been handled, or outgoing message that has not yet been sent.</li>
+<li><code>handled</code> - incoming that has been handled by a flow or put in the inbox.</li>
+<li><code>wired</code> - outgoing that has been wired to a channel.</li>
+<li><code>sent</code> - outgoing for which channel has confirmed that it has been sent.</li>
+<li><code>delivered</code> - outgoing for which channel has confirmed that it has been delivered to the contact.</li>
+<li><code>read</code> - outgoing for which channel has confirmed that it has been read by the contact.</li>
+<li><code>errored</code> - outgoing that has errored but will be retried.</li>
+<li><code>failed</code> - outgoing that has errored too many times and will no longer be retried.</li>
+</ul>
+</li>
+<li><strong>visibility</strong> - the visibility of the message (one of <code>visible</code>, <code>archived</code> or <code>deleted</code>)</li>
+<li><strong>text</strong> - the text of the message received (string). Note this is the logical view and the message may have been received as multiple physical messages.</li>
+<li><strong>attachments</strong> - the attachments on the message (array of objects).</li>
+<li><strong>quick_replies</strong> - the quick_replies on the message (array of objects).</li>
+<li><strong>labels</strong> - any labels set on this message (array of objects).</li>
+<li><strong>flow</strong> - the UUID and name of the flow if message was part of a flow (object, optional).</li>
+<li><strong>created_on</strong> - when this message was either received by the channel or created (datetime) (filterable as <code>before</code> and <code>after</code>).</li>
+<li><strong>sent_on</strong> - for outgoing messages, when the channel sent the message (null if not yet sent or an incoming message) (datetime).</li>
+<li><strong>modified_on</strong> - when the message was last modified (datetime).</li>
+</ul>
+<p>You can also filter by <code>folder</code> where folder is one of <code>inbox</code>, <code>flows</code>, <code>archived</code>, <code>outbox</code>, <code>sent</code> or <code>failed</code>.</p>
+<p>The sort order for the <code>sent</code> folder is the sent date. All other requests are sorted by the message creation date.</p>
+<p>Without any parameters this endpoint will return all incoming and outgoing messages ordered by creation date.</p>
+<p>Example:</p>
+<pre><code>GET /api/v2/messages.json?folder=inbox
+</code></pre>
+<p>Response is the list of messages for that contact, most recently created first:</p>
+<pre><code>{
+    "next": "http://example.com/api/v2/messages.json?folder=inbox&amp;cursor=cD0yMDE1LTExLTExKzExJTNBM40NjQlMkIwMCUzRv",
+    "previous": null,
+    "results": [
+    {
+        "id": 4105426,
+        "broadcast": 2690007,
+        "contact": {"uuid": "d33e9ad5-5c35-414c-abd4-e7451c69ff1d", "name": "Bob McFlow"},
+        "urn": "tel:+1234567890",
+        "channel": {"uuid": "9a8b001e-a913-486c-80f4-1356e23f582e", "name": "Vonage"},
+        "direction": "out",
+        "type": "text",
+        "status": "wired",
+        "visibility": "visible",
+        "text": "How are you?",
+        "attachments": [{"content_type": "audio/wav" "url": "http://domain.com/recording.wav"}],
+        "quick_replies": [{"text": "Great"}, {"text": "Improving"}],
+        "labels": [{"name": "Important", "uuid": "5a4eb79e-1b1f-4ae3-8700-09384cca385f"}],
+        "flow": {"uuid": "254fd2ff-4990-4621-9536-0a448d313692", "name": "Registration"},
+        "created_on": "2016-01-06T15:33:00.813162Z",
+        "sent_on": "2016-01-06T15:35:03.675716Z",
+        "modified_on": "2016-01-06T15:35:03.675716Z"
+    },
+    ...
+}
+</code></pre>
+<h3 id="sending-a-message">Sending a Message</h3>
+<p>A <strong>POST</strong> can be used to create and send a new message. Attachments are media object UUIDs returned from POSTing
+to the <a href="https://rapidpro-mtracpro.health.go.ug/api/v2/media">media</a> endpoint.</p>
+<ul>
+<li><strong>contact</strong> - the UUID of the contact (string)</li>
+<li><strong>text</strong> - the text of the message (string)</li>
+<li><strong>attachments</strong> - the attachments of the message (list of strings, maximum 10)</li>
+<li><strong>quick_replies</strong> - the quick_replies of the message (list of objects, maximum 10)</li>
+</ul>
+<p>Example:</p>
+<pre><code>POST /api/v2/messages.json
+{
+    "contact": "d33e9ad5-5c35-414c-abd4-e7451c69ff1d",
+    "text": "Burger or pizza?",
+    "attachments": [],
+    "quick_repies": [{"text": "Burger", "extra": "With cheese"}, {"text": "Pizza"}]
+
+}
+</code></pre>
+<p>You will receive the new message object as a response if successful:</p>
+<pre><code>{
+    "id": 4105426,
+    "broadcast": null,
+    "contact": {"uuid": "d33e9ad5-5c35-414c-abd4-e7451c69ff1d", "name": "Bob McFlow"},
+    "urn": "tel:+1234567890",
+    "channel": {"uuid": "9a8b001e-a913-486c-80f4-1356e23f582e", "name": "Vonage"},
+    "direction": "out",
+    "type": "text",
+    "status": "queued",
+    "visibility": "visible",
+    "text": "Burger or pizza?",
+    "attachments": [],
+    "quick_replies": [{"text": "Burger", "extra": "With cheese"}, {"text": "Pizza"}],
+    "labels": [],
+    "flow": null,
+    "created_on": "2023-01-06T15:33:00.813162Z",
+    "sent_on": "2023-01-06T15:35:03.675716Z",
+    "modified_on": "2023-01-06T15:35:03.675716Z"
+}
+</code></pre>
+    </div>
+  </div>
+
+        
+      </div>
+      <div class="flex-grow"></div>
+    </div>
+    <div style="flex-grow: 8" class="bottom">
+      <div class="flex flex-col h-full">
+        <div class="flex-grow"></div>
+        <div class="bottom">
+          
+            
+                    <div class="spa-footer text-center text-gray-500 py-6 bg-gray-200">
+                      <!--
+                  License requires that the copyright attribution remain, please do not modify.
+                -->
+                      Copyright © 2012-2025 TextIt. All rights reserved.
+                    </div>
+                  
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+      </div>
+      
+      <temba-dialog header="Delete" primarybuttonname="Delete" destructive="true" class="hidden" id="general-delete-confirmation"><template shadowrootmode="open"><!---->
+      <div id="dialog-mask" class="dialog-mask ">
+        <div style="position: absolute; width: 100%;">
+          <temba-loading id="page-loader" units="6" size="12" color="#ccc"><template shadowrootmode="open"><!---->
+      <div class="loading-container" style="flex-direction:row">
+        <!--?lit$420016443$--><!---->
+            <div class="loading-unit" style="border-radius:50%;width:12px;height:12px;margin:6px;animation-delay:-1s;background:#ccc;"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:12px;height:12px;margin:6px;animation-delay:-0.8333333333333334s;background:#ccc;"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:12px;height:12px;margin:6px;animation-delay:-0.6666666666666667s;background:#ccc;"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:12px;height:12px;margin:6px;animation-delay:-0.5s;background:#ccc;"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:12px;height:12px;margin:6px;animation-delay:-0.33333333333333337s;background:#ccc;"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:12px;height:12px;margin:6px;animation-delay:-0.16666666666666674s;background:#ccc;"></div>
+          <!---->
+      </div>
+    </template></temba-loading>
+        </div>
+
+        <div class="flex">
+          <div class="grow-top" style=""></div>
+          <div class="dialog-container" style="width:600px;min-width:250px;max-width:600px;">
+            <!--?lit$420016443$-->
+          <div class="dialog-header">
+            <div class="header-text">
+              <div class="title"><!--?lit$420016443$-->Delete</div>
+            </div>
+          </div>
+        
+            <div class="dialog-body">
+              <!--?lit$420016443$--><slot></slot>
+              <temba-loading units="6" size="8"><template shadowrootmode="open"><!---->
+      <div class="loading-container" style="flex-direction:row">
+        <!--?lit$420016443$--><!---->
+            <div class="loading-unit" style="border-radius:50%;width:8px;height:8px;margin:4px;animation-delay:-1s;background:var(--color-primary-dark);"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:8px;height:8px;margin:4px;animation-delay:-0.8333333333333334s;background:var(--color-primary-dark);"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:8px;height:8px;margin:4px;animation-delay:-0.6666666666666667s;background:var(--color-primary-dark);"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:8px;height:8px;margin:4px;animation-delay:-0.5s;background:var(--color-primary-dark);"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:8px;height:8px;margin:4px;animation-delay:-0.33333333333333337s;background:var(--color-primary-dark);"></div>
+          <!----><!---->
+            <div class="loading-unit" style="border-radius:50%;width:8px;height:8px;margin:4px;animation-delay:-0.16666666666666674s;background:var(--color-primary-dark);"></div>
+          <!---->
+      </div>
+    </template></temba-loading>
+            </div>
+
+            <div class="dialog-footer">
+              <div class="flex-grow">
+                <slot name="gutter"></slot>
+              </div>
+              <!--?lit$420016443$--><!---->
+                  <temba-button name="Cancel" secondary="" index="0"><template shadowrootmode="open"><!---->
+      <div tabindex="0" class="button-container 
+          v-1
+          secondary-button">
+        <div class="button-mask">
+          <!--?lit$420016443$-->
+          <div class="button-name"><slot name="name"><!--?lit$420016443$-->Cancel</slot></div>
+        </div>
+      </div>
+    </template></temba-button>
+                <!----><!---->
+                  <temba-button name="Delete" destructive="" index="1"><template shadowrootmode="open"><!---->
+      <div tabindex="0" class="button-container 
+          v-1
+          primary-button destructive-button">
+        <div class="button-mask">
+          <!--?lit$420016443$-->
+          <div class="button-name"><slot name="name"><!--?lit$420016443$-->Delete</slot></div>
+        </div>
+      </div>
+    </template></temba-button>
+                <!---->
+              </div>
+            </div>
+            <div class="grow-bottom"></div>
+          </div>
+        </div>
+      
+    </template>
+        <div class="p-6 confirmation-body">Are you sure you want to continue? This cannot be undone.</div>
+      </temba-dialog>
+      <!-- media associated with any form we are displaying -->
+      
+    
+  
+
+<div id="give-freely-root-bcjindcccaagfpapjjmafapmmgkkhgoa" class="give-freely-root" data-extension-id="bcjindcccaagfpapjjmafapmmgkkhgoa" data-extension-name="JSON Formatter" style="display: block;"><template shadowrootmode="open"><style>
+  :host {
+    all: initial;
+  }
+
+  .gf-scroll-remove::-webkit-scrollbar {
+    border-radius-bottom-right: 15px;
+  }
+
+  button {
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+
+  button:active {
+    transform: scale(0.98);
+  }
+
+  .give-freely-close-button:hover {
+    opacity: 0.7;
+  }
+
+  input[type="radio"] {
+    margin-right: 8px;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid #e5e5e5;
+    margin: 1em 0;
+  }
+
+  dialog::backdrop  {
+    background-color: revert;
+  }
+
+  dialog.backdrop-hidden::backdrop  {
+    background-color: transparent;
+  }
+</style><div><div class="gf-app"></div></div></template></div></body><grammarly-desktop-integration data-grammarly-shadow-root="true"><template shadowrootmode="open"><style>
+      div.grammarly-desktop-integration {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select:none;
+        user-select:none;
+      }
+
+      div.grammarly-desktop-integration:before {
+        content: attr(data-content);
+      }
+    </style><div aria-label="grammarly-integration" role="group" tabindex="-1" class="grammarly-desktop-integration" data-content="{&quot;mode&quot;:&quot;limited&quot;,&quot;isActive&quot;:false,&quot;isUserDisabled&quot;:false}"></div></template></grammarly-desktop-integration></html>

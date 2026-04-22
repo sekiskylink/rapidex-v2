@@ -269,4 +269,36 @@ describe('reporters page', () => {
       text: 'Test broadcast',
     })
   })
+
+  it('shows actionable sync validation detail in the error banner', async () => {
+    authenticate(['reporters.read', 'reporters.write'])
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/11/sync' && init?.method === 'POST') {
+        throw {
+          status: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'validation failed',
+          details: { telephone: ['must resolve to a RapidPro tel: URN'] },
+          requestId: 'req-reporters-422',
+        }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Unable to sync reporter.')
+    expect(alert).toHaveTextContent('must resolve to a RapidPro tel: URN')
+    expect(alert).toHaveTextContent('req-reporters-422')
+  })
 })

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import { clearSession, configureSessionStorage, setSession } from '../auth/session'
 import { createAppRouter } from '../routes'
 import { AppThemeProvider } from '../ui/theme'
@@ -308,4 +309,69 @@ describe('desktop reporters page', () => {
       text: 'Test broadcast',
     })
   }, 20000)
+
+  it('shows actionable sync validation detail in the error banner', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/v1/auth/me')) {
+        return new Response(
+          JSON.stringify({
+            id: 5,
+            username: 'alice',
+            roles: ['Staff'],
+            permissions: ['reporters.read', 'reporters.write'],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/v1/reporters?')) {
+        return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/orgunits?')) {
+        return new Response(JSON.stringify({ items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporters/11/sync') && init?.method === 'POST') {
+        throw new ApiError(
+          400,
+          'validation failed',
+          'VALIDATION_ERROR',
+          { telephone: ['must resolve to a RapidPro tel: URN'] },
+          'req-desktop-reporters-422',
+        )
+      }
+      if (url.includes('/api/v1/bootstrap')) {
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderRoute('/reporters', store)
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Unable to sync reporter.')
+    expect(alert).toHaveTextContent('must resolve to a RapidPro tel: URN')
+    expect(alert).toHaveTextContent('req-desktop-reporters-422')
+  })
 })

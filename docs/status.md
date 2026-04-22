@@ -1,5 +1,41 @@
 # Status
 
+## Milestone — Reporter Sync Parity and Validation Surfacing (Complete)
+
+### What changed
+- Restored the documented RapidPro reporter sync behavior in the backend:
+  - use local `rapidpro_uuid` first when it resolves remotely
+  - fall back to normalized `tel:` URN lookup when the local UUID is missing or stale
+  - create the RapidPro contact when neither lookup finds a match
+  - persist the resolved or created UUID back to `reporters.rapidpro_uuid` and keep `synced=true`
+- Removed the backend-only requirement that blocked sync when `rapidProUuid` was empty, which was causing existing local reporters to fail with `VALIDATION_ERROR`.
+- Kept validation failures for real input/config issues only, such as invalid telephone normalization and RapidPro integration misconfiguration.
+- Updated both web and desktop Reporters pages so sync errors show the first actionable validation detail and request ID in the existing error banner instead of only `validation failed`.
+- Updated RapidPro reporter sync notes to reflect UUID-first, URN-fallback behavior for stale local UUIDs.
+- Saved prompt traceability copy in `docs/prompts/2026-04-23-reporter-sync-parity-fix.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter sync coverage for URN lookup when `rapidProUuid` is missing
+  - reporter sync coverage for contact creation when UUID and URN lookups miss
+  - reporter sync coverage for stale local UUID fallback to URN lookup
+- Web:
+  - reporters page coverage for actionable sync validation detail in the banner
+- Desktop:
+  - matching reporters page coverage for actionable sync validation detail in the banner
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI warnings may still appear in unrelated frontend tests.
+
 ## Milestone — Rapidex RapidPro Reporter Sync and Messaging (Complete)
 
 ### What changed

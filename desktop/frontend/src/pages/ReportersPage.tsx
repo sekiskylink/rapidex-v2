@@ -20,6 +20,7 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
 import { useApiClient } from '../api/useApiClient'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
+import { handleAppError } from '../errors/handleAppError'
 
 interface Reporter {
   id: number
@@ -99,6 +100,15 @@ function toForm(reporter?: Reporter | null): ReporterFormState {
     isActive: reporter.isActive,
     groups: reporter.groups ?? [],
   }
+}
+
+function formatActionError(prefix: string, normalized: { message: string; fieldErrors?: Record<string, string[]>; requestId?: string }) {
+  const detail = Object.values(normalized.fieldErrors ?? {}).flat()[0]
+  const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+  if (!detail || detail === normalized.message) {
+    return `${prefix}${requestId}`
+  }
+  return `${prefix} ${detail}${requestId}`
 }
 
 export function ReportersPage() {
@@ -294,7 +304,11 @@ export function ReportersPage() {
       await apiClient.request(`/api/v1/reporters/${id}/sync`, { method: 'POST', body: '{}' })
       await load()
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : 'Unable to sync reporter.')
+      const { error: normalized } = await handleAppError(syncError, {
+        fallbackMessage: 'Unable to sync reporter.',
+        notifyUser: false,
+      })
+      setError(formatActionError('Unable to sync reporter.', normalized))
     }
   }
 
@@ -307,7 +321,11 @@ export function ReportersPage() {
       })
       await load()
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : 'Unable to sync selected reporters.')
+      const { error: normalized } = await handleAppError(syncError, {
+        fallbackMessage: 'Unable to sync selected reporters.',
+        notifyUser: false,
+      })
+      setError(formatActionError('Unable to sync selected reporters.', normalized))
     }
   }
 

@@ -68,7 +68,9 @@ func (s reporterServerLookup) GetServerByCode(context.Context, string) (sukumads
 
 type reporterRapidProClient struct {
 	lookupByUUIDFound bool
+	lookupByURNFound  bool
 	messageCalls      int
+	lastUpsertInput   rapidpro.UpsertContactInput
 }
 
 func (c *reporterRapidProClient) LookupContactByUUID(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
@@ -78,9 +80,13 @@ func (c *reporterRapidProClient) LookupContactByUUID(context.Context, rapidpro.C
 	return rapidpro.Contact{UUID: "contact-existing"}, true, nil
 }
 func (c *reporterRapidProClient) LookupContactByURN(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
-	return rapidpro.Contact{}, false, nil
+	if !c.lookupByURNFound {
+		return rapidpro.Contact{}, false, nil
+	}
+	return rapidpro.Contact{UUID: "contact-by-urn"}, true, nil
 }
 func (c *reporterRapidProClient) UpsertContact(_ context.Context, _ rapidpro.Connection, input rapidpro.UpsertContactInput) (rapidpro.Contact, error) {
+	c.lastUpsertInput = input
 	if input.UUID != "" {
 		return rapidpro.Contact{UUID: input.UUID}, nil
 	}
@@ -139,7 +145,7 @@ func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {
 	}
 }
 
-func TestSyncReporterRequiresRapidProUUID(t *testing.T) {
+func TestSyncReporterLooksUpByURNWhenRapidProUUIDMissing(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{
 			1: {
@@ -151,7 +157,7 @@ func TestSyncReporterRequiresRapidProUUID(t *testing.T) {
 			},
 		},
 	}
-	client := &reporterRapidProClient{lookupByUUIDFound: true}
+	client := &reporterRapidProClient{lookupByURNFound: true}
 	service := NewService(repo).
 		WithRapidProIntegration(reporterServerLookup{
 			record: sukumadserver.Record{
@@ -160,11 +166,100 @@ func TestSyncReporterRequiresRapidProUUID(t *testing.T) {
 			},
 		}, client)
 
-	if _, err := service.SyncReporter(context.Background(), 1); err == nil {
-		t.Fatal("expected sync reporter to reject empty rapidpro uuid")
+	result, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
 	}
-	if repo.updateCalls != 0 {
-		t.Fatalf("expected no persistence updates, got %d", repo.updateCalls)
+	if result.Operation != "updated" {
+		t.Fatalf("expected update operation after URN match, got %q", result.Operation)
+	}
+	if result.Reporter.RapidProUUID != "contact-by-urn" {
+		t.Fatalf("expected URN lookup uuid to be persisted, got %q", result.Reporter.RapidProUUID)
+	}
+	if client.lastUpsertInput.UUID != "contact-by-urn" {
+		t.Fatalf("expected upsert to reuse URN lookup uuid, got %q", client.lastUpsertInput.UUID)
+	}
+	if repo.updateCalls != 1 {
+		t.Fatalf("expected one persistence update, got %d", repo.updateCalls)
+	}
+}
+
+func TestSyncReporterCreatesRapidProContactWhenLookupMisses(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	service := NewService(repo).
+		WithRapidProIntegration(reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	result, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if result.Operation != "created" {
+		t.Fatalf("expected create operation, got %q", result.Operation)
+	}
+	if result.Reporter.RapidProUUID != "contact-created" {
+		t.Fatalf("expected created contact uuid to be persisted, got %q", result.Reporter.RapidProUUID)
+	}
+	if client.lastUpsertInput.UUID != "" {
+		t.Fatalf("expected create path to upsert without preset uuid, got %q", client.lastUpsertInput.UUID)
+	}
+	if repo.updateCalls != 1 {
+		t.Fatalf("expected one persistence update, got %d", repo.updateCalls)
+	}
+}
+
+func TestSyncReporterFallsBackToURNWhenStoredRapidProUUIDIsStale(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:           1,
+				Name:         "Alice Reporter",
+				Telephone:    "+256700000001",
+				OrgUnitID:    2,
+				RapidProUUID: "contact-stale",
+				IsActive:     true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{lookupByURNFound: true}
+	service := NewService(repo).
+		WithRapidProIntegration(reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	result, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if result.Operation != "updated" {
+		t.Fatalf("expected update operation after stale uuid fallback, got %q", result.Operation)
+	}
+	if result.Reporter.RapidProUUID != "contact-by-urn" {
+		t.Fatalf("expected fallback uuid to be persisted, got %q", result.Reporter.RapidProUUID)
+	}
+	if client.lastUpsertInput.UUID != "contact-by-urn" {
+		t.Fatalf("expected upsert to use fallback uuid, got %q", client.lastUpsertInput.UUID)
+	}
+	if repo.updateCalls != 1 {
+		t.Fatalf("expected one persistence update, got %d", repo.updateCalls)
 	}
 }
 

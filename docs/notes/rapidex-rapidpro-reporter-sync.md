@@ -10,6 +10,7 @@
 
 ## Reporter sync behavior
 - Reporters sync to RapidPro by local `rapidpro_uuid` first when present.
+- If a stored local UUID no longer exists remotely, the sync falls back to phone-based lookup instead of failing immediately.
 - If no local UUID is present, the sync attempts RapidPro contact lookup by normalized `tel:` URN.
 - If a contact exists remotely, Rapidex updates it and persists the returned UUID locally.
 - If no contact exists, Rapidex creates it and stores the created UUID in `reporters.rapidpro_uuid`.
