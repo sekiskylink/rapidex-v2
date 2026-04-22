@@ -40,6 +40,12 @@ type Contact struct {
 	Groups []Group  `json:"groups"`
 }
 
+type ContactField struct {
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	ValueType string `json:"value_type"`
+}
+
 type Message struct {
 	ID      int64   `json:"id"`
 	Text    string  `json:"text"`
@@ -57,6 +63,7 @@ type UpsertContactInput struct {
 	Name   string
 	URNs   []string
 	Groups []string
+	Fields map[string]string
 }
 
 type listResponse[T any] struct {
@@ -91,6 +98,9 @@ func (c *Client) UpsertContact(ctx context.Context, conn Connection, input Upser
 		"urns":   normalizeStrings(input.URNs),
 		"groups": normalizeStrings(input.Groups),
 	}
+	if len(input.Fields) > 0 {
+		body["fields"] = normalizeFieldMap(input.Fields)
+	}
 	query := map[string]string{}
 	if uuid := strings.TrimSpace(input.UUID); uuid != "" {
 		query["uuid"] = uuid
@@ -102,6 +112,14 @@ func (c *Client) UpsertContact(ctx context.Context, conn Connection, input Upser
 		return Contact{}, err
 	}
 	return contact, nil
+}
+
+func (c *Client) ListContactFields(ctx context.Context, conn Connection) ([]ContactField, error) {
+	var response listResponse[ContactField]
+	if err := c.doJSON(ctx, conn, http.MethodGet, "/fields.json", nil, nil, &response); err != nil {
+		return nil, err
+	}
+	return response.Results, nil
 }
 
 func (c *Client) EnsureGroup(ctx context.Context, conn Connection, name string) (Group, bool, error) {
@@ -255,6 +273,25 @@ func normalizeStrings(values []string) []string {
 		}
 		seen[key] = struct{}{}
 		normalized = append(normalized, trimmed)
+	}
+	return normalized
+}
+
+func normalizeFieldMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	normalized := make(map[string]string, len(values))
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		normalized[key] = value
+	}
+	if len(normalized) == 0 {
+		return nil
 	}
 	return normalized
 }

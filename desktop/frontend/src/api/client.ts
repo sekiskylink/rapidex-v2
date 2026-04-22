@@ -204,6 +204,31 @@ export interface RuntimeConfigResponse {
   config: Record<string, unknown>
 }
 
+export interface RapidProContactField {
+  key: string
+  label: string
+  valueType?: string
+}
+
+export interface RapidProReporterFieldMapping {
+  sourceKey: string
+  sourceLabel?: string
+  rapidProFieldKey: string
+}
+
+export interface RapidProReporterSyncValidation {
+  isValid: boolean
+  errors?: string[]
+}
+
+export interface RapidProReporterSyncSettingsResponse {
+  rapidProServerCode: string
+  availableFields: RapidProContactField[]
+  mappings: RapidProReporterFieldMapping[]
+  lastFetchedAt?: string | null
+  validation: RapidProReporterSyncValidation
+}
+
 interface CreateAPITokenRequest {
   name: string
   expiresInSeconds?: number
@@ -241,6 +266,11 @@ export interface ResetPasswordResponse {
 export interface LoginBrandingUpdateRequest {
   applicationDisplayName: string
   loginImageUrl?: string | null
+}
+
+export interface RapidProReporterSyncUpdateRequest {
+  rapidProServerCode: string
+  mappings: RapidProReporterFieldMapping[]
 }
 
 export interface ModuleEnablementUpdateRequest {
@@ -602,6 +632,25 @@ export function createApiClient(deps: ApiClientDeps) {
     async getRuntimeConfig() {
       return authorizedRequest<RuntimeConfigResponse>('/api/v1/settings/runtime-config', {
         method: 'GET',
+      })
+    },
+
+    async getRapidProReporterSyncSettings() {
+      return authorizedRequest<RapidProReporterSyncSettingsResponse>('/api/v1/settings/rapidpro-reporter-sync', {
+        method: 'GET',
+      })
+    },
+
+    async refreshRapidProReporterSyncFields() {
+      return authorizedRequest<RapidProReporterSyncSettingsResponse>('/api/v1/settings/rapidpro-reporter-sync/refresh-fields', {
+        method: 'POST',
+      })
+    },
+
+    async updateRapidProReporterSyncSettings(payload: RapidProReporterSyncUpdateRequest) {
+      return authorizedRequest<RapidProReporterSyncSettingsResponse>('/api/v1/settings/rapidpro-reporter-sync', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
       })
     },
 

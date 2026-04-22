@@ -22,6 +22,11 @@ type updateLoginBrandingRequest struct {
 	LoginImageAssetPath    *string `json:"loginImageAssetPath"`
 }
 
+type updateRapidProReporterSyncRequest struct {
+	RapidProServerCode string                         `json:"rapidProServerCode"`
+	Mappings           []RapidProReporterFieldMapping `json:"mappings"`
+}
+
 func (h *Handler) GetPublicLoginBranding(c *gin.Context) {
 	branding, err := h.service.GetLoginBranding(c.Request.Context())
 	if err != nil {
@@ -75,6 +80,55 @@ func (h *Handler) UpdateLoginBranding(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, branding)
+}
+
+func (h *Handler) GetRapidProReporterSync(c *gin.Context) {
+	settings, err := h.service.GetRapidProReporterSync(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) RefreshRapidProReporterSyncFields(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+	settings, err := h.service.RefreshRapidProReporterSyncFields(c.Request.Context(), actorUserID(principal))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) UpdateRapidProReporterSync(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	var req updateRapidProReporterSyncRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"body": []string{"invalid JSON payload"},
+		}))
+		return
+	}
+
+	settings, err := h.service.UpdateRapidProReporterSync(c.Request.Context(), RapidProReporterSyncUpdateInput{
+		RapidProServerCode: req.RapidProServerCode,
+		Mappings:           req.Mappings,
+	}, actorUserID(principal))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
 }
 
 func principalFromContext(c *gin.Context) (auth.Principal, bool) {

@@ -1086,6 +1086,84 @@ describe('web settings page', () => {
     })
   })
 
+  it('saves RapidPro reporter sync mappings through backend API', async () => {
+    authenticateForSettings(['settings.read', 'settings.write'])
+
+    let rapidProPutPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro Web',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ modules: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ config: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              availableFields: [
+                { key: 'Facility', label: 'Facility' },
+                { key: 'FacilityCode', label: 'FacilityCode' },
+              ],
+              mappings: [{ sourceKey: 'facilityName', sourceLabel: 'Facility Name', rapidProFieldKey: 'Facility' }],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync') && init?.method === 'PUT') {
+          rapidProPutPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro-custom',
+              availableFields: [
+                { key: 'Facility', label: 'Facility' },
+                { key: 'FacilityCode', label: 'FacilityCode' },
+              ],
+              mappings: [
+                { sourceKey: 'facilityName', sourceLabel: 'Facility Name', rapidProFieldKey: 'Facility' },
+                { sourceKey: 'facilityUID', sourceLabel: 'Facility UID', rapidProFieldKey: 'FacilityCode' },
+              ],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings')
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+
+    fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Facility UID' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save RapidPro Sync Settings' }))
+
+    await waitFor(() => {
+      expect(rapidProPutPayload).toEqual({
+        rapidProServerCode: 'rapidpro-custom',
+        mappings: [
+          { sourceKey: 'facilityName', rapidProFieldKey: 'Facility' },
+          { sourceKey: 'facilityUID', rapidProFieldKey: 'FacilityCode' },
+        ],
+      })
+    })
+  })
+
   it('shows module enablement list and write-permission guidance', async () => {
     setAuthSnapshot({
       isAuthenticated: true,

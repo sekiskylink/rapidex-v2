@@ -15,18 +15,24 @@ import (
 )
 
 type fakeSettingsRepo struct {
-	value []byte
+	values map[string][]byte
 }
 
-func (f *fakeSettingsRepo) Get(context.Context, string, string) (json.RawMessage, error) {
-	if len(f.value) == 0 {
+func (f *fakeSettingsRepo) Get(_ context.Context, category string, key string) (json.RawMessage, error) {
+	if len(f.values) == 0 {
 		return nil, settings.ErrNotFound
 	}
-	return append(json.RawMessage{}, f.value...), nil
+	if value, ok := f.values[category+"::"+key]; ok {
+		return append(json.RawMessage{}, value...), nil
+	}
+	return nil, settings.ErrNotFound
 }
 
-func (f *fakeSettingsRepo) Upsert(_ context.Context, _ string, _ string, value json.RawMessage, _ *int64, _ time.Time) error {
-	f.value = append([]byte{}, value...)
+func (f *fakeSettingsRepo) Upsert(_ context.Context, category string, key string, value json.RawMessage, _ *int64, _ time.Time) error {
+	if f.values == nil {
+		f.values = map[string][]byte{}
+	}
+	f.values[category+"::"+key] = append([]byte{}, value...)
 	return nil
 }
 
@@ -173,6 +179,32 @@ func TestRuntimeConfigRouteAcceptsSettingsReader(t *testing.T) {
 	}
 	if strings.Contains(body, "reader-secret") {
 		t.Fatalf("expected runtime config to mask dsn credentials, got %s", body)
+	}
+}
+
+func TestRapidProReporterSyncReadRouteAcceptsSettingsReader(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(201, "reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		201: []string{"settings.read"},
+	})
+	handler := settings.NewHandler(settings.NewService(&fakeSettingsRepo{}, nil))
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/rapidpro-reporter-sync", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "rapidProServerCode") {
+		t.Fatalf("expected rapidpro sync settings payload, got %s", w.Body.String())
 	}
 }
 

@@ -17,6 +17,21 @@
 - Successful syncs mark the reporter as `synced=true`.
 - Reporter group names are normalized and mapped to RapidPro groups, creating missing groups before attaching the contact.
 
+## Reporter field mapping settings
+- Added a server-backed RapidPro reporter sync settings payload under the existing Settings module.
+- Operators can refresh available RapidPro contact fields from the configured integration server and save reusable mappings once.
+- Saved mappings are applied uniformly to:
+  - row sync
+  - bulk sync
+  - scheduled `rapidpro_reporter_sync` jobs
+- The current default suggestions are:
+  - `Facility` <- linked org unit `name`
+  - `FacilityCode` <- linked org unit `uid`
+- Sync now fails early with validation detail when:
+  - a saved RapidPro field mapping points to a field that no longer exists remotely
+  - a mapped reporter/facility value is missing for the current reporter
+- RapidPro contact upsert now includes the mapped `fields` payload in addition to the existing contact name, URNs, and groups.
+
 ## Messaging behavior
 - Single-reporter SMS uses the RapidPro messages endpoint.
 - Multi-reporter sends use the RapidPro broadcasts endpoint.

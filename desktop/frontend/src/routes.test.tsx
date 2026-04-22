@@ -1912,6 +1912,112 @@ describe('app shell routes', () => {
     })
   })
 
+  it('updates RapidPro reporter sync mappings from settings page', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let rapidProUpdatePayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              username: 'admin',
+              roles: ['Admin'],
+              permissions: ['settings.read', 'settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/version')) {
+          return new Response(
+            JSON.stringify({ version: '1.0.0', commit: 'abc123', buildDate: '2026-03-06T00:00:00Z' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              applicationDisplayName: 'BasePro',
+              loginImageUrl: '',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ modules: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ config: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/rapidpro-reporter-sync') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              availableFields: [
+                { key: 'Facility', label: 'Facility' },
+                { key: 'FacilityCode', label: 'FacilityCode' },
+              ],
+              mappings: [{ sourceKey: 'facilityName', sourceLabel: 'Facility Name', rapidProFieldKey: 'Facility' }],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/rapidpro-reporter-sync') && init?.method === 'PUT') {
+          rapidProUpdatePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro-custom',
+              availableFields: [
+                { key: 'Facility', label: 'Facility' },
+                { key: 'FacilityCode', label: 'FacilityCode' },
+              ],
+              mappings: [
+                { sourceKey: 'facilityName', sourceLabel: 'Facility Name', rapidProFieldKey: 'Facility' },
+                { sourceKey: 'facilityUID', sourceLabel: 'Facility UID', rapidProFieldKey: 'FacilityCode' },
+              ],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings', store)
+
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Facility UID' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save RapidPro Sync Settings' }))
+
+    await waitFor(() => {
+      expect(rapidProUpdatePayload).toEqual({
+        rapidProServerCode: 'rapidpro-custom',
+        mappings: [
+          { sourceKey: 'facilityName', rapidProFieldKey: 'Facility' },
+          { sourceKey: 'facilityUID', rapidProFieldKey: 'FacilityCode' },
+        ],
+      })
+    })
+  })
+
   it('creates and reveals an API token from settings page', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

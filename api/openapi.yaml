@@ -424,6 +424,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericObjectResponse'
+  /settings/rapidpro-reporter-sync:
+    get:
+      tags: [Settings]
+      operationId: getRapidProReporterSync
+      summary: Get RapidPro reporter sync field mapping settings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RapidPro reporter sync settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidProReporterSyncSettings'
+    put:
+      tags: [Settings]
+      operationId: updateRapidProReporterSync
+      summary: Update RapidPro reporter sync field mapping settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RapidProReporterSyncUpdateRequest'
+      responses:
+        '200':
+          description: RapidPro reporter sync settings updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidProReporterSyncSettings'
+  /settings/rapidpro-reporter-sync/refresh-fields:
+    post:
+      tags: [Settings]
+      operationId: refreshRapidProReporterSyncFields
+      summary: Refresh available RapidPro contact fields for reporter sync mapping
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Refreshed RapidPro reporter sync settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidProReporterSyncSettings'
   /settings/module-enablement:
     get:
       tags: [Module Enablement]
@@ -1173,6 +1220,65 @@ components:
           type: object
           additionalProperties:
             type: boolean
+    RapidProContactField:
+      type: object
+      required: [key, label]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        valueType:
+          type: string
+    RapidProReporterFieldMapping:
+      type: object
+      required: [sourceKey, rapidProFieldKey]
+      properties:
+        sourceKey:
+          type: string
+        sourceLabel:
+          type: string
+        rapidProFieldKey:
+          type: string
+    RapidProReporterSyncValidation:
+      type: object
+      required: [isValid]
+      properties:
+        isValid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+    RapidProReporterSyncSettings:
+      type: object
+      required: [rapidProServerCode, availableFields, mappings, validation]
+      properties:
+        rapidProServerCode:
+          type: string
+        availableFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidProContactField'
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidProReporterFieldMapping'
+        lastFetchedAt:
+          type: string
+          format: date-time
+        validation:
+          $ref: '#/components/schemas/RapidProReporterSyncValidation'
+    RapidProReporterSyncUpdateRequest:
+      type: object
+      required: [rapidProServerCode, mappings]
+      properties:
+        rapidProServerCode:
+          type: string
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidProReporterFieldMapping'
     ExternalRequestSummaryServer:
       type: object
       required: [uid, code, name]

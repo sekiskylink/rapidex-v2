@@ -136,19 +136,6 @@ func run() error {
 			return moduleenablement.IsModuleEnabled(moduleID, moduleEnablementService.EffectiveOverrideMap(config.Get().Modules.Flags), nil)
 		}),
 	)
-	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService).
-		WithRuntimeConfigProvider(func() map[string]any {
-			cfg := config.Get()
-			payload, err := json.Marshal(cfg)
-			if err != nil {
-				return map[string]any{}
-			}
-			var raw map[string]any
-			if err := json.Unmarshal(payload, &raw); err != nil {
-				return map[string]any{}
-			}
-			return raw
-		})
 	sukumadServerService := server.NewService(server.NewRepository(database), auditService)
 	outboundLimiter := outboundratelimit.NewRegistry(func(destinationKey string) outboundratelimit.Policy {
 		cfg := config.Get()
@@ -178,8 +165,24 @@ func run() error {
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
 	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database))
 	sukumadRapidProClient := rapidpro.NewClient(nil)
+	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService).
+		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
+		WithRuntimeConfigProvider(func() map[string]any {
+			cfg := config.Get()
+			payload, err := json.Marshal(cfg)
+			if err != nil {
+				return map[string]any{}
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(payload, &raw); err != nil {
+				return map[string]any{}
+			}
+			return raw
+		})
 	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database), auditService).
-		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient)
+		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
+		WithRapidProSettings(settingsService).
+		WithOrgUnitLookup(sukumadOrgUnitService)
 	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()

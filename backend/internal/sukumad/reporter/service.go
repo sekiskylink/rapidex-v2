@@ -10,6 +10,8 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/settings"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
@@ -29,13 +31,23 @@ type rapidProClient interface {
 	SendBroadcast(context.Context, rapidpro.Connection, []string, string) (rapidpro.Broadcast, error)
 }
 
+type rapidProReporterSyncSettingsProvider interface {
+	GetRapidProReporterSync(context.Context) (settings.RapidProReporterSyncSettings, error)
+}
+
+type orgUnitLookup interface {
+	Get(context.Context, int64) (orgunit.OrgUnit, error)
+}
+
 // Service encapsulates business logic for reporters and depends on a Repository.
 type Service struct {
-	repo           Repository
-	auditService   *audit.Service
-	serverLookup   rapidProServerLookup
-	rapidProClient rapidProClient
-	clock          func() time.Time
+	repo             Repository
+	auditService     *audit.Service
+	serverLookup     rapidProServerLookup
+	rapidProClient   rapidProClient
+	rapidProSettings rapidProReporterSyncSettingsProvider
+	orgUnitLookup    orgUnitLookup
+	clock            func() time.Time
 }
 
 // NewService constructs a new Service with the provided repository.
@@ -59,6 +71,22 @@ func (s *Service) WithRapidProIntegration(serverLookup rapidProServerLookup, cli
 	}
 	s.serverLookup = serverLookup
 	s.rapidProClient = client
+	return s
+}
+
+func (s *Service) WithRapidProSettings(provider rapidProReporterSyncSettingsProvider) *Service {
+	if s == nil {
+		return s
+	}
+	s.rapidProSettings = provider
+	return s
+}
+
+func (s *Service) WithOrgUnitLookup(lookup orgUnitLookup) *Service {
+	if s == nil {
+		return s
+	}
+	s.orgUnitLookup = lookup
 	return s
 }
 
@@ -283,6 +311,11 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 		URNs:   []string{urn},
 		Groups: groupUUIDs,
 	}
+	fields, err := s.rapidProContactFields(ctx, reporter)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	upsertInput.Fields = fields
 	if resolvedUUID != "" {
 		contact, found, lookupErr := s.rapidProClient.LookupContactByUUID(ctx, conn, resolvedUUID)
 		if lookupErr != nil {
@@ -326,6 +359,81 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 		},
 	})
 	return SyncResult{Reporter: updatedReporter, Operation: operation, GroupCount: len(groupUUIDs)}, nil
+}
+
+func (s *Service) rapidProContactFields(ctx context.Context, reporter Reporter) (map[string]string, error) {
+	if s.rapidProSettings == nil {
+		return nil, nil
+	}
+	config, err := s.rapidProSettings.GetRapidProReporterSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !config.Validation.IsValid {
+		return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidproMapping": config.Validation.Errors,
+		})
+	}
+	if len(config.Mappings) == 0 {
+		return nil, nil
+	}
+
+	needsFacility := false
+	for _, mapping := range config.Mappings {
+		switch mapping.SourceKey {
+		case "facilityName", "facilityUID":
+			needsFacility = true
+		}
+	}
+
+	var unit orgunit.OrgUnit
+	if needsFacility {
+		if s.orgUnitLookup == nil {
+			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"rapidproMapping": []string{"Facility mapping is configured, but org unit lookup is not available"},
+			})
+		}
+		loaded, getErr := s.orgUnitLookup.Get(ctx, reporter.OrgUnitID)
+		if getErr != nil {
+			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"rapidproMapping": []string{"Reporter facility could not be loaded for RapidPro field mapping"},
+			})
+		}
+		unit = loaded
+	}
+
+	values := make(map[string]string, len(config.Mappings))
+	for _, mapping := range config.Mappings {
+		resolved := strings.TrimSpace(resolveRapidProSourceValue(mapping.SourceKey, reporter, unit))
+		if resolved == "" {
+			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"rapidproMapping": []string{fmt.Sprintf("%s is required for RapidPro field %q", mapping.SourceLabel, mapping.RapidProFieldKey)},
+			})
+		}
+		values[mapping.RapidProFieldKey] = resolved
+	}
+	return values, nil
+}
+
+func resolveRapidProSourceValue(sourceKey string, reporter Reporter, unit orgunit.OrgUnit) string {
+	switch sourceKey {
+	case "name":
+		return reporter.Name
+	case "telephone":
+		return reporter.Telephone
+	case "whatsapp":
+		return reporter.WhatsApp
+	case "telegram":
+		return reporter.Telegram
+	case "reportingLocation":
+		return reporter.ReportingLocation
+	case "facilityName":
+		return unit.Name
+	case "facilityUID":
+		return unit.UID
+	default:
+		return ""
+	}
 }
 
 func (s *Service) ensureRapidProGroups(ctx context.Context, conn rapidpro.Connection, groups []string) ([]string, int, error) {

@@ -43,6 +43,31 @@ interface RuntimeConfigResponse {
   config: Record<string, unknown>
 }
 
+interface RapidProContactField {
+  key: string
+  label: string
+  valueType?: string
+}
+
+interface RapidProReporterFieldMapping {
+  sourceKey: string
+  sourceLabel?: string
+  rapidProFieldKey: string
+}
+
+interface RapidProReporterSyncValidation {
+  isValid: boolean
+  errors?: string[]
+}
+
+interface RapidProReporterSyncSettingsResponse {
+  rapidProServerCode: string
+  availableFields: RapidProContactField[]
+  mappings: RapidProReporterFieldMapping[]
+  lastFetchedAt?: string | null
+  validation: RapidProReporterSyncValidation
+}
+
 interface CreateAPITokenResponse {
   id: number
   name: string
@@ -70,6 +95,16 @@ const navigationLabelFields = [
   { id: 'scheduler', label: 'Scheduler link' },
   { id: 'observability', label: 'Observability link' },
   { id: 'documentation', label: 'Documentation link' },
+] as const
+
+const rapidProReporterSourceOptions = [
+  { key: 'name', label: 'Reporter Name' },
+  { key: 'telephone', label: 'Telephone' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'telegram', label: 'Telegram' },
+  { key: 'reportingLocation', label: 'Reporting Location' },
+  { key: 'facilityName', label: 'Facility Name' },
+  { key: 'facilityUID', label: 'Facility UID' },
 ] as const
 
 export function SettingsPage() {
@@ -112,6 +147,15 @@ export function SettingsPage() {
   const [runtimeConfigLoading, setRuntimeConfigLoading] = React.useState(false)
   const [runtimeConfigError, setRuntimeConfigError] = React.useState('')
   const [runtimeConfigFormat, setRuntimeConfigFormat] = React.useState<RuntimeConfigFormat>('json')
+  const [rapidProServerCode, setRapidProServerCode] = React.useState('rapidpro')
+  const [rapidProFields, setRapidProFields] = React.useState<RapidProContactField[]>([])
+  const [rapidProMappings, setRapidProMappings] = React.useState<RapidProReporterFieldMapping[]>([])
+  const [rapidProLastFetchedAt, setRapidProLastFetchedAt] = React.useState<string | null>(null)
+  const [rapidProValidation, setRapidProValidation] = React.useState<RapidProReporterSyncValidation>({ isValid: true })
+  const [rapidProSyncLoading, setRapidProSyncLoading] = React.useState(true)
+  const [rapidProSyncSaving, setRapidProSyncSaving] = React.useState(false)
+  const [rapidProSyncRefreshing, setRapidProSyncRefreshing] = React.useState(false)
+  const [rapidProSyncError, setRapidProSyncError] = React.useState('')
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -236,6 +280,41 @@ export function SettingsPage() {
     }
   }, [canReadModuleEnablement, notify])
 
+  React.useEffect(() => {
+    if (!canReadModuleEnablement) {
+      setRapidProSyncLoading(false)
+      setRapidProFields([])
+      setRapidProMappings([])
+      setRapidProValidation({ isValid: true })
+      return
+    }
+    let active = true
+    setRapidProSyncLoading(true)
+    apiRequest<RapidProReporterSyncSettingsResponse>('/settings/rapidpro-reporter-sync', { method: 'GET' })
+      .then((payload) => {
+        if (!active) {
+          return
+        }
+        applyRapidProSyncPayload(payload)
+      })
+      .catch((error) => {
+        if (active) {
+          void handleAppError(error, {
+            fallbackMessage: 'Unable to load RapidPro reporter sync settings.',
+            notifier: notify,
+          })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setRapidProSyncLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [canReadModuleEnablement, notify])
+
   const brandingUrlValidationError = React.useMemo(() => {
     if (!brandingImageUrl.trim()) {
       return ''
@@ -323,6 +402,86 @@ export function SettingsPage() {
       setBrandingErrorMessage(`${normalized.message}${requestId}`)
     } finally {
       setBrandingSaving(false)
+    }
+  }
+
+  const applyRapidProSyncPayload = React.useCallback((payload: RapidProReporterSyncSettingsResponse) => {
+    setRapidProServerCode((payload.rapidProServerCode ?? '').trim() || 'rapidpro')
+    setRapidProFields(payload.availableFields ?? [])
+    setRapidProMappings(payload.mappings ?? [])
+    setRapidProLastFetchedAt(payload.lastFetchedAt ?? null)
+    setRapidProValidation(payload.validation ?? { isValid: true })
+  }, [])
+
+  const handleRapidProFieldMappingChange = React.useCallback((sourceKey: string, rapidProFieldKey: string) => {
+    setRapidProMappings((current) => {
+      const filtered = current.filter((item) => item.sourceKey !== sourceKey)
+      if (!rapidProFieldKey) {
+        return filtered
+      }
+      const sourceLabel = rapidProReporterSourceOptions.find((item) => item.key === sourceKey)?.label ?? sourceKey
+      return [...filtered, { sourceKey, sourceLabel, rapidProFieldKey }]
+    })
+  }, [])
+
+  const handleRefreshRapidProFields = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setRapidProSyncRefreshing(true)
+    setRapidProSyncError('')
+    try {
+      const payload = await apiRequest<RapidProReporterSyncSettingsResponse>(
+        '/settings/rapidpro-reporter-sync/refresh-fields',
+        { method: 'POST' },
+      )
+      applyRapidProSyncPayload(payload)
+      notify.success('RapidPro fields refreshed.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to refresh RapidPro fields.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidProSyncError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidProSyncRefreshing(false)
+    }
+  }
+
+  const handleSaveRapidProSync = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setRapidProSyncSaving(true)
+    setRapidProSyncError('')
+    try {
+      const payload = await apiRequest<RapidProReporterSyncSettingsResponse>(
+        '/settings/rapidpro-reporter-sync',
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            rapidProServerCode,
+            mappings: rapidProMappings.map((item) => ({
+              sourceKey: item.sourceKey,
+              rapidProFieldKey: item.rapidProFieldKey,
+            })),
+          }),
+        },
+      )
+      applyRapidProSyncPayload(payload)
+      notify.success('RapidPro reporter sync settings saved.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to save RapidPro reporter sync settings.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidProSyncError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidProSyncSaving(false)
     }
   }
 
@@ -585,6 +744,87 @@ export function SettingsPage() {
           ) : null}
           {canReadModuleEnablement && !canWriteBranding ? (
             <Alert severity="info">You need settings.write permission to change runtime-manageable module flags.</Alert>
+          ) : null}
+        </Stack>
+      </Paper>
+
+      <Paper elevation={1} sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2">
+            RapidPro Reporter Sync
+          </Typography>
+          <Divider />
+          <Typography color="text.secondary">
+            Fetch RapidPro contact fields once, review the suggested reporter mappings, and reuse them for manual and scheduled syncs.
+          </Typography>
+          {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view RapidPro sync settings.</Alert> : null}
+          {rapidProSyncError ? <Alert severity="error">{rapidProSyncError}</Alert> : null}
+          {canReadModuleEnablement ? (
+            rapidProSyncLoading ? (
+              <Typography color="text.secondary">Loading RapidPro sync settings...</Typography>
+            ) : (
+              <>
+                <TextField
+                  label="RapidPro Server Code"
+                  value={rapidProServerCode}
+                  onChange={(event) => setRapidProServerCode(event.target.value)}
+                  disabled={!canWriteBranding || rapidProSyncSaving || rapidProSyncRefreshing}
+                  helperText="Defaults to the existing RapidPro integration server code."
+                  sx={{ maxWidth: 280 }}
+                />
+                <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                  <Button variant="outlined" onClick={() => void handleRefreshRapidProFields()} disabled={!canWriteBranding || rapidProSyncRefreshing}>
+                    {rapidProSyncRefreshing ? 'Refreshing...' : 'Refresh RapidPro Fields'}
+                  </Button>
+                  <Typography color="text.secondary">
+                    {rapidProLastFetchedAt ? `Last fetched: ${new Date(rapidProLastFetchedAt).toLocaleString()}` : 'Fields have not been fetched yet.'}
+                  </Typography>
+                </Stack>
+                {rapidProFields.length === 0 ? (
+                  <Alert severity="info">Refresh RapidPro fields to populate the available mapping targets.</Alert>
+                ) : (
+                  <Stack spacing={1.5}>
+                    {rapidProReporterSourceOptions.map((option) => {
+                      const selected = rapidProMappings.find((item) => item.sourceKey === option.key)?.rapidProFieldKey ?? ''
+                      return (
+                        <FormControl key={option.key} fullWidth>
+                          <Select
+                            displayEmpty
+                            value={selected}
+                            inputProps={{ 'aria-label': option.label }}
+                            disabled={!canWriteBranding || rapidProSyncSaving}
+                            onChange={(event) => handleRapidProFieldMappingChange(option.key, event.target.value)}
+                          >
+                            <MenuItem value="">
+                              <em>Do not sync</em>
+                            </MenuItem>
+                            {rapidProFields.map((field) => (
+                              <MenuItem key={field.key} value={field.key}>
+                                {field.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                          <Typography variant="body2" color="text.secondary">
+                            {option.label}
+                          </Typography>
+                        </FormControl>
+                      )
+                    })}
+                  </Stack>
+                )}
+                {!rapidProValidation.isValid ? (
+                  <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
+                ) : (
+                  <Alert severity="success">Saved RapidPro mappings are valid and ready for sync.</Alert>
+                )}
+                {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidPro sync settings.</Alert> : null}
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button variant="contained" onClick={() => void handleSaveRapidProSync()} disabled={!canWriteBranding || rapidProSyncSaving}>
+                    {rapidProSyncSaving ? 'Saving...' : 'Save RapidPro Sync Settings'}
+                  </Button>
+                </Stack>
+              </>
+            )
           ) : null}
         </Stack>
       </Paper>

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/rapidex/rapidpro"
+	sukumadserver "basepro/backend/internal/sukumad/server"
 )
 
 type fakeRepo struct {
@@ -37,6 +39,22 @@ func (f *fakeRepo) Upsert(_ context.Context, category, key string, value json.Ra
 
 type fakeAuditRepo struct {
 	events []audit.Event
+}
+
+type fakeRapidProServerLookup struct {
+	record sukumadserver.Record
+}
+
+func (f fakeRapidProServerLookup) GetServerByCode(context.Context, string) (sukumadserver.Record, error) {
+	return f.record, nil
+}
+
+type fakeRapidProFieldClient struct {
+	fields []rapidpro.ContactField
+}
+
+func (f fakeRapidProFieldClient) ListContactFields(context.Context, rapidpro.Connection) ([]rapidpro.ContactField, error) {
+	return append([]rapidpro.ContactField(nil), f.fields...), nil
 }
 
 func (f *fakeAuditRepo) Insert(_ context.Context, event audit.Event) error {
@@ -171,5 +189,63 @@ func TestMaskDSNReturnsMaskedFallbackForOpaqueValues(t *testing.T) {
 	}
 	if !strings.Contains(masked, "Password=[masked]") {
 		t.Fatalf("expected masked password placeholder, got %q", masked)
+	}
+}
+
+func TestRefreshRapidProReporterSyncFieldsAppliesFacilitySuggestions(t *testing.T) {
+	repo := newFakeRepo()
+	service := NewService(repo, nil).
+		WithRapidProIntegration(
+			fakeRapidProServerLookup{record: sukumadserver.Record{Code: "rapidpro", BaseURL: "https://rapidpro.example.com"}},
+			fakeRapidProFieldClient{fields: []rapidpro.ContactField{
+				{Key: "Facility", Label: "Facility"},
+				{Key: "FacilityCode", Label: "FacilityCode"},
+				{Key: "District", Label: "District"},
+			}},
+		)
+
+	got, err := service.RefreshRapidProReporterSyncFields(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("refresh rapidpro fields: %v", err)
+	}
+	if got.RapidProServerCode != "rapidpro" {
+		t.Fatalf("expected default server code, got %q", got.RapidProServerCode)
+	}
+	if len(got.AvailableFields) != 3 {
+		t.Fatalf("expected 3 fields, got %d", len(got.AvailableFields))
+	}
+	if len(got.Mappings) != 2 {
+		t.Fatalf("expected 2 suggested mappings, got %#v", got.Mappings)
+	}
+	if got.Mappings[0].SourceKey != "facilityName" || got.Mappings[0].RapidProFieldKey != "Facility" {
+		t.Fatalf("expected Facility suggestion, got %#v", got.Mappings[0])
+	}
+	if got.Mappings[1].SourceKey != "facilityUID" || got.Mappings[1].RapidProFieldKey != "FacilityCode" {
+		t.Fatalf("expected FacilityCode suggestion, got %#v", got.Mappings[1])
+	}
+	if got.LastFetchedAt == nil {
+		t.Fatal("expected lastFetchedAt to be populated")
+	}
+	if !got.Validation.IsValid {
+		t.Fatalf("expected valid settings, got %#v", got.Validation)
+	}
+}
+
+func TestUpdateRapidProReporterSyncRejectsUnknownField(t *testing.T) {
+	repo := newFakeRepo()
+	repo.items["rapidpro::reporter_sync"] = json.RawMessage(`{
+		"rapidProServerCode":"rapidpro",
+		"availableFields":[{"key":"Facility","label":"Facility"}]
+	}`)
+	service := NewService(repo, nil)
+
+	_, err := service.UpdateRapidProReporterSync(context.Background(), RapidProReporterSyncUpdateInput{
+		RapidProServerCode: "rapidpro",
+		Mappings: []RapidProReporterFieldMapping{
+			{SourceKey: "facilityName", RapidProFieldKey: "FacilityCode"},
+		},
+	}, nil)
+	if err == nil {
+		t.Fatal("expected validation error for unavailable field")
 	}
 }

@@ -89,6 +89,8 @@ type Service struct {
 	repo                  Repository
 	auditService          *audit.Service
 	runtimeConfigProvider func() map[string]any
+	rapidProServerLookup  rapidProServerLookup
+	rapidProFieldClient   rapidProFieldClient
 }
 
 func NewService(repo Repository, auditService *audit.Service) *Service {

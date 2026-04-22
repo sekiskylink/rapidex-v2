@@ -1,5 +1,48 @@
 # Status
 
+## Milestone — RapidPro Reporter Field Mapping Settings (Complete)
+
+### What changed
+- Added server-backed RapidPro reporter sync settings under the existing Settings module so operators can fetch and save one reusable field-mapping configuration instead of redefining it on every sync.
+- Extended the RapidPro client and settings API with:
+  - RapidPro contact-field discovery
+  - saved reporter field mappings
+  - validation state for stale or invalid RapidPro field references
+- Updated reporter sync so manual sync, bulk sync, and scheduled `rapidpro_reporter_sync` jobs all apply the saved mappings automatically.
+- Added facility-specific sync mapping support so:
+  - RapidPro field `Facility` receives the linked org unit name
+  - RapidPro field `FacilityCode` receives the linked org unit UID
+- Extended both web and desktop Settings pages with a RapidPro Reporter Sync section for:
+  - field refresh
+  - auto-suggested mapping review
+  - editable mapping selection
+  - saved validation visibility
+- Updated OpenAPI and RapidPro sync notes to document the new settings and contact-field behavior.
+- Saved prompt traceability copy in `docs/prompts/2026-04-23-rapidpro-field-mapping-settings.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - RapidPro settings coverage for field refresh and auto-suggested Facility mappings
+  - RapidPro settings validation coverage for unavailable field selection
+  - reporter sync coverage for mapped RapidPro contact fields and invalid mapping rejection
+  - settings router coverage for RapidPro reporter sync read access
+- Web:
+  - settings page coverage for saving RapidPro reporter sync mappings
+- Desktop:
+  - matching settings page coverage for saving RapidPro reporter sync mappings
+
+### Verification summary
+- Backend targeted tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/settings ./internal/sukumad/reporter`)
+- Backend settings/router tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run "Test(LoginBranding|RuntimeConfig|RapidProReporterSync)"`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Full `cd backend && GOCACHE=/tmp/go-build go test ./...` was not re-run in this session because an unrelated existing `httptest.NewServer` listener path in another router test is blocked by the current sandbox environment.
+- Existing MUI/jsdom anchor warnings and Vite `'use client' was ignored` warnings still appear during focused frontend tests/builds but did not fail the runs.
+
 ## Milestone — Reporter Sync Parity and Validation Surfacing (Complete)
 
 ### What changed

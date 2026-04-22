@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"basepro/backend/internal/settings"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
@@ -103,6 +105,22 @@ func (c *reporterRapidProClient) SendBroadcast(context.Context, rapidpro.Connect
 	return rapidpro.Broadcast{}, nil
 }
 
+type reporterSettingsProvider struct {
+	config settings.RapidProReporterSyncSettings
+}
+
+func (p reporterSettingsProvider) GetRapidProReporterSync(context.Context) (settings.RapidProReporterSyncSettings, error) {
+	return p.config, nil
+}
+
+type reporterOrgUnitLookup struct {
+	item orgunit.OrgUnit
+}
+
+func (l reporterOrgUnitLookup) Get(context.Context, int64) (orgunit.OrgUnit, error) {
+	return l.item, nil
+}
+
 func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{
@@ -142,6 +160,89 @@ func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {
 	}
 	if repo.updateCalls != 1 {
 		t.Fatalf("expected one rapidpro status update, got %d", repo.updateCalls)
+	}
+}
+
+func TestSyncReporterIncludesConfiguredRapidProContactFields(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:                1,
+				Name:              "Alice Reporter",
+				Telephone:         "+256700000001",
+				ReportingLocation: "Kampala",
+				OrgUnitID:         2,
+				IsActive:          true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	service := NewService(repo).
+		WithRapidProIntegration(reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Mappings: []settings.RapidProReporterFieldMapping{
+					{SourceKey: "facilityName", SourceLabel: "Facility Name", RapidProFieldKey: "Facility"},
+					{SourceKey: "facilityUID", SourceLabel: "Facility UID", RapidProFieldKey: "FacilityCode"},
+				},
+				Validation: settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		}).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			item: orgunit.OrgUnit{ID: 2, UID: "ou-2", Name: "Kampala Health Centre"},
+		})
+
+	result, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if result.Reporter.RapidProUUID != "contact-created" {
+		t.Fatalf("expected created contact uuid to be persisted, got %q", result.Reporter.RapidProUUID)
+	}
+	if got := client.lastUpsertInput.Fields["Facility"]; got != "Kampala Health Centre" {
+		t.Fatalf("expected Facility field to use org unit name, got %q", got)
+	}
+	if got := client.lastUpsertInput.Fields["FacilityCode"]; got != "ou-2" {
+		t.Fatalf("expected FacilityCode field to use org unit uid, got %q", got)
+	}
+}
+
+func TestSyncReporterFailsWhenRapidProFieldMappingIsInvalid(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, &reporterRapidProClient{}).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Validation: settings.RapidProReporterSyncValidation{
+					IsValid: false,
+					Errors:  []string{`Mapped RapidPro field "Facility" is no longer available.`},
+				},
+			},
+		})
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected sync to fail for invalid rapidpro mapping")
 	}
 }
 
