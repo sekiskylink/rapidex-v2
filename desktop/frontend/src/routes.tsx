@@ -241,6 +241,8 @@ function AuthenticatedGatePage() {
             username: bootstrap.principal.username,
             roles: bootstrap.principal.roles ?? [],
             permissions: bootstrap.principal.permissions ?? [],
+            assignedOrgUnitIds: bootstrap.principal.assignedOrgUnitIds ?? [],
+            isOrgUnitScopeRestricted: Boolean(bootstrap.principal.isOrgUnitScopeRestricted),
           })
         }
       } catch {
@@ -258,6 +260,8 @@ function AuthenticatedGatePage() {
             username: me.username,
             roles: me.roles ?? [],
             permissions: me.permissions ?? [],
+            assignedOrgUnitIds: me.assignedOrgUnitIds ?? [],
+            isOrgUnitScopeRestricted: Boolean(me.isOrgUnitScopeRestricted),
           })
         } catch {
           if (!active) {

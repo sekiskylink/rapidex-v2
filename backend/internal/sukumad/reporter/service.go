@@ -17,6 +17,7 @@ import (
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	"basepro/backend/internal/sukumad/reportergroup"
 	sukumadserver "basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/userorg"
 )
 
 const (
@@ -53,6 +54,10 @@ type reporterGroupCatalog interface {
 	EnsureRapidProGroups(context.Context, []string) ([]rapidpro.Group, error)
 }
 
+type reporterScopeResolver interface {
+	ResolveScope(context.Context, int64) (userorg.Scope, error)
+}
+
 // Service encapsulates business logic for reporters and depends on a Repository.
 type Service struct {
 	repo             Repository
@@ -62,6 +67,7 @@ type Service struct {
 	rapidProSettings rapidProReporterSyncSettingsProvider
 	orgUnitLookup    orgUnitLookup
 	groupCatalog     reporterGroupCatalog
+	scopeResolver    reporterScopeResolver
 	clock            func() time.Time
 }
 
@@ -121,8 +127,28 @@ func (s *Service) WithReporterGroupCatalog(catalog reporterGroupCatalog) *Servic
 	return s
 }
 
+func (s *Service) WithScopeResolver(resolver reporterScopeResolver) *Service {
+	if s == nil {
+		return s
+	}
+	s.scopeResolver = resolver
+	return s
+}
+
 // List returns a page of reporters matching the provided query.
 func (s *Service) List(ctx context.Context, query ListQuery) (ListResult, error) {
+	return s.repo.List(ctx, query)
+}
+
+func (s *Service) ListForUser(ctx context.Context, userID int64, query ListQuery) (ListResult, error) {
+	scope, err := s.resolveScope(ctx, userID)
+	if err != nil {
+		return ListResult{}, err
+	}
+	if scope.Restricted {
+		query.ScopeRestricted = true
+		query.ScopePaths = append([]string(nil), scope.PathPrefixes...)
+	}
 	return s.repo.List(ctx, query)
 }
 
@@ -131,6 +157,21 @@ func (s *Service) Get(ctx context.Context, id int64) (Reporter, error) {
 	reporter, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return Reporter{}, mapReporterLookupError(err)
+	}
+	return reporter, nil
+}
+
+func (s *Service) GetForUser(ctx context.Context, userID, id int64) (Reporter, error) {
+	scope, err := s.resolveScope(ctx, userID)
+	if err != nil {
+		return Reporter{}, err
+	}
+	reporter, err := s.Get(ctx, id)
+	if err != nil {
+		return Reporter{}, err
+	}
+	if err := s.ensureReporterInScope(ctx, scope, reporter); err != nil {
+		return Reporter{}, err
 	}
 	return reporter, nil
 }
@@ -292,6 +333,17 @@ func (s *Service) Create(ctx context.Context, r Reporter) (Reporter, error) {
 	return s.repo.Create(ctx, r)
 }
 
+func (s *Service) CreateForUser(ctx context.Context, userID int64, r Reporter) (Reporter, error) {
+	scope, err := s.resolveScope(ctx, userID)
+	if err != nil {
+		return Reporter{}, err
+	}
+	if err := s.ensureOrgUnitInScope(ctx, scope, r.OrgUnitID); err != nil {
+		return Reporter{}, err
+	}
+	return s.Create(ctx, r)
+}
+
 // Update validates and updates an existing reporter.
 func (s *Service) Update(ctx context.Context, r Reporter) (Reporter, error) {
 	if err := validateReporter(r, true); err != nil {
@@ -313,12 +365,37 @@ func (s *Service) Update(ctx context.Context, r Reporter) (Reporter, error) {
 	return updated, nil
 }
 
+func (s *Service) UpdateForUser(ctx context.Context, userID int64, r Reporter) (Reporter, error) {
+	scope, err := s.resolveScope(ctx, userID)
+	if err != nil {
+		return Reporter{}, err
+	}
+	existing, err := s.Get(ctx, r.ID)
+	if err != nil {
+		return Reporter{}, err
+	}
+	if err := s.ensureReporterInScope(ctx, scope, existing); err != nil {
+		return Reporter{}, err
+	}
+	if err := s.ensureOrgUnitInScope(ctx, scope, r.OrgUnitID); err != nil {
+		return Reporter{}, err
+	}
+	return s.Update(ctx, r)
+}
+
 // Delete removes a reporter by ID.
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return mapReporterLookupError(err)
 	}
 	return nil
+}
+
+func (s *Service) DeleteForUser(ctx context.Context, userID, id int64) error {
+	if _, err := s.GetForUser(ctx, userID, id); err != nil {
+		return err
+	}
+	return s.Delete(ctx, id)
 }
 
 func (s *Service) SyncReporter(ctx context.Context, id int64) (SyncResult, error) {
@@ -329,8 +406,24 @@ func (s *Service) SyncReporter(ctx context.Context, id int64) (SyncResult, error
 	return s.syncReporter(ctx, reporter)
 }
 
+func (s *Service) SyncReporterForUser(ctx context.Context, userID, id int64) (SyncResult, error) {
+	reporter, err := s.GetForUser(ctx, userID, id)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	return s.syncReporter(ctx, reporter)
+}
+
 func (s *Service) SyncReporters(ctx context.Context, ids []int64) (SyncBatchResult, error) {
 	reporters, err := s.loadByIDs(ctx, ids)
+	if err != nil {
+		return SyncBatchResult{}, err
+	}
+	return s.syncReporterBatch(ctx, reporters, false, nil, false)
+}
+
+func (s *Service) SyncReportersForUser(ctx context.Context, userID int64, ids []int64) (SyncBatchResult, error) {
+	reporters, err := s.loadByIDsForUser(ctx, userID, ids)
 	if err != nil {
 		return SyncBatchResult{}, err
 	}
@@ -377,6 +470,29 @@ func (s *Service) SendMessage(ctx context.Context, id int64, text string) (Messa
 	return MessageResult{Reporter: syncResult.Reporter, Message: message}, nil
 }
 
+func (s *Service) SendMessageForUser(ctx context.Context, userID, id int64, text string) (MessageResult, error) {
+	message := strings.TrimSpace(text)
+	if message == "" {
+		return MessageResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"text": []string{"is required"}})
+	}
+	reporter, err := s.GetForUser(ctx, userID, id)
+	if err != nil {
+		return MessageResult{}, err
+	}
+	syncResult, err := s.syncReporter(ctx, reporter)
+	if err != nil {
+		return MessageResult{}, err
+	}
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return MessageResult{}, err
+	}
+	if _, err := s.rapidProClient.SendMessage(ctx, conn, syncResult.Reporter.RapidProUUID, message); err != nil {
+		return MessageResult{}, mapRapidProRequestError(err)
+	}
+	return MessageResult{Reporter: syncResult.Reporter, Message: message}, nil
+}
+
 func (s *Service) BroadcastMessage(ctx context.Context, ids []int64, text string) (BroadcastResult, error) {
 	message := strings.TrimSpace(text)
 	if message == "" {
@@ -415,6 +531,67 @@ func (s *Service) BroadcastMessage(ctx context.Context, ids []int64, text string
 		},
 	})
 	return BroadcastResult{ReporterIDs: reporterIDs, Message: message}, nil
+}
+
+func (s *Service) BroadcastMessageForUser(ctx context.Context, userID int64, ids []int64, text string) (BroadcastResult, error) {
+	message := strings.TrimSpace(text)
+	if message == "" {
+		return BroadcastResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"text": []string{"is required"}})
+	}
+	reporters, err := s.loadByIDsForUser(ctx, userID, ids)
+	if err != nil {
+		return BroadcastResult{}, err
+	}
+	syncResult, err := s.syncReporterBatch(ctx, reporters, false, nil, false)
+	if err != nil {
+		return BroadcastResult{}, err
+	}
+	if len(syncResult.Reporters) == 0 {
+		return BroadcastResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"reporterIds": []string{"at least one reporter is required"}})
+	}
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return BroadcastResult{}, err
+	}
+	contactUUIDs := make([]string, 0, len(syncResult.Reporters))
+	reporterIDs := make([]int64, 0, len(syncResult.Reporters))
+	for _, reporter := range syncResult.Reporters {
+		contactUUIDs = append(contactUUIDs, reporter.RapidProUUID)
+		reporterIDs = append(reporterIDs, reporter.ID)
+	}
+	if _, err := s.rapidProClient.SendBroadcast(ctx, conn, contactUUIDs, message); err != nil {
+		return BroadcastResult{}, mapRapidProRequestError(err)
+	}
+	return BroadcastResult{ReporterIDs: reporterIDs, Message: message}, nil
+}
+
+func (s *Service) GetRapidProContactDetailsForUser(ctx context.Context, userID, id int64) (RapidProContactDetailsResult, error) {
+	reporter, err := s.GetForUser(ctx, userID, id)
+	if err != nil {
+		return RapidProContactDetailsResult{}, err
+	}
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return RapidProContactDetailsResult{}, err
+	}
+	contact, found, err := s.lookupRapidProContact(ctx, conn, reporter)
+	if err != nil {
+		return RapidProContactDetailsResult{}, err
+	}
+	result := RapidProContactDetailsResult{Reporter: reporter, Found: found}
+	if found {
+		snapshot := toRapidProContactSnapshot(contact)
+		result.Contact = &snapshot
+	}
+	return result, nil
+}
+
+func (s *Service) GetRapidProMessageHistoryForUser(ctx context.Context, userID, id int64) (RapidProMessageHistoryResult, error) {
+	reporter, err := s.GetForUser(ctx, userID, id)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, err
+	}
+	return s.getRapidProMessageHistoryForReporter(ctx, reporter)
 }
 
 func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, dryRun bool, since *time.Time, onlyActive bool) (SyncBatchResult, error) {
@@ -510,6 +687,121 @@ func (s *Service) lookupRapidProContact(ctx context.Context, conn rapidpro.Conne
 		return rapidpro.Contact{}, false, mapRapidProRequestError(err)
 	}
 	return contact, found, nil
+}
+
+func (s *Service) getRapidProMessageHistoryForReporter(ctx context.Context, reporter Reporter) (RapidProMessageHistoryResult, error) {
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, err
+	}
+	contact, found, err := s.lookupRapidProContact(ctx, conn, reporter)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, err
+	}
+	result := RapidProMessageHistoryResult{Reporter: reporter, Found: found, Items: []RapidProMessageRecord{}}
+	if !found {
+		return result, nil
+	}
+	targetURNs := make(map[string]struct{}, len(contact.URNs))
+	for _, urn := range contact.URNs {
+		normalized := strings.ToLower(strings.TrimSpace(urn))
+		if normalized == "" {
+			continue
+		}
+		targetURNs[normalized] = struct{}{}
+	}
+	var (
+		query        map[string]string
+		next         string
+		pagesScanned int
+	)
+	for pagesScanned < maxRapidProHistoryPages && len(result.Items) < maxRapidProHistoryItems {
+		messages, pageNext, err := s.rapidProClient.ListMessages(ctx, conn, query)
+		if err != nil {
+			return RapidProMessageHistoryResult{}, mapRapidProRequestError(err)
+		}
+		pagesScanned++
+		next = pageNext
+		for _, message := range messages {
+			if !messageMatchesReporter(message, contact.UUID, targetURNs) {
+				continue
+			}
+			result.Items = append(result.Items, toRapidProMessageRecord(message))
+			if len(result.Items) >= maxRapidProHistoryItems {
+				break
+			}
+		}
+		if next == "" {
+			break
+		}
+		nextQuery, ok := rapidProNextQuery(next)
+		if !ok {
+			break
+		}
+		query = nextQuery
+	}
+	sort.SliceStable(result.Items, func(i, j int) bool {
+		left := messageRecordSortTime(result.Items[i])
+		right := messageRecordSortTime(result.Items[j])
+		if left.Equal(right) {
+			return result.Items[i].ID < result.Items[j].ID
+		}
+		return left.Before(right)
+	})
+	result.Next = next
+	return result, nil
+}
+
+func (s *Service) loadByIDsForUser(ctx context.Context, userID int64, ids []int64) ([]Reporter, error) {
+	scope, err := s.resolveScope(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reporters, err := s.loadByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	if !scope.Restricted {
+		return reporters, nil
+	}
+	filtered := make([]Reporter, 0, len(reporters))
+	for _, item := range reporters {
+		if err := s.ensureReporterInScope(ctx, scope, item); err == nil {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered, nil
+}
+
+func (s *Service) ensureReporterInScope(ctx context.Context, scope userorg.Scope, reporter Reporter) error {
+	if !scope.Restricted {
+		return nil
+	}
+	return s.ensureOrgUnitInScope(ctx, scope, reporter.OrgUnitID)
+}
+
+func (s *Service) ensureOrgUnitInScope(ctx context.Context, scope userorg.Scope, orgUnitID int64) error {
+	if !scope.Restricted {
+		return nil
+	}
+	if s.orgUnitLookup == nil {
+		return apperror.Forbidden("Organisation unit is outside your assigned jurisdiction")
+	}
+	unit, err := s.orgUnitLookup.Get(ctx, orgUnitID)
+	if err != nil {
+		return err
+	}
+	if !userorg.ScopeContainsPath(scope, unit.Path) {
+		return apperror.Forbidden("Organisation unit is outside your assigned jurisdiction")
+	}
+	return nil
+}
+
+func (s *Service) resolveScope(ctx context.Context, userID int64) (userorg.Scope, error) {
+	if s.scopeResolver == nil {
+		return userorg.Scope{}, nil
+	}
+	return s.scopeResolver.ResolveScope(ctx, userID)
 }
 
 type rapidProContactData struct {

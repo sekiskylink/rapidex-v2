@@ -300,6 +300,11 @@ func registerOrgUnitRoutes(
 		middleware.RequireJWTUser(),
 	)
 	group.GET("/orgunits", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsRead), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 		pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 		search := c.Query("search")
@@ -311,55 +316,70 @@ func registerOrgUnitRoutes(
 				parentID = &id64
 			}
 		}
-		result, err := service.List(c.Request.Context(), orgunit.ListQuery{
+		result, err := service.ListForUser(c.Request.Context(), userID, orgunit.ListQuery{
 			Page: page, PageSize: pageSize, Search: search, ParentID: parentID, RootsOnly: rootsOnly, LeafOnly: leafOnly,
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, result)
 	})
 	group.POST("/orgunits", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsWrite), func(c *gin.Context) {
-		var input orgunit.OrgUnit
-		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
 			return
 		}
-		created, err := service.Create(c.Request.Context(), input)
+		var input orgunit.OrgUnit
+		if err := c.ShouldBindJSON(&input); err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+			return
+		}
+		created, err := service.CreateForUser(c.Request.Context(), userID, input)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusCreated, created)
 	})
 	group.PUT("/orgunits/:id", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid organisation unit id"}}))
 			return
 		}
 		var input orgunit.OrgUnit
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
 		input.ID = id
-		updated, err := service.Update(c.Request.Context(), input)
+		updated, err := service.UpdateForUser(c.Request.Context(), userID, input)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, updated)
 	})
 	group.DELETE("/orgunits/:id", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsWrite), func(c *gin.Context) {
-		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
 			return
 		}
-		if err := service.Delete(c.Request.Context(), id); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid organisation unit id"}}))
+			return
+		}
+		if err := service.DeleteForUser(c.Request.Context(), userID, id); err != nil {
+			apperror.Write(c, err)
 			return
 		}
 		c.Status(http.StatusNoContent)
@@ -385,6 +405,11 @@ func registerReporterRoutes(
 		middleware.RequireJWTUser(),
 	)
 	group.GET("/reporters", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 		pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 		search := c.Query("search")
@@ -395,20 +420,25 @@ func registerReporterRoutes(
 			}
 		}
 		onlyActive := c.DefaultQuery("onlyActive", "false") == "true"
-		result, err := service.List(c.Request.Context(), reporter.ListQuery{Page: page, PageSize: pageSize, Search: search, OrgUnitID: orgUnitID, OnlyActive: onlyActive})
+		result, err := service.ListForUser(c.Request.Context(), userID, reporter.ListQuery{Page: page, PageSize: pageSize, Search: search, OrgUnitID: orgUnitID, OnlyActive: onlyActive})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, result)
 	})
 	group.POST("/reporters", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		var input reporter.Reporter
 		if err := c.ShouldBindJSON(&input); err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
-		created, err := service.Create(c.Request.Context(), input)
+		created, err := service.CreateForUser(c.Request.Context(), userID, input)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -416,6 +446,11 @@ func registerReporterRoutes(
 		c.JSON(http.StatusCreated, created)
 	})
 	group.PUT("/reporters/:id", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
@@ -427,7 +462,7 @@ func registerReporterRoutes(
 			return
 		}
 		input.ID = id
-		updated, err := service.Update(c.Request.Context(), input)
+		updated, err := service.UpdateForUser(c.Request.Context(), userID, input)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -435,24 +470,34 @@ func registerReporterRoutes(
 		c.JSON(http.StatusOK, updated)
 	})
 	group.DELETE("/reporters/:id", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
 			return
 		}
-		if err := service.Delete(c.Request.Context(), id); err != nil {
+		if err := service.DeleteForUser(c.Request.Context(), userID, id); err != nil {
 			apperror.Write(c, err)
 			return
 		}
 		c.Status(http.StatusNoContent)
 	})
 	group.POST("/reporters/:id/sync", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
 			return
 		}
-		result, err := service.SyncReporter(c.Request.Context(), id)
+		result, err := service.SyncReporterForUser(c.Request.Context(), userID, id)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -460,6 +505,11 @@ func registerReporterRoutes(
 		c.JSON(http.StatusOK, result)
 	})
 	group.POST("/reporters/:id/send-message", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
@@ -472,7 +522,7 @@ func registerReporterRoutes(
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
-		result, err := service.SendMessage(c.Request.Context(), id, payload.Text)
+		result, err := service.SendMessageForUser(c.Request.Context(), userID, id, payload.Text)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -480,12 +530,17 @@ func registerReporterRoutes(
 		c.JSON(http.StatusOK, result)
 	})
 	group.GET("/reporters/:id/rapidpro-contact", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
 			return
 		}
-		result, err := service.GetRapidProContactDetails(c.Request.Context(), id)
+		result, err := service.GetRapidProContactDetailsForUser(c.Request.Context(), userID, id)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -493,12 +548,17 @@ func registerReporterRoutes(
 		c.JSON(http.StatusOK, result)
 	})
 	group.GET("/reporters/:id/chat-history", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
 			return
 		}
-		result, err := service.GetRapidProMessageHistory(c.Request.Context(), id)
+		result, err := service.GetRapidProMessageHistoryForUser(c.Request.Context(), userID, id)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -506,6 +566,11 @@ func registerReporterRoutes(
 		c.JSON(http.StatusOK, result)
 	})
 	group.POST("/reporters/bulk/sync", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		var payload struct {
 			ReporterIDs []int64 `json:"reporterIds"`
 		}
@@ -513,7 +578,7 @@ func registerReporterRoutes(
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
-		result, err := service.SyncReporters(c.Request.Context(), payload.ReporterIDs)
+		result, err := service.SyncReportersForUser(c.Request.Context(), userID, payload.ReporterIDs)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -521,6 +586,11 @@ func registerReporterRoutes(
 		c.JSON(http.StatusOK, result)
 	})
 	group.POST("/reporters/bulk/broadcast", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
 		var payload struct {
 			ReporterIDs []int64 `json:"reporterIds"`
 			Text        string  `json:"text"`
@@ -529,7 +599,7 @@ func registerReporterRoutes(
 			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
 			return
 		}
-		result, err := service.BroadcastMessage(c.Request.Context(), payload.ReporterIDs, payload.Text)
+		result, err := service.BroadcastMessageForUser(c.Request.Context(), userID, payload.ReporterIDs, payload.Text)
 		if err != nil {
 			apperror.Write(c, err)
 			return
@@ -586,12 +656,16 @@ func registerUserOrgUnitRoutes(
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 			return
 		}
-		ids, err := service.GetUserOrgUnitIDs(c.Request.Context(), userID)
+		assignments, err := service.GetUserAssignments(c.Request.Context(), userID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"orgUnitIds": ids})
+		ids := make([]int64, 0, len(assignments))
+		for _, assignment := range assignments {
+			ids = append(ids, assignment.OrgUnitID)
+		}
+		c.JSON(http.StatusOK, gin.H{"orgUnitIds": ids, "items": assignments})
 	})
 	group.POST("/user-org-units", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsWrite), func(c *gin.Context) {
 		var req userorg.AssignmentRequest
@@ -622,4 +696,12 @@ func registerUserOrgUnitRoutes(
 		}
 		c.Status(http.StatusNoContent)
 	})
+}
+
+func currentUserID(c *gin.Context) (int64, bool) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok || principal.Type != "user" || principal.UserID == 0 {
+		return 0, false
+	}
+	return principal.UserID, true
 }

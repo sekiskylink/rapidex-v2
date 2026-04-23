@@ -19,6 +19,8 @@ export interface SessionPrincipal {
   username: string
   roles: string[]
   permissions: string[]
+  assignedOrgUnitIds?: number[]
+  isOrgUnitScopeRestricted?: boolean
 }
 
 type SessionExpiredReason = 'expired' | 'network'
@@ -87,6 +89,8 @@ export function setSessionPrincipal(principal: SessionPrincipal) {
     username: principal.username,
     roles: [...principal.roles],
     permissions: [...principal.permissions],
+    assignedOrgUnitIds: [...(principal.assignedOrgUnitIds ?? [])],
+    isOrgUnitScopeRestricted: Boolean(principal.isOrgUnitScopeRestricted),
   }
   notifyAuthStateChange()
 }

@@ -15,6 +15,7 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
+import { getAuthSnapshot } from '../auth/state'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { apiRequest } from '../lib/api'
 
@@ -120,6 +121,7 @@ function toForm(unit?: OrgUnit | null): OrgUnitFormState {
 }
 
 export function OrgUnitsPage() {
+  const currentUser = getAuthSnapshot().user
   const [items, setItems] = React.useState<OrgUnit[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
@@ -268,6 +270,11 @@ export function OrgUnitsPage() {
           New Facility
         </Button>
       </Stack>
+      {Boolean(currentUser?.isOrgUnitScopeRestricted && (currentUser.assignedOrgUnitIds?.length ?? 0) === 0) ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          No org units are assigned to your account yet, so the facility hierarchy is currently empty.
+        </Alert>
+      ) : null}
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 

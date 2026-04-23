@@ -50,11 +50,13 @@ type CacheHints struct {
 }
 
 type PrincipalSummary struct {
-	Type        string   `json:"type"`
-	UserID      int64    `json:"userId,omitempty"`
-	Username    string   `json:"username,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
+	Type                     string   `json:"type"`
+	UserID                   int64    `json:"userId,omitempty"`
+	Username                 string   `json:"username,omitempty"`
+	Roles                    []string `json:"roles,omitempty"`
+	Permissions              []string `json:"permissions,omitempty"`
+	AssignedOrgUnitIDs       []int64  `json:"assignedOrgUnitIds,omitempty"`
+	IsOrgUnitScopeRestricted bool     `json:"isOrgUnitScopeRestricted,omitempty"`
 }
 
 type Response struct {

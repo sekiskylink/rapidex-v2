@@ -25,6 +25,8 @@ interface MeResponse {
   username: string
   roles?: string[]
   permissions?: string[]
+  assignedOrgUnitIds?: number[]
+  isOrgUnitScopeRestricted?: boolean
 }
 
 interface AuthContextValue {
@@ -44,6 +46,8 @@ function toAuthUser(payload: MeResponse): AuthUser {
     username: payload.username,
     roles: payload.roles ?? [],
     permissions: payload.permissions ?? [],
+    assignedOrgUnitIds: payload.assignedOrgUnitIds ?? [],
+    isOrgUnitScopeRestricted: Boolean(payload.isOrgUnitScopeRestricted),
   }
 }
 
@@ -56,6 +60,8 @@ function toAuthUserFromBootstrap(payload: BootstrapPayload | null | undefined): 
     username: payload.principal.username,
     roles: payload.principal.roles ?? [],
     permissions: payload.principal.permissions ?? [],
+    assignedOrgUnitIds: payload.principal.assignedOrgUnitIds ?? [],
+    isOrgUnitScopeRestricted: Boolean(payload.principal.isOrgUnitScopeRestricted),
   }
 }
 

@@ -56,11 +56,13 @@ func (r *Reporter) UnmarshalJSON(data []byte) error {
 }
 
 type ListQuery struct {
-	Page       int
-	PageSize   int
-	Search     string
-	OrgUnitID  *int64
-	OnlyActive bool
+	Page            int
+	PageSize        int
+	Search          string
+	OrgUnitID       *int64
+	OnlyActive      bool
+	ScopeRestricted bool
+	ScopePaths      []string
 }
 
 type ListResult struct {

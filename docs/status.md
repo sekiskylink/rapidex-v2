@@ -1,5 +1,45 @@
 # Status
 
+## Milestone — RapidEx Org-Unit Jurisdiction Enforcement (Complete)
+
+### What changed
+- Enforced `user_org_units` assignments as real jurisdiction scope for RapidEx facilities and reporters instead of leaving them as passive reference data.
+- Added a reusable backend org-scope resolver in the existing `userorg` module:
+  - Admin users bypass org-unit restrictions
+  - non-admin assignments are treated as jurisdiction roots
+  - descendants are resolved from `org_units.path`
+- Applied backend scope enforcement to RapidEx facilities (`/api/v1/orgunits`) and reporters (`/api/v1/reporters`), including write paths and reporter actions:
+  - list/search
+  - create/update/delete
+  - reporter sync
+  - reporter messaging
+  - RapidPro details
+  - chat history
+  - bulk reporter actions
+- Extended session/bootstrap identity payloads so web and desktop now receive:
+  - `assignedOrgUnitIds`
+  - `isOrgUnitScopeRestricted`
+- Updated `GET /api/v1/user-org-units/:userId` to return assignment details for admin UI usage, and added org-unit assignment management to the existing Users pages in both web and desktop.
+- Added empty-state messaging on Facilities and Reporters pages when a restricted user has no assigned org units.
+
+### Added or updated tests
+- Backend:
+  - targeted RapidEx org-unit, reporter, auth, and router tests remain green with scoped route wiring
+- Web:
+  - focused reporters, users/audit, and route coverage remain green with the new auth/session shape
+- Desktop:
+  - focused reporters and route coverage remain green with the new session shape
+
+### Verification summary
+- Backend targeted tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/orgunit ./internal/sukumad/reporter ./internal/auth ./internal/bootstrap ./cmd/api -run "TestRapidex|TestServiceCreate|TestSyncReporter|TestBuildRapidProReporterSyncPreview|TestScope|TestAuth|TestBootstrap"`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/reporters-page.test.tsx src/pages/users-audit-pages.test.tsx src/routes.test.tsx`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+
+### Known follow-ups
+- The shared org-unit scope contract is intentionally reusable for future org-unit-tagged modules, but this implementation only enforces it for RapidEx facilities and reporters today.
+- Full `cd backend && GOCACHE=/tmp/go-build go test ./...` was not re-run in this session because unrelated router coverage still triggers sandbox-blocked listener setup in another test path.
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in focused frontend tests.
+
 ## Milestone — RapidEx Branding Defaults and Reporter Action Labels (Complete)
 
 ### What changed

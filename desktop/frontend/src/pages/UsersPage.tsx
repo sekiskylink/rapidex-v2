@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
@@ -44,6 +45,23 @@ interface UserRow {
 interface RoleOption {
   id: number
   name: string
+}
+
+interface OrgUnitOption {
+  id: number
+  name: string
+  displayPath?: string
+}
+
+interface UserOrgUnitAssignment {
+  orgUnitId: number
+  orgUnitName: string
+  displayPath?: string
+}
+
+interface UserOrgUnitAssignmentsResponse {
+  orgUnitIds: number[]
+  items: UserOrgUnitAssignment[]
 }
 
 interface UserFormState {
@@ -142,6 +160,16 @@ function renderRoleChips(roles: string[]) {
   )
 }
 
+function mergeOrgUnitOptions(...collections: OrgUnitOption[][]) {
+  const merged = new Map<number, OrgUnitOption>()
+  for (const collection of collections) {
+    for (const item of collection) {
+      merged.set(item.id, item)
+    }
+  }
+  return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name))
+}
+
 export function UsersPage() {
   const apiClient = useApiClient()
   const principal = useSessionPrincipal()
@@ -175,6 +203,15 @@ export function UsersPage() {
   const [rolesOpen, setRolesOpen] = React.useState(false)
   const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null)
   const [rolesSelection, setRolesSelection] = React.useState<string[]>([])
+  const [assignmentsOpen, setAssignmentsOpen] = React.useState(false)
+  const [assignmentsUser, setAssignmentsUser] = React.useState<UserRow | null>(null)
+  const [assignmentOptions, setAssignmentOptions] = React.useState<OrgUnitOption[]>([])
+  const [assignmentSelection, setAssignmentSelection] = React.useState<OrgUnitOption[]>([])
+  const [assignmentInitialIDs, setAssignmentInitialIDs] = React.useState<number[]>([])
+  const [assignmentSearch, setAssignmentSearch] = React.useState('')
+  const [assignmentLoading, setAssignmentLoading] = React.useState(false)
+  const [assignmentSaving, setAssignmentSaving] = React.useState(false)
+  const [assignmentError, setAssignmentError] = React.useState('')
 
   const [submitting, setSubmitting] = React.useState(false)
 
@@ -199,6 +236,11 @@ export function UsersPage() {
   React.useEffect(() => {
     void loadRoleOptions()
   }, [loadRoleOptions])
+
+  const loadOrgUnitOptions = React.useCallback(async (search: string) => {
+    const payload = await apiClient.request<PaginatedResponse<OrgUnitOption>>(`/api/v1/orgunits?page=0&pageSize=50&search=${encodeURIComponent(search.trim())}`)
+    return Array.isArray(payload.items) ? payload.items : []
+  }, [apiClient])
 
   const fetchUsers = React.useCallback(
     async (params: AppDataGridFetchParams) => {
@@ -351,6 +393,80 @@ export function UsersPage() {
     }
   }
 
+  const openAssignmentsDialog = React.useCallback(async (row: UserRow) => {
+    setAssignmentsUser(row)
+    setAssignmentsOpen(true)
+    setAssignmentLoading(true)
+    setAssignmentSaving(false)
+    setAssignmentError('')
+    setAssignmentSearch('')
+    try {
+      const [currentAssignments, availableOptions] = await Promise.all([
+        apiClient.request<UserOrgUnitAssignmentsResponse>(`/api/v1/user-org-units/${row.id}`),
+        loadOrgUnitOptions(''),
+      ])
+      const selected = (currentAssignments.items ?? []).map((item) => ({
+        id: item.orgUnitId,
+        name: item.orgUnitName,
+        displayPath: item.displayPath,
+      }))
+      setAssignmentSelection(selected)
+      setAssignmentInitialIDs(currentAssignments.orgUnitIds ?? selected.map((item) => item.id))
+      setAssignmentOptions(mergeOrgUnitOptions(availableOptions, selected))
+    } catch (error) {
+      setAssignmentSelection([])
+      setAssignmentInitialIDs([])
+      setAssignmentOptions([])
+      await handleAppError(error, { fallbackMessage: 'Unable to load org unit assignments.' })
+      setAssignmentError('Unable to load org unit assignments.')
+    } finally {
+      setAssignmentLoading(false)
+    }
+  }, [apiClient, loadOrgUnitOptions])
+
+  const onAssignmentSearchChange = React.useCallback(async (value: string) => {
+    setAssignmentSearch(value)
+    if (!assignmentsOpen) {
+      return
+    }
+    try {
+      const options = await loadOrgUnitOptions(value)
+      setAssignmentOptions((current) => mergeOrgUnitOptions(current, options, assignmentSelection))
+    } catch {
+    }
+  }, [assignmentSelection, assignmentsOpen, loadOrgUnitOptions])
+
+  const onSaveAssignments = React.useCallback(async () => {
+    if (!assignmentsUser) {
+      return
+    }
+    setAssignmentSaving(true)
+    setAssignmentError('')
+    const nextIDs = assignmentSelection.map((item) => item.id)
+    const toRemove = assignmentInitialIDs.filter((id) => !nextIDs.includes(id))
+    const toAdd = nextIDs.filter((id) => !assignmentInitialIDs.includes(id))
+    try {
+      for (const orgUnitID of toRemove) {
+        await apiClient.request(`/api/v1/user-org-units/${assignmentsUser.id}/${orgUnitID}`, { method: 'DELETE' })
+      }
+      for (const orgUnitID of toAdd) {
+        await apiClient.request('/api/v1/user-org-units', {
+          method: 'POST',
+          body: JSON.stringify({ userId: assignmentsUser.id, orgUnitId: orgUnitID }),
+        })
+      }
+      notify.success('Org unit assignments updated.')
+      setAssignmentsOpen(false)
+      setAssignmentsUser(null)
+      setAssignmentInitialIDs(nextIDs)
+    } catch (error) {
+      await handleAppError(error, { fallbackMessage: 'Unable to save org unit assignments.' })
+      setAssignmentError('Unable to save org unit assignments.')
+    } finally {
+      setAssignmentSaving(false)
+    }
+  }, [apiClient, assignmentInitialIDs, assignmentSelection, assignmentsUser])
+
   const roleNames = React.useMemo(() => roleOptions.map((role) => role.name), [roleOptions])
 
   const columns = React.useMemo<GridColDef<UserRow>[]>(
@@ -449,6 +565,15 @@ export function UsersPage() {
                 },
               },
               {
+                id: 'jurisdiction',
+                label: 'Org Unit Scope',
+                icon: 'view',
+                disabled: !canWrite,
+                onClick: () => {
+                  void openAssignmentsDialog(params.row)
+                },
+              },
+              {
                 id: 'reset-password',
                 label: 'Reset Password',
                 icon: 'delete',
@@ -467,7 +592,7 @@ export function UsersPage() {
         ),
       },
     ],
-    [canWrite],
+    [canWrite, openAssignmentsDialog],
   )
 
   return (
@@ -865,6 +990,51 @@ export function UsersPage() {
           <Button onClick={() => setRolesOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={() => void onSaveRoles()} disabled={submitting}>
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={assignmentsOpen} onClose={() => !assignmentSaving && setAssignmentsOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Org Unit Scope</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography color="text.secondary">
+              {assignmentsUser ? `Assign jurisdiction roots for ${assignmentsUser.username}. Descendants inherit automatically.` : 'Assign jurisdiction roots.'}
+            </Typography>
+            {assignmentError ? <Alert severity="error">{assignmentError}</Alert> : null}
+            <Autocomplete
+              multiple
+              options={assignmentOptions}
+              loading={assignmentLoading}
+              value={assignmentSelection}
+              inputValue={assignmentSearch}
+              onInputChange={(_event, value) => void onAssignmentSearchChange(value)}
+              onChange={(_event, value) => {
+                setAssignmentSelection(value)
+                setAssignmentOptions((current) => mergeOrgUnitOptions(current, value))
+              }}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              getOptionLabel={(option) => option.name}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip label={option.displayPath ? `${option.name} (${option.displayPath})` : option.name} {...getTagProps({ index })} key={option.id} size="small" />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Assigned Org Units"
+                  placeholder="Search facilities or jurisdiction roots"
+                  helperText="Users can access any descendants of the selected org units."
+                />
+              )}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignmentsOpen(false)} disabled={assignmentSaving}>Cancel</Button>
+          <Button onClick={() => void onSaveAssignments()} variant="contained" disabled={assignmentSaving || assignmentLoading}>
+            Save Scope
           </Button>
         </DialogActions>
       </Dialog>

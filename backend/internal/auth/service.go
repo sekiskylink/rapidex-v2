@@ -11,7 +11,13 @@ import (
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/rbac"
+	"basepro/backend/internal/sukumad/userorg"
 )
+
+type orgUnitAssignmentProvider interface {
+	GetUserOrgUnitIDs(context.Context, int64) ([]int64, error)
+	ResolveScope(context.Context, int64) (userorg.Scope, error)
+}
 
 type Service struct {
 	repo             Repository
@@ -26,6 +32,7 @@ type Service struct {
 	passwordHashCost int
 	passwordResetTTL time.Duration
 	resetNotifier    PasswordResetNotifier
+	orgUnitScope     orgUnitAssignmentProvider
 	now              func() time.Time
 }
 
@@ -71,6 +78,14 @@ func NewService(
 
 func (s *Service) SetPasswordResetNotifier(notifier PasswordResetNotifier) {
 	s.resetNotifier = notifier
+}
+
+func (s *Service) WithUserOrgScope(provider orgUnitAssignmentProvider) *Service {
+	if s == nil {
+		return s
+	}
+	s.orgUnitScope = provider
+	return s
 }
 
 func (s *Service) RequestPasswordReset(ctx context.Context, identifier, resetURLBase, ip, userAgent string) (PasswordResetRequestResult, error) {
@@ -407,6 +422,8 @@ func (s *Service) Logout(ctx context.Context, refreshToken, authHeader, ip, user
 func (s *Service) Me(ctx context.Context, claims Claims) map[string]any {
 	roles := []string{}
 	permissions := []string{}
+	assignedOrgUnitIDs := []int64{}
+	isOrgUnitScopeRestricted := false
 	if s.rbacService != nil {
 		if resolvedRoles, err := s.rbacService.RoleNamesForUser(ctx, claims.UserID); err == nil {
 			roles = resolvedRoles
@@ -415,11 +432,21 @@ func (s *Service) Me(ctx context.Context, claims Claims) map[string]any {
 			permissions = resolvedPerms
 		}
 	}
+	if s.orgUnitScope != nil {
+		if ids, err := s.orgUnitScope.GetUserOrgUnitIDs(ctx, claims.UserID); err == nil {
+			assignedOrgUnitIDs = ids
+		}
+		if scope, err := s.orgUnitScope.ResolveScope(ctx, claims.UserID); err == nil {
+			isOrgUnitScopeRestricted = scope.Restricted
+		}
+	}
 	return map[string]any{
-		"id":          claims.UserID,
-		"username":    claims.Username,
-		"roles":       roles,
-		"permissions": permissions,
+		"id":                       claims.UserID,
+		"username":                 claims.Username,
+		"roles":                    roles,
+		"permissions":              permissions,
+		"assignedOrgUnitIds":       assignedOrgUnitIDs,
+		"isOrgUnitScopeRestricted": isOrgUnitScopeRestricted,
 	}
 }
 

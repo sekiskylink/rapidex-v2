@@ -60,6 +60,12 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	where := "WHERE 1=1"
 	args := []interface{}{}
 
+	if query.ScopeRestricted && len(query.ScopePaths) == 0 && !(query.RootsOnly && len(query.ScopeRootIDs) > 0) {
+		result.Total = 0
+		result.Items = []OrgUnit{}
+		return result, nil
+	}
+
 	if strings.TrimSpace(query.Search) != "" {
 		where += " AND (LOWER(code) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(short_name) LIKE LOWER(?))"
 		search := fmt.Sprintf("%%%s%%", strings.TrimSpace(query.Search))
@@ -69,10 +75,32 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 		where += " AND parent_id = ?"
 		args = append(args, *query.ParentID)
 	} else if query.RootsOnly {
-		where += " AND parent_id IS NULL"
+		if query.ScopeRestricted {
+			if len(query.ScopeRootIDs) == 0 {
+				result.Total = 0
+				result.Items = []OrgUnit{}
+				return result, nil
+			}
+			rootPlaceholders := make([]string, 0, len(query.ScopeRootIDs))
+			for _, rootID := range query.ScopeRootIDs {
+				rootPlaceholders = append(rootPlaceholders, "?")
+				args = append(args, rootID)
+			}
+			where += " AND id IN (" + strings.Join(rootPlaceholders, ", ") + ")"
+		} else {
+			where += " AND parent_id IS NULL"
+		}
 	}
 	if query.LeafOnly {
 		where += " AND NOT EXISTS (SELECT 1 FROM org_units child WHERE child.parent_id = org_units.id)"
+	}
+	if query.ScopeRestricted && len(query.ScopePaths) > 0 {
+		pathClauses := make([]string, 0, len(query.ScopePaths))
+		for _, path := range query.ScopePaths {
+			pathClauses = append(pathClauses, "org_units.path LIKE ?")
+			args = append(args, path+"%")
+		}
+		where += " AND (" + strings.Join(pathClauses, " OR ") + ")"
 	}
 
 	var total int

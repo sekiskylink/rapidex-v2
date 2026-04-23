@@ -41,6 +41,8 @@ export interface BootstrapPrincipalSummary {
   username?: string
   roles?: string[]
   permissions?: string[]
+  assignedOrgUnitIds?: number[]
+  isOrgUnitScopeRestricted?: boolean
 }
 
 export interface BootstrapCacheHints {
@@ -200,4 +202,3 @@ export function subscribeBootstrap(listener: () => void) {
 export function useBootstrapSnapshot() {
   return useSyncExternalStore(subscribeBootstrap, getBootstrapSnapshot, getBootstrapSnapshot)
 }
-

@@ -24,4 +24,6 @@ export interface MeResponse {
   username: string
   roles: string[]
   permissions: string[]
+  assignedOrgUnitIds?: number[]
+  isOrgUnitScopeRestricted?: boolean
 }

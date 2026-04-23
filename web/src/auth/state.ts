@@ -3,6 +3,8 @@ export interface AuthUser {
   username: string
   roles: string[]
   permissions: string[]
+  assignedOrgUnitIds?: number[]
+  isOrgUnitScopeRestricted?: boolean
 }
 
 export interface AuthSnapshot {

@@ -121,6 +121,8 @@ func run() error {
 		cfg.Auth.APITokenEnabled,
 		cfg.Auth.PasswordHashCost,
 	)
+	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database)).WithRoleLookup(rbacService)
+	authService = authService.WithUserOrgScope(sukumadUserOrgUnitService)
 	usersService := users.NewService(users.NewSQLRepository(database), rbacService, auditService, cfg.Auth.PasswordHashCost)
 	moduleEnablementService := moduleenablement.NewService(settings.NewSQLRepository(database), auditService)
 	if err := moduleEnablementService.LoadRuntimeOverrides(ctx); err != nil {
@@ -164,7 +166,7 @@ func run() error {
 	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
-	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database))
+	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database)).WithScopeResolver(sukumadUserOrgUnitService)
 	sukumadRapidProClient := rapidpro.NewClient(nil)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService).
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
@@ -187,9 +189,9 @@ func run() error {
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
 		WithRapidProSettings(settingsService).
 		WithReporterGroupCatalog(sukumadReporterGroupService).
-		WithOrgUnitLookup(sukumadOrgUnitService)
+		WithOrgUnitLookup(sukumadOrgUnitService).
+		WithScopeResolver(sukumadUserOrgUnitService)
 	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
-	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()
 		files := make([]documentation.SourceFile, 0, len(cfg.Documentation.Files))
@@ -235,7 +237,7 @@ func run() error {
 			return config.Get().Modules.Flags
 		},
 		rbacService,
-	)
+	).WithUserOrgScope(sukumadUserOrgUnitService)
 
 	seedRBAC := cfg.Seed.EnableDevBootstrap || flags.seedDevAdmin
 	if seedRBAC {

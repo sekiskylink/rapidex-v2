@@ -24,6 +24,7 @@ import {
 import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
 import { useApiClient } from '../api/useApiClient'
+import { useSessionPrincipal } from '../auth/hooks'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { handleAppError } from '../errors/handleAppError'
 import {
@@ -166,6 +167,7 @@ function formatFacilityPath(unit: OrgUnit | null) {
 
 export function ReportersPage() {
   const apiClient = useApiClient()
+  const principal = useSessionPrincipal()
   const [reporters, setReporters] = React.useState<Reporter[]>([])
   const [orgUnits, setOrgUnits] = React.useState<OrgUnit[]>([])
   const [reporterGroupOptions, setReporterGroupOptions] = React.useState<ReporterGroupOption[]>([])
@@ -640,6 +642,11 @@ export function ReportersPage() {
           </Button>
         </Stack>
       </Stack>
+      {Boolean(principal?.isOrgUnitScopeRestricted && (principal.assignedOrgUnitIds?.length ?? 0) === 0) ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          No org units are assigned to your account yet, so reporter search and creation are currently unavailable.
+        </Alert>
+      ) : null}
 
       {selectedCount > 0 ? (
         <Alert severity="info" sx={{ mb: 2 }}>

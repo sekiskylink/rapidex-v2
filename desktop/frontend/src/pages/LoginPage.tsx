@@ -51,6 +51,8 @@ export function LoginPage() {
         username: me.username,
         roles: me.roles ?? [],
         permissions: me.permissions ?? [],
+        assignedOrgUnitIds: me.assignedOrgUnitIds ?? [],
+        isOrgUnitScopeRestricted: Boolean(me.isOrgUnitScopeRestricted),
       })
       await navigate({ to: consumeIntendedDestination('/dashboard'), replace: true })
     } catch (error) {

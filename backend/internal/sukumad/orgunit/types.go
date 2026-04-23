@@ -72,12 +72,15 @@ type OrgUnit struct {
 }
 
 type ListQuery struct {
-	Page      int
-	PageSize  int
-	Search    string
-	ParentID  *int64
-	RootsOnly bool
-	LeafOnly  bool
+	Page            int
+	PageSize        int
+	Search          string
+	ParentID        *int64
+	RootsOnly       bool
+	LeafOnly        bool
+	ScopeRestricted bool
+	ScopeRootIDs    []int64
+	ScopePaths      []string
 }
 
 type ListResult struct {

@@ -45,20 +45,35 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	result := ListResult{Page: query.Page, PageSize: query.PageSize}
 	where := "WHERE 1=1"
 	args := []interface{}{}
+	from := "FROM reporters JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id"
+
+	if query.ScopeRestricted && len(query.ScopePaths) == 0 {
+		result.Total = 0
+		result.Items = []Reporter{}
+		return result, nil
+	}
 	if strings.TrimSpace(query.Search) != "" {
-		where += " AND (LOWER(telephone) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(rapidpro_uuid) LIKE LOWER(?))"
+		where += " AND (LOWER(reporters.telephone) LIKE LOWER(?) OR LOWER(reporters.name) LIKE LOWER(?) OR LOWER(reporters.rapidpro_uuid) LIKE LOWER(?))"
 		s := fmt.Sprintf("%%%s%%", strings.TrimSpace(query.Search))
 		args = append(args, s, s, s)
 	}
 	if query.OrgUnitID != nil {
-		where += " AND org_unit_id = ?"
+		where += " AND reporters.org_unit_id = ?"
 		args = append(args, *query.OrgUnitID)
 	}
 	if query.OnlyActive {
-		where += " AND is_active = TRUE"
+		where += " AND reporters.is_active = TRUE"
+	}
+	if query.ScopeRestricted && len(query.ScopePaths) > 0 {
+		pathClauses := make([]string, 0, len(query.ScopePaths))
+		for _, path := range query.ScopePaths {
+			pathClauses = append(pathClauses, "scope_org_unit.path LIKE ?")
+			args = append(args, path+"%")
+		}
+		where += " AND (" + strings.Join(pathClauses, " OR ") + ")"
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM reporters %s", where)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) %s %s", from, where)
 	var total int
 	if err := r.db.GetContext(ctx, &total, r.db.Rebind(countQuery), args...); err != nil {
 		return result, err
@@ -74,10 +89,11 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
 		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
 		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
-		FROM reporters %s
+		%s
+		%s
 		ORDER BY name ASC, id ASC
 		LIMIT %d OFFSET %d
-	`, where, limit, offset)
+	`, from, where, limit, offset)
 	rows := []reporterRow{}
 	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(listQuery), args...); err != nil {
 		return result, err

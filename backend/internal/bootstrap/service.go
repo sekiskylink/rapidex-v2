@@ -10,6 +10,7 @@ import (
 	"basepro/backend/internal/moduleenablement"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/settings"
+	"basepro/backend/internal/sukumad/userorg"
 )
 
 type AppInfo struct {
@@ -35,6 +36,7 @@ type Service struct {
 	moduleFlagsService *moduleenablement.Service
 	configFlags        ConfigFlagsProvider
 	rbacService        *rbac.Service
+	orgUnitScope       *userorg.Service
 	now                func() time.Time
 }
 
@@ -124,6 +126,14 @@ func (s *Service) Build(ctx context.Context, principal *auth.Principal) (Respons
 	}, nil
 }
 
+func (s *Service) WithUserOrgScope(scope *userorg.Service) *Service {
+	if s == nil {
+		return s
+	}
+	s.orgUnitScope = scope
+	return s
+}
+
 func (s *Service) principalSummary(ctx context.Context, principal *auth.Principal) (*PrincipalSummary, bool, bool) {
 	if principal == nil {
 		return nil, false, false
@@ -138,6 +148,8 @@ func (s *Service) principalSummary(ctx context.Context, principal *auth.Principa
 	case "user":
 		var roles []string
 		var perms []string
+		assignedOrgUnitIDs := []int64{}
+		isOrgUnitScopeRestricted := false
 		if s.rbacService != nil {
 			if resolvedRoles, err := s.rbacService.RoleNamesForUser(ctx, principal.UserID); err == nil {
 				roles = resolvedRoles
@@ -146,12 +158,22 @@ func (s *Service) principalSummary(ctx context.Context, principal *auth.Principa
 				perms = resolvedPerms
 			}
 		}
+		if s.orgUnitScope != nil {
+			if ids, err := s.orgUnitScope.GetUserOrgUnitIDs(ctx, principal.UserID); err == nil {
+				assignedOrgUnitIDs = ids
+			}
+			if scope, err := s.orgUnitScope.ResolveScope(ctx, principal.UserID); err == nil {
+				isOrgUnitScopeRestricted = scope.Restricted
+			}
+		}
 		return &PrincipalSummary{
-			Type:        principal.Type,
-			UserID:      principal.UserID,
-			Username:    principal.Username,
-			Roles:       roles,
-			Permissions: perms,
+			Type:                     principal.Type,
+			UserID:                   principal.UserID,
+			Username:                 principal.Username,
+			Roles:                    roles,
+			Permissions:              perms,
+			AssignedOrgUnitIDs:       assignedOrgUnitIDs,
+			IsOrgUnitScopeRestricted: isOrgUnitScopeRestricted,
 		}, hasPermission(perms, rbac.PermissionSettingsRead), hasPermission(perms, rbac.PermissionSettingsWrite)
 	default:
 		return &PrincipalSummary{Type: principal.Type}, false, false
