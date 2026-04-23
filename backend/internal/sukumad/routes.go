@@ -606,6 +606,24 @@ func registerReporterRoutes(
 		}
 		c.JSON(http.StatusOK, result)
 	})
+	group.POST("/reporters/broadcasts", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
+		var payload reporter.JurisdictionBroadcastInput
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+			return
+		}
+		result, err := service.QueueJurisdictionBroadcastForUser(c.Request.Context(), userID, payload)
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusAccepted, result)
+	})
 }
 
 func registerReporterGroupRoutes(

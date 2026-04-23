@@ -3,12 +3,16 @@ package reporter
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 )
+
+var ErrNoEligibleBroadcast = errors.New("no eligible jurisdiction broadcast")
 
 type PgRepository struct {
 	db *sqlx.DB
@@ -35,6 +39,28 @@ type reporterRow struct {
 	CreatedAt         time.Time    `db:"created_at"`
 	UpdatedAt         time.Time    `db:"updated_at"`
 	LastLoginAt       sql.NullTime `db:"last_login_at"`
+}
+
+type jurisdictionBroadcastRow struct {
+	ID                   int64        `db:"id"`
+	UID                  string       `db:"uid"`
+	RequestedByUserID    int64        `db:"requested_by_user_id"`
+	OrgUnitIDs           []byte       `db:"org_unit_ids"`
+	ReporterGroup        string       `db:"reporter_group"`
+	MessageText          string       `db:"message_text"`
+	DedupeKey            string       `db:"dedupe_key"`
+	MatchedCount         int          `db:"matched_count"`
+	SentCount            int          `db:"sent_count"`
+	FailedCount          int          `db:"failed_count"`
+	Status               string       `db:"status"`
+	LastError            string       `db:"last_error"`
+	RequestedAt          time.Time    `db:"requested_at"`
+	StartedAt            sql.NullTime `db:"started_at"`
+	FinishedAt           sql.NullTime `db:"finished_at"`
+	ClaimedAt            sql.NullTime `db:"claimed_at"`
+	ClaimedByWorkerRunID *int64       `db:"claimed_by_worker_run_id"`
+	CreatedAt            time.Time    `db:"created_at"`
+	UpdatedAt            time.Time    `db:"updated_at"`
 }
 
 func NewPgRepository(db *sqlx.DB) *PgRepository {
@@ -185,6 +211,162 @@ func (r *PgRepository) ListUpdatedSince(ctx context.Context, since *time.Time, l
 		return nil, err
 	}
 	return items, nil
+}
+
+func (r *PgRepository) CountBroadcastRecipients(ctx context.Context, query BroadcastRecipientQuery) (int, error) {
+	where, args := buildBroadcastRecipientWhere(query)
+	if where == "" {
+		return 0, nil
+	}
+	var total int
+	countQuery := `
+		SELECT COUNT(DISTINCT reporters.id)
+		FROM reporters
+		JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id
+		JOIN reporter_groups rg ON rg.reporter_id = reporters.id
+		WHERE ` + where
+	if err := r.db.GetContext(ctx, &total, r.db.Rebind(countQuery), args...); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func (r *PgRepository) ListBroadcastRecipients(ctx context.Context, query BroadcastRecipientQuery) ([]Reporter, error) {
+	where, args := buildBroadcastRecipientWhere(query)
+	if where == "" {
+		return []Reporter{}, nil
+	}
+	listQuery := `
+		SELECT DISTINCT reporters.id, reporters.uid, reporters.name, reporters.telephone, reporters.whatsapp, reporters.telegram, reporters.org_unit_id, reporters.reporting_location,
+		       reporters.district_id, reporters.total_reports, reporters.last_reporting_date, reporters.sms_code, reporters.sms_code_expires_at,
+		       reporters.mtuuid, reporters.synced, reporters.rapidpro_uuid, reporters.is_active, reporters.created_at, reporters.updated_at, reporters.last_login_at
+		FROM reporters
+		JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id
+		JOIN reporter_groups rg ON rg.reporter_id = reporters.id
+		WHERE ` + where + `
+		ORDER BY reporters.name ASC, reporters.id ASC
+	`
+	rows := []reporterRow{}
+	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(listQuery), args...); err != nil {
+		return nil, err
+	}
+	items := convertReporterRows(rows)
+	if err := r.hydrateGroups(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *PgRepository) GetRecentPendingBroadcastByDedupeKey(ctx context.Context, dedupeKey string, since time.Time) (JurisdictionBroadcastRecord, error) {
+	row := jurisdictionBroadcastRow{}
+	if err := r.db.GetContext(ctx, &row, `
+		SELECT id, uid, requested_by_user_id, org_unit_ids, reporter_group, message_text, dedupe_key,
+		       matched_count, sent_count, failed_count, status, last_error, requested_at, started_at,
+		       finished_at, claimed_at, claimed_by_worker_run_id, created_at, updated_at
+		FROM reporter_broadcasts
+		WHERE dedupe_key = $1
+		  AND requested_at >= $2
+		  AND status IN ('queued', 'running')
+		ORDER BY requested_at DESC, id DESC
+		LIMIT 1
+	`, strings.TrimSpace(dedupeKey), since.UTC()); err != nil {
+		return JurisdictionBroadcastRecord{}, err
+	}
+	return row.toRecord()
+}
+
+func (r *PgRepository) CreateJurisdictionBroadcast(ctx context.Context, record JurisdictionBroadcastRecord) (JurisdictionBroadcastRecord, error) {
+	orgUnitIDs, err := marshalInt64List(record.OrgUnitIDs)
+	if err != nil {
+		return JurisdictionBroadcastRecord{}, err
+	}
+	var id int64
+	if err := r.db.GetContext(ctx, &id, `
+		INSERT INTO reporter_broadcasts (
+			uid, requested_by_user_id, org_unit_ids, reporter_group, message_text, dedupe_key,
+			matched_count, sent_count, failed_count, status, last_error, requested_at,
+			started_at, finished_at, claimed_at, claimed_by_worker_run_id, created_at, updated_at
+		)
+		VALUES (
+			$1, $2, $3::jsonb, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12,
+			NULL, NULL, NULL, NULL, $13, $14
+		)
+		RETURNING id
+	`,
+		record.UID,
+		record.RequestedByUserID,
+		string(orgUnitIDs),
+		record.ReporterGroup,
+		record.MessageText,
+		record.DedupeKey,
+		record.MatchedCount,
+		record.SentCount,
+		record.FailedCount,
+		record.Status,
+		record.LastError,
+		record.RequestedAt.UTC(),
+		record.CreatedAt.UTC(),
+		record.UpdatedAt.UTC(),
+	); err != nil {
+		return JurisdictionBroadcastRecord{}, fmt.Errorf("create reporter broadcast: %w", err)
+	}
+	return r.getJurisdictionBroadcastByID(ctx, id)
+}
+
+func (r *PgRepository) ClaimNextJurisdictionBroadcast(ctx context.Context, now time.Time, claimTimeout time.Duration, workerRunID int64) (JurisdictionBroadcastRecord, error) {
+	staleBefore := now.UTC().Add(-claimTimeout)
+	row := jurisdictionBroadcastRow{}
+	if err := r.db.GetContext(ctx, &row, `
+		WITH candidate AS (
+			SELECT rb.id
+			FROM reporter_broadcasts rb
+			WHERE rb.status = 'queued'
+			  AND (rb.claimed_at IS NULL OR rb.claimed_at <= $2)
+			ORDER BY rb.requested_at ASC, rb.id ASC
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		), claimed AS (
+			UPDATE reporter_broadcasts rb
+			SET status = 'running',
+			    started_at = COALESCE(rb.started_at, $1),
+			    claimed_at = $1,
+			    claimed_by_worker_run_id = NULLIF($3, 0),
+			    updated_at = NOW()
+			FROM candidate
+			WHERE rb.id = candidate.id
+			RETURNING rb.id
+		)
+		SELECT id, uid, requested_by_user_id, org_unit_ids, reporter_group, message_text, dedupe_key,
+		       matched_count, sent_count, failed_count, status, last_error, requested_at, started_at,
+		       finished_at, claimed_at, claimed_by_worker_run_id, created_at, updated_at
+		FROM reporter_broadcasts
+		JOIN claimed USING (id)
+	`, now.UTC(), staleBefore, workerRunID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return JurisdictionBroadcastRecord{}, ErrNoEligibleBroadcast
+		}
+		return JurisdictionBroadcastRecord{}, fmt.Errorf("claim reporter broadcast: %w", err)
+	}
+	return row.toRecord()
+}
+
+func (r *PgRepository) UpdateJurisdictionBroadcastResult(ctx context.Context, id int64, status string, sentCount int, failedCount int, lastError string, finishedAt time.Time) (JurisdictionBroadcastRecord, error) {
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE reporter_broadcasts
+		SET status = $2,
+		    sent_count = $3,
+		    failed_count = $4,
+		    last_error = $5,
+		    finished_at = $6,
+		    claimed_at = NULL,
+		    claimed_by_worker_run_id = NULL,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, id, strings.TrimSpace(status), sentCount, failedCount, strings.TrimSpace(lastError), finishedAt.UTC()); err != nil {
+		return JurisdictionBroadcastRecord{}, fmt.Errorf("update reporter broadcast: %w", err)
+	}
+	return r.getJurisdictionBroadcastByID(ctx, id)
 }
 
 func (r *PgRepository) UpdateRapidProStatus(ctx context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error) {
@@ -429,6 +611,20 @@ func (r *PgRepository) getByWhere(ctx context.Context, where string, arg any) (R
 	return reporter, nil
 }
 
+func (r *PgRepository) getJurisdictionBroadcastByID(ctx context.Context, id int64) (JurisdictionBroadcastRecord, error) {
+	row := jurisdictionBroadcastRow{}
+	if err := r.db.GetContext(ctx, &row, `
+		SELECT id, uid, requested_by_user_id, org_unit_ids, reporter_group, message_text, dedupe_key,
+		       matched_count, sent_count, failed_count, status, last_error, requested_at, started_at,
+		       finished_at, claimed_at, claimed_by_worker_run_id, created_at, updated_at
+		FROM reporter_broadcasts
+		WHERE id = $1
+	`, id); err != nil {
+		return JurisdictionBroadcastRecord{}, err
+	}
+	return row.toRecord()
+}
+
 func (r *PgRepository) getByIDTx(ctx context.Context, tx *sqlx.Tx, id int64) (Reporter, error) {
 	row := reporterRow{}
 	if err := tx.GetContext(ctx, &row, `
@@ -586,4 +782,72 @@ func nullTimePtr(value sql.NullTime) *time.Time {
 	}
 	t := value.Time
 	return &t
+}
+
+func buildBroadcastRecipientWhere(query BroadcastRecipientQuery) (string, []any) {
+	if len(query.OrgUnitPaths) == 0 || strings.TrimSpace(query.ReporterGroup) == "" {
+		return "", nil
+	}
+	whereParts := []string{"LOWER(rg.group_name) = LOWER(?)"}
+	args := []any{strings.TrimSpace(query.ReporterGroup)}
+	pathClauses := make([]string, 0, len(query.OrgUnitPaths))
+	for _, path := range query.OrgUnitPaths {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			continue
+		}
+		pathClauses = append(pathClauses, "scope_org_unit.path LIKE ?")
+		args = append(args, trimmed+"%")
+	}
+	if len(pathClauses) == 0 {
+		return "", nil
+	}
+	whereParts = append(whereParts, "("+strings.Join(pathClauses, " OR ")+")")
+	if query.OnlyActive {
+		whereParts = append(whereParts, "reporters.is_active = TRUE")
+	}
+	return strings.Join(whereParts, " AND "), args
+}
+
+func marshalInt64List(values []int64) ([]byte, error) {
+	return json.Marshal(values)
+}
+
+func unmarshalInt64List(raw []byte) ([]int64, error) {
+	if len(raw) == 0 {
+		return []int64{}, nil
+	}
+	var values []int64
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("decode org unit ids: %w", err)
+	}
+	return values, nil
+}
+
+func (r jurisdictionBroadcastRow) toRecord() (JurisdictionBroadcastRecord, error) {
+	orgUnitIDs, err := unmarshalInt64List(r.OrgUnitIDs)
+	if err != nil {
+		return JurisdictionBroadcastRecord{}, err
+	}
+	return JurisdictionBroadcastRecord{
+		ID:                   r.ID,
+		UID:                  r.UID,
+		RequestedByUserID:    r.RequestedByUserID,
+		OrgUnitIDs:           orgUnitIDs,
+		ReporterGroup:        r.ReporterGroup,
+		MessageText:          r.MessageText,
+		DedupeKey:            r.DedupeKey,
+		MatchedCount:         r.MatchedCount,
+		SentCount:            r.SentCount,
+		FailedCount:          r.FailedCount,
+		Status:               r.Status,
+		LastError:            r.LastError,
+		RequestedAt:          r.RequestedAt,
+		StartedAt:            nullTimePtr(r.StartedAt),
+		FinishedAt:           nullTimePtr(r.FinishedAt),
+		ClaimedAt:            nullTimePtr(r.ClaimedAt),
+		ClaimedByWorkerRunID: r.ClaimedByWorkerRunID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}, nil
 }

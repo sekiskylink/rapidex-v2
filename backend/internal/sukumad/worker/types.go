@@ -6,12 +6,13 @@ import (
 )
 
 const (
-	TypeIngest    = "ingest"
-	TypeSend      = "send"
-	TypePoll      = "poll"
-	TypeRetry     = "retry"
-	TypeRetention = "retention"
-	TypeSchedulerRun = "scheduler.run"
+	TypeIngest            = "ingest"
+	TypeSend              = "send"
+	TypePoll              = "poll"
+	TypeRetry             = "retry"
+	TypeRetention         = "retention"
+	TypeReporterBroadcast = "reporter.broadcast"
+	TypeSchedulerRun      = "scheduler.run"
 )
 
 const (

@@ -31,6 +31,24 @@ type Repository interface {
 	// ListUpdatedSince fetches reporters created or updated after the provided time.
 	ListUpdatedSince(ctx context.Context, since *time.Time, limit int, onlyActive bool) ([]Reporter, error)
 
+	// CountBroadcastRecipients returns the number of reporters matching the broadcast query.
+	CountBroadcastRecipients(ctx context.Context, query BroadcastRecipientQuery) (int, error)
+
+	// ListBroadcastRecipients returns reporters matching the broadcast query.
+	ListBroadcastRecipients(ctx context.Context, query BroadcastRecipientQuery) ([]Reporter, error)
+
+	// GetRecentPendingBroadcastByDedupeKey returns a recent queued or running broadcast with the same dedupe key.
+	GetRecentPendingBroadcastByDedupeKey(ctx context.Context, dedupeKey string, since time.Time) (JurisdictionBroadcastRecord, error)
+
+	// CreateJurisdictionBroadcast enqueues a new jurisdiction broadcast request.
+	CreateJurisdictionBroadcast(ctx context.Context, record JurisdictionBroadcastRecord) (JurisdictionBroadcastRecord, error)
+
+	// ClaimNextJurisdictionBroadcast claims the next queued broadcast for worker processing.
+	ClaimNextJurisdictionBroadcast(ctx context.Context, now time.Time, claimTimeout time.Duration, workerRunID int64) (JurisdictionBroadcastRecord, error)
+
+	// UpdateJurisdictionBroadcastResult persists terminal processing state for a broadcast.
+	UpdateJurisdictionBroadcastResult(ctx context.Context, id int64, status string, sentCount int, failedCount int, lastError string, finishedAt time.Time) (JurisdictionBroadcastRecord, error)
+
 	// UpdateRapidProStatus updates RapidPro linkage fields without mutating the local change timestamp watermark.
 	UpdateRapidProStatus(ctx context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error)
 

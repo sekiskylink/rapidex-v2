@@ -368,6 +368,53 @@ describe('reporters page', () => {
     })
   })
 
+  it('queues jurisdiction broadcasts from the top send message dialog', async () => {
+    authenticate(['reporters.read', 'reporters.write'])
+    let queuePayload: Record<string, unknown> | null = null
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
+      if (path === '/orgunits?page=0&pageSize=200') {
+        return { items: [{ id: 9, name: 'Kampala District', path: '/UG/Kampala/', displayPath: 'Uganda' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path.includes('/orgunits?page=0&pageSize=20&search=Kampala')) {
+        return { items: [{ id: 9, name: 'Kampala District', path: '/UG/Kampala/', displayPath: 'Uganda' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/broadcasts' && init?.method === 'POST') {
+        queuePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return { status: 'queued', message: 'Reporter broadcast queued. Delivery will continue in the background.', broadcast: { id: 31, matchedCount: 4, status: 'queued' } }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send Message' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send Message' })
+    const orgUnitsInput = within(dialog).getByRole('combobox', { name: 'Organisation Units' })
+    fireEvent.focus(orgUnitsInput)
+    fireEvent.keyDown(orgUnitsInput, { key: 'ArrowDown' })
+    fireEvent.keyDown(orgUnitsInput, { key: 'Enter' })
+    const reporterGroupInput = within(dialog).getByRole('combobox', { name: 'Reporter Group' })
+    fireEvent.focus(reporterGroupInput)
+    fireEvent.keyDown(reporterGroupInput, { key: 'ArrowDown' })
+    fireEvent.keyDown(reporterGroupInput, { key: 'Enter' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Background hello' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Queue Broadcast' }))
+
+    await waitFor(() => expect(queuePayload).not.toBeNull())
+    expect(queuePayload).toMatchObject({
+      orgUnitIds: [9],
+      reporterGroup: 'Lead',
+      text: 'Background hello',
+    })
+    expect(await screen.findByText(/Reporter broadcast queued/)).toBeInTheDocument()
+  })
+
   it('selects all reporters on the current page from the header checkbox', async () => {
     authenticate(['reporters.read', 'reporters.write'])
     apiRequestSpy.mockImplementation(async (path: string) => {

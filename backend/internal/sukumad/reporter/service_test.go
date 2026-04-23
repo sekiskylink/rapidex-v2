@@ -2,6 +2,7 @@ package reporter
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,9 +17,15 @@ import (
 )
 
 type reporterServiceRepo struct {
-	byID              map[int64]Reporter
-	updatedSinceItems []Reporter
-	updateCalls       int
+	byID                     map[int64]Reporter
+	updatedSinceItems        []Reporter
+	updateCalls              int
+	countBroadcastRecipients int
+	broadcastRecipients      []Reporter
+	recentBroadcast          *JurisdictionBroadcastRecord
+	createdBroadcasts        []JurisdictionBroadcastRecord
+	claimedBroadcasts        []JurisdictionBroadcastRecord
+	updatedBroadcasts        []JurisdictionBroadcastRecord
 }
 
 func (r *reporterServiceRepo) List(context.Context, ListQuery) (ListResult, error) {
@@ -45,6 +52,36 @@ func (r *reporterServiceRepo) ListByIDs(_ context.Context, ids []int64) ([]Repor
 }
 func (r *reporterServiceRepo) ListUpdatedSince(context.Context, *time.Time, int, bool) ([]Reporter, error) {
 	return append([]Reporter(nil), r.updatedSinceItems...), nil
+}
+func (r *reporterServiceRepo) CountBroadcastRecipients(context.Context, BroadcastRecipientQuery) (int, error) {
+	return r.countBroadcastRecipients, nil
+}
+func (r *reporterServiceRepo) ListBroadcastRecipients(context.Context, BroadcastRecipientQuery) ([]Reporter, error) {
+	return append([]Reporter(nil), r.broadcastRecipients...), nil
+}
+func (r *reporterServiceRepo) GetRecentPendingBroadcastByDedupeKey(context.Context, string, time.Time) (JurisdictionBroadcastRecord, error) {
+	if r.recentBroadcast != nil {
+		return *r.recentBroadcast, nil
+	}
+	return JurisdictionBroadcastRecord{}, sql.ErrNoRows
+}
+func (r *reporterServiceRepo) CreateJurisdictionBroadcast(_ context.Context, record JurisdictionBroadcastRecord) (JurisdictionBroadcastRecord, error) {
+	record.ID = int64(len(r.createdBroadcasts) + 1)
+	r.createdBroadcasts = append(r.createdBroadcasts, record)
+	return record, nil
+}
+func (r *reporterServiceRepo) ClaimNextJurisdictionBroadcast(context.Context, time.Time, time.Duration, int64) (JurisdictionBroadcastRecord, error) {
+	if len(r.claimedBroadcasts) > 0 {
+		item := r.claimedBroadcasts[0]
+		r.claimedBroadcasts = r.claimedBroadcasts[1:]
+		return item, nil
+	}
+	return JurisdictionBroadcastRecord{}, ErrNoEligibleBroadcast
+}
+func (r *reporterServiceRepo) UpdateJurisdictionBroadcastResult(_ context.Context, id int64, status string, sentCount int, failedCount int, lastError string, finishedAt time.Time) (JurisdictionBroadcastRecord, error) {
+	record := JurisdictionBroadcastRecord{ID: id, Status: status, SentCount: sentCount, FailedCount: failedCount, LastError: lastError, FinishedAt: &finishedAt}
+	r.updatedBroadcasts = append(r.updatedBroadcasts, record)
+	return record, nil
 }
 func (r *reporterServiceRepo) UpdateRapidProStatus(_ context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error) {
 	item := r.byID[id]
@@ -167,11 +204,168 @@ func (p reporterSettingsProvider) GetRapidProReporterSync(context.Context) (sett
 }
 
 type reporterOrgUnitLookup struct {
-	item orgunit.OrgUnit
+	item  orgunit.OrgUnit
+	items map[int64]orgunit.OrgUnit
 }
 
-func (l reporterOrgUnitLookup) Get(context.Context, int64) (orgunit.OrgUnit, error) {
+func (l reporterOrgUnitLookup) Get(_ context.Context, id int64) (orgunit.OrgUnit, error) {
+	if len(l.items) > 0 {
+		if item, ok := l.items[id]; ok {
+			return item, nil
+		}
+	}
 	return l.item, nil
+}
+
+type reporterGroupCatalogStub struct {
+	validatedGroups []string
+}
+
+func (s *reporterGroupCatalogStub) ValidateActiveNames(_ context.Context, names []string) ([]string, error) {
+	s.validatedGroups = append([]string(nil), names...)
+	return append([]string(nil), names...), nil
+}
+
+func (s *reporterGroupCatalogStub) EnsureRapidProGroups(_ context.Context, names []string) ([]rapidpro.Group, error) {
+	result := make([]rapidpro.Group, 0, len(names))
+	for _, name := range names {
+		result = append(result, rapidpro.Group{UUID: "group-" + name, Name: name})
+	}
+	return result, nil
+}
+
+func TestQueueJurisdictionBroadcastForUserQueuesBackgroundBroadcast(t *testing.T) {
+	repo := &reporterServiceRepo{countBroadcastRecipients: 3}
+	groupCatalog := &reporterGroupCatalogStub{}
+	service := NewService(repo).
+		WithReporterGroupCatalog(groupCatalog).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			items: map[int64]orgunit.OrgUnit{
+				9: {ID: 9, Name: "Kampala District", Path: "/UG/Kampala/"},
+			},
+		}).
+		WithClock(func() time.Time { return time.Date(2026, 4, 23, 12, 0, 0, 0, time.UTC) })
+
+	result, err := service.QueueJurisdictionBroadcastForUser(context.Background(), 7, JurisdictionBroadcastInput{
+		OrgUnitIDs:    []int64{9, 9},
+		ReporterGroup: "Lead",
+		Text:          "Please submit today",
+	})
+	if err != nil {
+		t.Fatalf("queue jurisdiction broadcast: %v", err)
+	}
+	if result.Status != BroadcastQueueResultQueued {
+		t.Fatalf("expected queued status, got %q", result.Status)
+	}
+	if len(repo.createdBroadcasts) != 1 {
+		t.Fatalf("expected one queued broadcast, got %d", len(repo.createdBroadcasts))
+	}
+	created := repo.createdBroadcasts[0]
+	if created.MatchedCount != 3 {
+		t.Fatalf("expected matched count 3, got %d", created.MatchedCount)
+	}
+	if len(created.OrgUnitIDs) != 1 || created.OrgUnitIDs[0] != 9 {
+		t.Fatalf("expected normalized org unit ids, got %#v", created.OrgUnitIDs)
+	}
+	if created.ReporterGroup != "Lead" {
+		t.Fatalf("expected reporter group Lead, got %q", created.ReporterGroup)
+	}
+	if got := strings.TrimSpace(created.MessageText); got != "Please submit today" {
+		t.Fatalf("expected message text to be persisted, got %q", got)
+	}
+	if len(groupCatalog.validatedGroups) != 1 || groupCatalog.validatedGroups[0] != "Lead" {
+		t.Fatalf("expected group validation for Lead, got %#v", groupCatalog.validatedGroups)
+	}
+}
+
+func TestQueueJurisdictionBroadcastForUserReturnsDuplicatePending(t *testing.T) {
+	repo := &reporterServiceRepo{
+		countBroadcastRecipients: 2,
+		recentBroadcast: &JurisdictionBroadcastRecord{
+			ID:           11,
+			UID:          "rb-11",
+			MatchedCount: 2,
+			Status:       BroadcastStatusRunning,
+		},
+	}
+	service := NewService(repo).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			items: map[int64]orgunit.OrgUnit{
+				9: {ID: 9, Name: "Kampala District", Path: "/UG/Kampala/"},
+			},
+		}).
+		WithClock(func() time.Time { return time.Date(2026, 4, 23, 12, 0, 0, 0, time.UTC) })
+
+	result, err := service.QueueJurisdictionBroadcastForUser(context.Background(), 7, JurisdictionBroadcastInput{
+		OrgUnitIDs:    []int64{9},
+		ReporterGroup: "Lead",
+		Text:          "Please submit today",
+	})
+	if err != nil {
+		t.Fatalf("queue duplicate jurisdiction broadcast: %v", err)
+	}
+	if result.Status != BroadcastQueueResultDuplicate {
+		t.Fatalf("expected duplicate pending status, got %q", result.Status)
+	}
+	if len(repo.createdBroadcasts) != 0 {
+		t.Fatalf("expected no new broadcast to be created, got %d", len(repo.createdBroadcasts))
+	}
+}
+
+func TestRunQueuedBroadcastsProcessesClaimedBroadcast(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {ID: 1, Name: "Alice Reporter", Telephone: "+256700000001", OrgUnitID: 9, IsActive: true},
+			2: {ID: 2, Name: "Bob Reporter", Telephone: "+256700000002", OrgUnitID: 9, IsActive: true},
+		},
+		broadcastRecipients: []Reporter{
+			{ID: 1, Name: "Alice Reporter", Telephone: "+256700000001", OrgUnitID: 9, IsActive: true},
+			{ID: 2, Name: "Bob Reporter", Telephone: "+256700000002", OrgUnitID: 9, IsActive: true},
+		},
+		claimedBroadcasts: []JurisdictionBroadcastRecord{
+			{
+				ID:            21,
+				UID:           "rb-21",
+				OrgUnitIDs:    []int64{9},
+				ReporterGroup: "Lead",
+				MessageText:   "Background hello",
+				MatchedCount:  2,
+				Status:        BroadcastStatusRunning,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{Code: "rapidpro", BaseURL: "https://rapidpro.example.com"},
+		}, client).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			items: map[int64]orgunit.OrgUnit{
+				9: {ID: 9, Name: "Kampala District", Path: "/UG/Kampala/"},
+			},
+		}).
+		WithClock(func() time.Time { return time.Date(2026, 4, 23, 12, 0, 0, 0, time.UTC) })
+
+	var observed []string
+	err := service.RunQueuedBroadcasts(context.Background(), 55, func(name string, delta int) {
+		observed = append(observed, fmt.Sprintf("%s:%d", name, delta))
+	}, 5, time.Minute)
+	if err != nil {
+		t.Fatalf("run queued broadcasts: %v", err)
+	}
+	if len(repo.updatedBroadcasts) == 0 {
+		t.Fatal("expected broadcast result update")
+	}
+	updated := repo.updatedBroadcasts[len(repo.updatedBroadcasts)-1]
+	if updated.Status != BroadcastStatusCompleted {
+		t.Fatalf("expected completed status, got %q", updated.Status)
+	}
+	if updated.SentCount != 2 || updated.FailedCount != 0 {
+		t.Fatalf("expected sent=2 failed=0, got sent=%d failed=%d", updated.SentCount, updated.FailedCount)
+	}
+	if !strings.Contains(strings.Join(observed, ","), "claimed:1") || !strings.Contains(strings.Join(observed, ","), "completed:1") {
+		t.Fatalf("expected worker observations, got %#v", observed)
+	}
 }
 
 func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {

@@ -27,6 +27,8 @@ import { getAuthSnapshot } from '../auth/state'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
+import { useAppNotify } from '../notifications/facade'
+import { ChatBubbleOutlineRoundedIcon, GroupRoundedIcon, SyncRoundedIcon } from '../ui/icons'
 import {
   ChatHistoryDialog,
   RapidProDetailsDialog,
@@ -80,6 +82,16 @@ interface ListResponse<T> {
   totalCount: number
 }
 
+interface JurisdictionBroadcastQueueResponse {
+  status: 'queued' | 'duplicate_pending'
+  message: string
+  broadcast: {
+    id: number
+    matchedCount: number
+    status: string
+  }
+}
+
 type FacilityBrowserEntry = {
   unit?: OrgUnit
   label: string
@@ -100,6 +112,12 @@ type MessageDialogState = {
   reporter?: Reporter | null
 }
 
+type JurisdictionBroadcastFormState = {
+  orgUnits: OrgUnit[]
+  reporterGroup: string
+  text: string
+}
+
 const emptyForm: ReporterFormState = {
   name: '',
   telephone: '',
@@ -108,6 +126,12 @@ const emptyForm: ReporterFormState = {
   orgUnitId: '',
   isActive: true,
   groups: [],
+}
+
+const emptyJurisdictionBroadcastForm: JurisdictionBroadcastFormState = {
+  orgUnits: [],
+  reporterGroup: '',
+  text: '',
 }
 
 const dataGridSx = {
@@ -167,6 +191,7 @@ function formatFacilityPath(unit: OrgUnit | null) {
 
 export function ReportersPage() {
   const currentUser = getAuthSnapshot().user
+  const notify = useAppNotify()
   const [reporters, setReporters] = React.useState<Reporter[]>([])
   const [orgUnits, setOrgUnits] = React.useState<OrgUnit[]>([])
   const [reporterGroupOptions, setReporterGroupOptions] = React.useState<ReporterGroupOption[]>([])
@@ -181,6 +206,12 @@ export function ReportersPage() {
   const [messageDialog, setMessageDialog] = React.useState<MessageDialogState | null>(null)
   const [messageText, setMessageText] = React.useState('')
   const [messageSending, setMessageSending] = React.useState(false)
+  const [jurisdictionDialogOpen, setJurisdictionDialogOpen] = React.useState(false)
+  const [jurisdictionForm, setJurisdictionForm] = React.useState<JurisdictionBroadcastFormState>(emptyJurisdictionBroadcastForm)
+  const [jurisdictionOrgUnitOptions, setJurisdictionOrgUnitOptions] = React.useState<OrgUnit[]>([])
+  const [jurisdictionOrgUnitSearch, setJurisdictionOrgUnitSearch] = React.useState('')
+  const [jurisdictionOrgUnitLoading, setJurisdictionOrgUnitLoading] = React.useState(false)
+  const [jurisdictionSubmitting, setJurisdictionSubmitting] = React.useState(false)
   const [rapidProReporter, setRapidProReporter] = React.useState<Reporter | null>(null)
   const [rapidProDetails, setRapidProDetails] = React.useState<RapidProContactDetailsResponse | null>(null)
   const [rapidProDetailsLoading, setRapidProDetailsLoading] = React.useState(false)
@@ -248,6 +279,11 @@ export function ReportersPage() {
     return response.items ?? []
   }, [])
 
+  const fetchJurisdictionOrgUnitOptions = React.useCallback(async (search: string) => {
+    const response = await apiRequest<ListResponse<OrgUnit>>(`/orgunits?page=0&pageSize=20&search=${encodeURIComponent(search)}`)
+    return response.items ?? []
+  }, [])
+
   const loadFacilityBrowserLevel = React.useCallback(async (trail: FacilityBrowserEntry[]) => {
     setFacilityBrowserLoading(true)
     try {
@@ -312,6 +348,44 @@ export function ReportersPage() {
       window.clearTimeout(timeoutId)
     }
   }, [dialogOpen, facilitySearchInput, fetchFacilityOptions, selectedFacility])
+
+  React.useEffect(() => {
+    if (!jurisdictionDialogOpen) {
+      return
+    }
+    const search = jurisdictionOrgUnitSearch.trim()
+    if (search === '') {
+      setJurisdictionOrgUnitOptions(uniqOrgUnits([...jurisdictionForm.orgUnits, ...orgUnits.slice(0, 20)]))
+      setJurisdictionOrgUnitLoading(false)
+      return
+    }
+    let active = true
+    setJurisdictionOrgUnitLoading(true)
+    const timeoutId = window.setTimeout(() => {
+      void fetchJurisdictionOrgUnitOptions(search)
+        .then((items) => {
+          if (!active) {
+            return
+          }
+          setJurisdictionOrgUnitOptions(uniqOrgUnits([...jurisdictionForm.orgUnits, ...items]))
+        })
+        .catch((searchError) => {
+          if (!active) {
+            return
+          }
+          setError(searchError instanceof Error ? searchError.message : 'Unable to search organisation units.')
+        })
+        .finally(() => {
+          if (active) {
+            setJurisdictionOrgUnitLoading(false)
+          }
+        })
+    }, 250)
+    return () => {
+      active = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [fetchJurisdictionOrgUnitOptions, jurisdictionDialogOpen, jurisdictionForm.orgUnits, jurisdictionOrgUnitSearch, orgUnits])
 
   const openRapidProDetails = React.useCallback(async (reporter: Reporter) => {
     setRapidProReporter(reporter)
@@ -512,6 +586,24 @@ export function ReportersPage() {
     setMessageText('')
   }
 
+  function openJurisdictionDialog() {
+    setJurisdictionDialogOpen(true)
+    setJurisdictionForm(emptyJurisdictionBroadcastForm)
+    setJurisdictionOrgUnitOptions(orgUnits.slice(0, 20))
+    setJurisdictionOrgUnitSearch('')
+    setError('')
+  }
+
+  function closeJurisdictionDialog() {
+    if (jurisdictionSubmitting) {
+      return
+    }
+    setJurisdictionDialogOpen(false)
+    setJurisdictionForm(emptyJurisdictionBroadcastForm)
+    setJurisdictionOrgUnitOptions([])
+    setJurisdictionOrgUnitSearch('')
+  }
+
   function openFacilityBrowser() {
     setFacilityBrowserOpen(true)
     void loadFacilityBrowserLevel([])
@@ -620,6 +712,35 @@ export function ReportersPage() {
     }
   }
 
+  async function submitJurisdictionBroadcast() {
+    setJurisdictionSubmitting(true)
+    setError('')
+    try {
+      const result = await apiRequest<JurisdictionBroadcastQueueResponse>('/reporters/broadcasts', {
+        method: 'POST',
+        body: JSON.stringify({
+          orgUnitIds: jurisdictionForm.orgUnits.map((item) => item.id),
+          reporterGroup: jurisdictionForm.reporterGroup,
+          text: jurisdictionForm.text.trim(),
+        }),
+      })
+      closeJurisdictionDialog()
+      if (result.status === 'duplicate_pending') {
+        notify.info(result.message)
+        return
+      }
+      notify.success(`${result.message} ${result.broadcast.matchedCount} reporter${result.broadcast.matchedCount === 1 ? '' : 's'} matched.`)
+    } catch (broadcastError) {
+      const { error: normalized } = await handleAppError(broadcastError, {
+        fallbackMessage: 'Unable to queue reporter broadcast.',
+        notifyUser: false,
+      })
+      setError(formatActionError('Unable to queue reporter broadcast.', normalized))
+    } finally {
+      setJurisdictionSubmitting(false)
+    }
+  }
+
   return (
     <Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
@@ -630,13 +751,16 @@ export function ReportersPage() {
           <Typography color="text.secondary">Manage local reporters, RapidPro contact sync, and outbound SMS.</Typography>
         </Box>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button variant="outlined" onClick={() => void syncSelected()} disabled={selectedCount === 0}>
+          <Button variant="outlined" size="small" startIcon={<SyncRoundedIcon />} onClick={() => void syncSelected()} disabled={selectedCount === 0}>
             Sync Selected
           </Button>
-          <Button variant="outlined" onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
+          <Button variant="outlined" size="small" startIcon={<GroupRoundedIcon />} onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
             Broadcast to Selected
           </Button>
-          <Button variant="contained" onClick={() => openDialog()}>
+          <Button variant="outlined" size="small" startIcon={<ChatBubbleOutlineRoundedIcon />} onClick={openJurisdictionDialog}>
+            Send Message
+          </Button>
+          <Button variant="contained" size="small" startIcon={<GroupRoundedIcon />} onClick={() => openDialog()}>
             New Reporter
           </Button>
         </Stack>
@@ -902,6 +1026,75 @@ export function ReportersPage() {
           <Button onClick={closeMessageDialog} disabled={messageSending}>Cancel</Button>
           <Button onClick={() => void submitMessage()} disabled={messageSending || !messageText.trim()} variant="contained">
             {messageDialog?.mode === 'single' ? 'Send Message' : 'Send Broadcast'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={jurisdictionDialogOpen} onClose={closeJurisdictionDialog} fullWidth maxWidth="md">
+        <DialogTitle>Send Message</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <DialogContentText>
+              Queue a background broadcast for reporters in the selected organisation units and reporter group. Selecting a non-leaf organisation unit includes all reporters below it.
+            </DialogContentText>
+            <Autocomplete
+              multiple
+              autoHighlight
+              openOnFocus
+              disablePortal
+              options={jurisdictionOrgUnitOptions}
+              value={jurisdictionForm.orgUnits}
+              inputValue={jurisdictionOrgUnitSearch}
+              loading={jurisdictionOrgUnitLoading}
+              filterOptions={(options) => options}
+              onInputChange={(_event, value) => setJurisdictionOrgUnitSearch(value)}
+              onChange={(_event, value) => {
+                setJurisdictionForm((current) => ({ ...current, orgUnits: uniqOrgUnits(value) }))
+                setJurisdictionOrgUnitOptions((current) => uniqOrgUnits([...value, ...current]))
+              }}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              getOptionLabel={(option) => option.name ?? ''}
+              renderOption={(props, option) => (
+                <Box component="li" {...props}>
+                  <Stack spacing={0.25}>
+                    <Typography variant="body2">{option.name}</Typography>
+                    {formatFacilityPath(option) ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {formatFacilityPath(option)}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                </Box>
+              )}
+              renderInput={(params) => <TextField {...params} label="Organisation Units" placeholder="Search organisation units" required />}
+            />
+            <Autocomplete
+              autoHighlight
+              openOnFocus
+              disablePortal
+              options={reporterGroupOptions}
+              value={reporterGroupOptions.find((item) => item.name === jurisdictionForm.reporterGroup) ?? null}
+              onChange={(_event, value) => setJurisdictionForm((current) => ({ ...current, reporterGroup: value?.name ?? '' }))}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              getOptionLabel={(option) => option.name ?? ''}
+              renderInput={(params) => <TextField {...params} label="Reporter Group" required />}
+            />
+            <TextField
+              label="Message"
+              multiline
+              minRows={4}
+              value={jurisdictionForm.text}
+              onChange={(event) => setJurisdictionForm((current) => ({ ...current, text: event.target.value }))}
+              required
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeJurisdictionDialog} disabled={jurisdictionSubmitting}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={() => void submitJurisdictionBroadcast()} disabled={jurisdictionSubmitting}>
+            {jurisdictionSubmitting ? 'Queueing...' : 'Queue Broadcast'}
           </Button>
         </DialogActions>
       </Dialog>

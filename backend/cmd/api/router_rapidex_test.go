@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -168,6 +169,25 @@ func (r *rapidexReporterRepo) ListByIDs(context.Context, []int64) ([]reporter.Re
 }
 func (r *rapidexReporterRepo) ListUpdatedSince(context.Context, *time.Time, int, bool) ([]reporter.Reporter, error) {
 	return []reporter.Reporter{}, nil
+}
+func (r *rapidexReporterRepo) CountBroadcastRecipients(context.Context, reporter.BroadcastRecipientQuery) (int, error) {
+	return 0, nil
+}
+func (r *rapidexReporterRepo) ListBroadcastRecipients(context.Context, reporter.BroadcastRecipientQuery) ([]reporter.Reporter, error) {
+	return []reporter.Reporter{}, nil
+}
+func (r *rapidexReporterRepo) GetRecentPendingBroadcastByDedupeKey(context.Context, string, time.Time) (reporter.JurisdictionBroadcastRecord, error) {
+	return reporter.JurisdictionBroadcastRecord{}, sql.ErrNoRows
+}
+func (r *rapidexReporterRepo) CreateJurisdictionBroadcast(_ context.Context, item reporter.JurisdictionBroadcastRecord) (reporter.JurisdictionBroadcastRecord, error) {
+	item.ID = 1
+	return item, nil
+}
+func (r *rapidexReporterRepo) ClaimNextJurisdictionBroadcast(context.Context, time.Time, time.Duration, int64) (reporter.JurisdictionBroadcastRecord, error) {
+	return reporter.JurisdictionBroadcastRecord{}, reporter.ErrNoEligibleBroadcast
+}
+func (r *rapidexReporterRepo) UpdateJurisdictionBroadcastResult(_ context.Context, id int64, status string, sentCount int, failedCount int, lastError string, finishedAt time.Time) (reporter.JurisdictionBroadcastRecord, error) {
+	return reporter.JurisdictionBroadcastRecord{ID: id, Status: status, SentCount: sentCount, FailedCount: failedCount, LastError: lastError, FinishedAt: &finishedAt}, nil
 }
 func (r *rapidexReporterRepo) UpdateRapidProStatus(_ context.Context, id int64, rapidProUUID string, synced bool) (reporter.Reporter, error) {
 	return reporter.Reporter{ID: id, RapidProUUID: rapidProUUID, Synced: synced}, nil

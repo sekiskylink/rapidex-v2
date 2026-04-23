@@ -1,5 +1,47 @@
 # Status
 
+## Milestone — Jurisdiction-Scoped Reporter Broadcast Queue (Complete)
+
+### What changed
+- Added a new top-level `Send Message` action to the Reporters page in both web and desktop, styled to match the smaller settings-page action buttons and updated with representative icons.
+- The new action opens a dialog that lets operators:
+  - select one or more organisation units
+  - choose a single reporter group
+  - enter a broadcast message
+- Queueing now follows jurisdiction rules:
+  - selected non-leaf organisation units include all descendant facilities/reporters below them
+  - final recipients are limited to the current user’s permitted jurisdiction
+  - matching reporters are de-duplicated before send
+- Added a new backend queue-backed reporter broadcast flow at `POST /api/v1/reporters/broadcasts`.
+- Added duplicate suppression for identical queued/running broadcasts within a 15-minute window, returning a user-facing `duplicate_pending` response instead of enqueueing a second send.
+- Added a dedicated reporter broadcast worker path so larger recipient sets are processed in the background and users are informed immediately that sending will continue asynchronously.
+- Added the `reporter_broadcasts` migration and persistence for queue state, matching counts, send outcomes, and duplicate detection metadata.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-23-jurisdiction-scoped-reporter-broadcast-queue.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter service coverage for queue creation
+  - duplicate-pending suppression coverage
+  - queued worker processing coverage
+  - API/router stub updates for the new reporter broadcast endpoint
+- Web:
+  - reporters page coverage for the new top-level `Send Message` dialog and queued broadcast submission
+- Desktop:
+  - matching reporters page coverage for the new dialog and duplicate-pending user feedback
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in frontend tests.
+- Existing scheduler/settings test warnings about controlled/uncontrolled select state still appear in frontend suites.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — User Org-Unit Search Shows Ancestor Paths (Complete)
 
 ### What changed

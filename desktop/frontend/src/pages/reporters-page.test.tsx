@@ -411,6 +411,95 @@ describe('desktop reporters page', () => {
     })
   }, 20000)
 
+  it('queues jurisdiction broadcasts from the top send message dialog', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let queuePayload: Record<string, unknown> | null = null
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/v1/auth/me')) {
+        return new Response(
+          JSON.stringify({
+            id: 5,
+            username: 'alice',
+            roles: ['Staff'],
+            permissions: ['reporters.read', 'reporters.write'],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/v1/reporters?')) {
+        return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporter-groups/options')) {
+        return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/orgunits?page=0&pageSize=200')) {
+        return new Response(JSON.stringify({ items: [{ id: 9, name: 'Kampala District', path: '/UG/Kampala/', displayPath: 'Uganda' }], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/orgunits?page=0&pageSize=20&search=Kampala')) {
+        return new Response(JSON.stringify({ items: [{ id: 9, name: 'Kampala District', path: '/UG/Kampala/', displayPath: 'Uganda' }], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporters/broadcasts') && init?.method === 'POST') {
+        queuePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return new Response(JSON.stringify({ status: 'duplicate_pending', message: 'An identical reporter broadcast is already being processed. Please wait for it to finish.', broadcast: { id: 31, matchedCount: 4, status: 'running' } }), {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/bootstrap')) {
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderRoute('/reporters', store)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send Message' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send Message' })
+    const orgUnitsInput = within(dialog).getByRole('combobox', { name: 'Organisation Units' })
+    fireEvent.focus(orgUnitsInput)
+    fireEvent.keyDown(orgUnitsInput, { key: 'ArrowDown' })
+    fireEvent.keyDown(orgUnitsInput, { key: 'Enter' })
+    const reporterGroupInput = within(dialog).getByRole('combobox', { name: 'Reporter Group' })
+    fireEvent.focus(reporterGroupInput)
+    fireEvent.keyDown(reporterGroupInput, { key: 'ArrowDown' })
+    fireEvent.keyDown(reporterGroupInput, { key: 'Enter' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Background hello' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Queue Broadcast' }))
+
+    await waitFor(() => expect(queuePayload).not.toBeNull())
+    expect(queuePayload).toMatchObject({
+      orgUnitIds: [9],
+      reporterGroup: 'Lead',
+      text: 'Background hello',
+    })
+    expect(await screen.findByText(/already being processed/)).toBeInTheDocument()
+  })
+
   it('selects all reporters on the current page from the header checkbox', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

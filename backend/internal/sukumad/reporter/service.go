@@ -2,7 +2,9 @@ package reporter
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -24,6 +26,8 @@ const (
 	defaultRapidProServerCode = "rapidpro"
 	maxRapidProHistoryItems   = 50
 	maxRapidProHistoryPages   = 5
+	broadcastDuplicateWindow  = 15 * time.Minute
+	broadcastClaimTimeout     = time.Minute
 )
 
 type rapidProServerLookup interface {
@@ -563,6 +567,209 @@ func (s *Service) BroadcastMessageForUser(ctx context.Context, userID int64, ids
 		return BroadcastResult{}, mapRapidProRequestError(err)
 	}
 	return BroadcastResult{ReporterIDs: reporterIDs, Message: message}, nil
+}
+
+func (s *Service) QueueJurisdictionBroadcastForUser(ctx context.Context, userID int64, input JurisdictionBroadcastInput) (JurisdictionBroadcastQueueResult, error) {
+	message := strings.TrimSpace(input.Text)
+	if message == "" {
+		return JurisdictionBroadcastQueueResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"text": []string{"is required"}})
+	}
+	group := strings.TrimSpace(input.ReporterGroup)
+	if group == "" {
+		return JurisdictionBroadcastQueueResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"reporterGroup": []string{"is required"}})
+	}
+	orgUnitIDs := normalizeInt64IDs(input.OrgUnitIDs)
+	if len(orgUnitIDs) == 0 {
+		return JurisdictionBroadcastQueueResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"orgUnitIds": []string{"at least one organisation unit is required"}})
+	}
+	if s.groupCatalog != nil {
+		validGroups, err := s.groupCatalog.ValidateActiveNames(ctx, []string{group})
+		if err != nil {
+			return JurisdictionBroadcastQueueResult{}, err
+		}
+		if len(validGroups) == 0 {
+			return JurisdictionBroadcastQueueResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"reporterGroup": []string{"must be an active reporter group"}})
+		}
+		group = validGroups[0]
+	}
+
+	scope, err := s.resolveScope(ctx, userID)
+	if err != nil {
+		return JurisdictionBroadcastQueueResult{}, err
+	}
+	paths, err := s.broadcastOrgUnitPaths(ctx, scope, orgUnitIDs)
+	if err != nil {
+		return JurisdictionBroadcastQueueResult{}, err
+	}
+	matchedCount, err := s.repo.CountBroadcastRecipients(ctx, BroadcastRecipientQuery{
+		OrgUnitPaths:  paths,
+		ReporterGroup: group,
+		OnlyActive:    true,
+	})
+	if err != nil {
+		return JurisdictionBroadcastQueueResult{}, err
+	}
+	if matchedCount == 0 {
+		return JurisdictionBroadcastQueueResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"orgUnitIds":    []string{"No active reporters matched the selected organisation units and reporter group"},
+			"reporterGroup": []string{"No active reporters matched the selected organisation units and reporter group"},
+		})
+	}
+
+	dedupeKey := jurisdictionBroadcastDedupeKey(userID, orgUnitIDs, group, message)
+	since := s.clock().Add(-broadcastDuplicateWindow)
+	existing, err := s.repo.GetRecentPendingBroadcastByDedupeKey(ctx, dedupeKey, since)
+	if err == nil {
+		return JurisdictionBroadcastQueueResult{
+			Status:    BroadcastQueueResultDuplicate,
+			Message:   "An identical reporter broadcast is already being processed. Please wait for it to finish.",
+			Broadcast: existing,
+		}, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return JurisdictionBroadcastQueueResult{}, err
+	}
+
+	now := s.clock()
+	record, err := s.repo.CreateJurisdictionBroadcast(ctx, JurisdictionBroadcastRecord{
+		UID:               newUID(),
+		RequestedByUserID: userID,
+		OrgUnitIDs:        orgUnitIDs,
+		ReporterGroup:     group,
+		MessageText:       message,
+		DedupeKey:         dedupeKey,
+		MatchedCount:      matchedCount,
+		Status:            BroadcastStatusQueued,
+		RequestedAt:       now,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	})
+	if err != nil {
+		return JurisdictionBroadcastQueueResult{}, err
+	}
+	s.logAudit(ctx, audit.Event{
+		Action:     "reporter.broadcast.queued",
+		EntityType: "reporter_broadcast",
+		EntityID:   strPtr(fmt.Sprintf("%d", record.ID)),
+		Metadata: map[string]any{
+			"requestedByUserId": userID,
+			"orgUnitIds":        append([]int64(nil), record.OrgUnitIDs...),
+			"reporterGroup":     record.ReporterGroup,
+			"matchedCount":      record.MatchedCount,
+		},
+	})
+	return JurisdictionBroadcastQueueResult{
+		Status:    BroadcastQueueResultQueued,
+		Message:   "Reporter broadcast queued. Delivery will continue in the background.",
+		Broadcast: record,
+	}, nil
+}
+
+func (s *Service) RunQueuedBroadcasts(ctx context.Context, workerRunID int64, observe func(string, int), batchSize int, claimTimeout time.Duration) error {
+	if batchSize <= 0 {
+		batchSize = 10
+	}
+	if claimTimeout <= 0 {
+		claimTimeout = broadcastClaimTimeout
+	}
+	for i := 0; i < batchSize; i++ {
+		record, err := s.repo.ClaimNextJurisdictionBroadcast(ctx, s.clock(), claimTimeout, workerRunID)
+		if err != nil {
+			if errors.Is(err, ErrNoEligibleBroadcast) {
+				return nil
+			}
+			return err
+		}
+		if observe != nil {
+			observe("claimed", 1)
+		}
+		if err := s.processJurisdictionBroadcast(ctx, record, observe); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) processJurisdictionBroadcast(ctx context.Context, record JurisdictionBroadcastRecord, observe func(string, int)) error {
+	paths, err := s.broadcastOrgUnitPaths(ctx, userorg.Scope{}, record.OrgUnitIDs)
+	if err != nil {
+		if _, updateErr := s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, record.MatchedCount, err.Error(), s.clock()); updateErr != nil {
+			return errors.Join(err, updateErr)
+		}
+		return nil
+	}
+	reporters, err := s.repo.ListBroadcastRecipients(ctx, BroadcastRecipientQuery{
+		OrgUnitPaths:  paths,
+		ReporterGroup: record.ReporterGroup,
+		OnlyActive:    true,
+	})
+	if err != nil {
+		if _, updateErr := s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, record.MatchedCount, err.Error(), s.clock()); updateErr != nil {
+			return errors.Join(err, updateErr)
+		}
+		return nil
+	}
+	if len(reporters) == 0 {
+		_, err = s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, 0, "No active reporters matched at processing time.", s.clock())
+		return err
+	}
+
+	syncResult, syncErr := s.syncReporterBatch(ctx, reporters, false, nil, true)
+	if len(syncResult.Reporters) == 0 {
+		errText := "No reporters could be synchronized for broadcast delivery."
+		if syncErr != nil {
+			errText = syncErr.Error()
+		}
+		_, err = s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, len(reporters), errText, s.clock())
+		return err
+	}
+
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		if _, updateErr := s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, len(reporters), err.Error(), s.clock()); updateErr != nil {
+			return errors.Join(err, updateErr)
+		}
+		return nil
+	}
+	contactUUIDs := make([]string, 0, len(syncResult.Reporters))
+	for _, reporter := range syncResult.Reporters {
+		if uuid := strings.TrimSpace(reporter.RapidProUUID); uuid != "" {
+			contactUUIDs = append(contactUUIDs, uuid)
+		}
+	}
+	if len(contactUUIDs) == 0 {
+		_, err = s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, len(reporters), "No synchronized RapidPro contacts were available for broadcast delivery.", s.clock())
+		return err
+	}
+	if _, err := s.rapidProClient.SendBroadcast(ctx, conn, contactUUIDs, record.MessageText); err != nil {
+		mapped := mapRapidProRequestError(err)
+		if _, updateErr := s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusFailed, 0, len(reporters), mapped.Error(), s.clock()); updateErr != nil {
+			return errors.Join(mapped, updateErr)
+		}
+		return nil
+	}
+	if observe != nil {
+		observe("completed", 1)
+	}
+	failedCount := len(reporters) - len(contactUUIDs)
+	if syncResult.Failed > failedCount {
+		failedCount = syncResult.Failed
+	}
+	if _, err := s.repo.UpdateJurisdictionBroadcastResult(ctx, record.ID, BroadcastStatusCompleted, len(contactUUIDs), failedCount, "", s.clock()); err != nil {
+		return err
+	}
+	s.logAudit(ctx, audit.Event{
+		Action:     "reporter.broadcast.sent.background",
+		EntityType: "reporter_broadcast",
+		EntityID:   strPtr(fmt.Sprintf("%d", record.ID)),
+		Metadata: map[string]any{
+			"matchedCount":  len(reporters),
+			"sentCount":     len(contactUUIDs),
+			"failedCount":   failedCount,
+			"reporterGroup": record.ReporterGroup,
+		},
+	})
+	return nil
 }
 
 func (s *Service) GetRapidProContactDetailsForUser(ctx context.Context, userID, id int64) (RapidProContactDetailsResult, error) {
@@ -1218,6 +1425,100 @@ func normalizeURNs(input []string) []string {
 		return nil
 	}
 	return output
+}
+
+func (s *Service) broadcastOrgUnitPaths(ctx context.Context, scope userorg.Scope, orgUnitIDs []int64) ([]string, error) {
+	if s.orgUnitLookup == nil {
+		return nil, apperror.ValidationWithDetails("validation failed", map[string]any{"orgUnitIds": []string{"Organisation unit lookup is not configured"}})
+	}
+	paths := make([]string, 0, len(orgUnitIDs))
+	for _, id := range orgUnitIDs {
+		unit, err := s.orgUnitLookup.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if scope.Restricted && !userorg.ScopeContainsPath(scope, unit.Path) {
+			return nil, apperror.Forbidden("Organisation unit is outside your assigned jurisdiction")
+		}
+		path := strings.TrimSpace(unit.Path)
+		if path == "" {
+			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{"orgUnitIds": []string{"Selected organisation unit is missing hierarchy path data"}})
+		}
+		paths = append(paths, path)
+	}
+	return normalizeStringValues(paths), nil
+}
+
+func normalizeInt64IDs(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	values := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		values = append(values, id)
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	return values
+}
+
+func normalizeStringValues(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(input))
+	values := make([]string, 0, len(input))
+	for _, item := range input {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		values = append(values, trimmed)
+	}
+	sort.Strings(values)
+	return values
+}
+
+func jurisdictionBroadcastDedupeKey(userID int64, orgUnitIDs []int64, reporterGroup string, message string) string {
+	parts := []string{
+		fmt.Sprintf("user:%d", userID),
+		"orgunits:" + joinInt64IDs(orgUnitIDs),
+		"group:" + strings.ToLower(strings.TrimSpace(reporterGroup)),
+		"text:" + normalizeBroadcastText(message),
+	}
+	digest := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return hex.EncodeToString(digest[:])
+}
+
+func normalizeBroadcastText(message string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(message)), " ")
+}
+
+func joinInt64IDs(values []int64) string {
+	if len(values) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, fmt.Sprintf("%d", value))
+	}
+	return strings.Join(parts, ",")
+}
+
+func newUID() string {
+	digest := sha256.Sum256([]byte(fmt.Sprintf("%d-%d", time.Now().UTC().UnixNano(), time.Now().UTC().Unix())))
+	return hex.EncodeToString(digest[:12])
 }
 
 func settingsTargetName() string {

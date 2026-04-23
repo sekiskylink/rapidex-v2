@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+const (
+	BroadcastStatusQueued         = "queued"
+	BroadcastStatusRunning        = "running"
+	BroadcastStatusCompleted      = "completed"
+	BroadcastStatusFailed         = "failed"
+	BroadcastQueueResultQueued    = "queued"
+	BroadcastQueueResultDuplicate = "duplicate_pending"
+)
+
 // Reporter represents a RapidPro contact that has permission to submit reports.
 type Reporter struct {
 	ID                int64      `db:"id" json:"id"`
@@ -102,6 +111,46 @@ type MessageResult struct {
 type BroadcastResult struct {
 	ReporterIDs []int64 `json:"reporterIds"`
 	Message     string  `json:"message"`
+}
+
+type JurisdictionBroadcastInput struct {
+	OrgUnitIDs    []int64 `json:"orgUnitIds"`
+	ReporterGroup string  `json:"reporterGroup"`
+	Text          string  `json:"text"`
+}
+
+type JurisdictionBroadcastRecord struct {
+	ID                   int64      `db:"id" json:"id"`
+	UID                  string     `db:"uid" json:"uid"`
+	RequestedByUserID    int64      `db:"requested_by_user_id" json:"requestedByUserId"`
+	OrgUnitIDs           []int64    `json:"orgUnitIds"`
+	ReporterGroup        string     `db:"reporter_group" json:"reporterGroup"`
+	MessageText          string     `db:"message_text" json:"messageText"`
+	DedupeKey            string     `db:"dedupe_key" json:"-"`
+	MatchedCount         int        `db:"matched_count" json:"matchedCount"`
+	SentCount            int        `db:"sent_count" json:"sentCount"`
+	FailedCount          int        `db:"failed_count" json:"failedCount"`
+	Status               string     `db:"status" json:"status"`
+	LastError            string     `db:"last_error" json:"lastError"`
+	RequestedAt          time.Time  `db:"requested_at" json:"requestedAt"`
+	StartedAt            *time.Time `db:"started_at" json:"startedAt,omitempty"`
+	FinishedAt           *time.Time `db:"finished_at" json:"finishedAt,omitempty"`
+	ClaimedAt            *time.Time `db:"claimed_at" json:"claimedAt,omitempty"`
+	ClaimedByWorkerRunID *int64     `db:"claimed_by_worker_run_id" json:"claimedByWorkerRunId,omitempty"`
+	CreatedAt            time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt            time.Time  `db:"updated_at" json:"updatedAt"`
+}
+
+type JurisdictionBroadcastQueueResult struct {
+	Status    string                      `json:"status"`
+	Message   string                      `json:"message"`
+	Broadcast JurisdictionBroadcastRecord `json:"broadcast"`
+}
+
+type BroadcastRecipientQuery struct {
+	OrgUnitPaths  []string
+	ReporterGroup string
+	OnlyActive    bool
 }
 
 type RapidProContactSnapshot struct {

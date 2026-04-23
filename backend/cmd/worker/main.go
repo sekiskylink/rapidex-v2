@@ -22,12 +22,15 @@ import (
 	"basepro/backend/internal/sukumad/dhis2"
 	"basepro/backend/internal/sukumad/ingest"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	"basepro/backend/internal/sukumad/reporter"
+	"basepro/backend/internal/sukumad/reportergroup"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
 	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/userorg"
 	"basepro/backend/internal/sukumad/worker"
 )
 
@@ -112,6 +115,14 @@ func run() error {
 	sukumadSchedulerService := scheduler.NewService(scheduler.NewRepository(database), auditService)
 	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database), auditService).
 		WithRapidProIntegration(sukumadServerService, rapidpro.NewClient(nil))
+	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
+	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database)).WithScopeResolver(sukumadUserOrgUnitService)
+	sukumadReporterGroupService := reportergroup.NewService(reportergroup.NewSQLRepository(database)).
+		WithRapidProIntegration(sukumadServerService, rapidpro.NewClient(nil))
+	sukumadReporterService = sukumadReporterService.
+		WithOrgUnitLookup(sukumadOrgUnitService).
+		WithReporterGroupCatalog(sukumadReporterGroupService).
+		WithScopeResolver(sukumadUserOrgUnitService)
 	sukumadIngestService := ingest.NewService(ingest.NewRepository(database), sukumadRequestService, auditService)
 	sukumadDeliveryService := delivery.NewService(delivery.NewRepository(database), auditService).
 		WithDispatcher(sukumadDHIS2Service).
@@ -191,6 +202,14 @@ func run() error {
 	retentionDef.Interval = time.Duration(workerCfg.Retention.IntervalSeconds) * time.Second
 	retentionDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 
+	reporterBroadcastDef := worker.NewReporterBroadcastDefinition(
+		sukumadReporterService,
+		workerCfg.Send.BatchSize,
+		time.Duration(workerCfg.Poll.ClaimTimeoutSeconds)*time.Second,
+	)
+	reporterBroadcastDef.Interval = time.Duration(workerCfg.Send.IntervalSeconds) * time.Second
+	reporterBroadcastDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
+
 	schedulerDef := worker.NewSchedulerDefinition(sukumadSchedulerService, config.Get().Sukumad.Scheduler.Worker.BatchSize)
 	schedulerDef.Interval = time.Duration(config.Get().Sukumad.Scheduler.Worker.IntervalSeconds) * time.Second
 	schedulerDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
@@ -217,7 +236,7 @@ func run() error {
 	ingestDef.Interval = time.Second
 	ingestDef.HeartbeatInterval = time.Duration(workerCfg.HeartbeatSeconds) * time.Second
 
-	manager := worker.NewManager(sukumadWorkerService, ingestDef, sendDef, retryDef, pollDef, retentionDef, schedulerDef)
+	manager := worker.NewManager(sukumadWorkerService, ingestDef, sendDef, retryDef, pollDef, retentionDef, reporterBroadcastDef, schedulerDef)
 	errCh := manager.Start(ctx)
 	dispatchErrCh := make(chan error, 1)
 	go func() {
