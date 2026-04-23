@@ -1,5 +1,47 @@
 # Status
 
+## Milestone — Reporter Informational Detail, RapidPro Snapshot, and Chat History (Complete)
+
+### What changed
+- Reworked the Reporters `View details` action in both web and desktop so it now opens an informational detail dialog instead of rendering disabled form controls.
+- Added authenticated backend reporter endpoints for:
+  - `GET /api/v1/reporters/:id/rapidpro-contact`
+  - `GET /api/v1/reporters/:id/chat-history`
+- Extended the RapidPro client and reporter service so the backend can:
+  - fetch a richer synced-contact snapshot
+  - fetch recent message history and normalize it into a reporter conversation timeline
+  - fall back safely when a local RapidPro UUID is missing or stale
+- Added a new `View RapidPro Details` reporter row action in both web and desktop, with empty/error states when a reporter is not synced or no remote contact is found.
+- Changed the Reporters `Telephone` column in both web and desktop into an interactive link that opens a conversation-style chat history dialog with message direction, timestamps, statuses, and channel badges.
+- Updated RapidPro reporter sync notes and saved a prompt traceability copy in `docs/prompts/2026-04-23-reporter-details-rapidpro-chat-history.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter service coverage for RapidPro contact snapshot lookup by UUID
+  - reporter service coverage for normalized reporter chat-history mapping
+  - router auth coverage for the new reporter RapidPro read endpoints
+- Web:
+  - reporters page coverage for the informational detail dialog
+  - reporters page coverage for the RapidPro details dialog
+  - reporters page coverage for the telephone-triggered chat history dialog
+- Desktop:
+  - matching reporters page coverage for informational details, RapidPro details, and chat history
+  - route smoke coverage remains green with the new reporter actions in place
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Reporter chat history currently shows the recent RapidPro message page only; there is no pagination or “load more” flow yet.
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in some frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — RapidEx Reporter Group Catalog and RapidPro Auto-Provisioning (Complete)
 
 ### What changed

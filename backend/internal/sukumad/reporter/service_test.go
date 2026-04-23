@@ -88,17 +88,27 @@ type reporterRapidProClient struct {
 	groupLookupSet    bool
 	messageCalls      int
 	lastUpsertInput   rapidpro.UpsertContactInput
+	uuidContact       rapidpro.Contact
+	urnContact        rapidpro.Contact
+	messages          []rapidpro.Message
+	messagesNext      string
 }
 
 func (c *reporterRapidProClient) LookupContactByUUID(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
 	if !c.lookupByUUIDFound {
 		return rapidpro.Contact{}, false, nil
 	}
+	if strings.TrimSpace(c.uuidContact.UUID) != "" {
+		return c.uuidContact, true, nil
+	}
 	return rapidpro.Contact{UUID: "contact-existing"}, true, nil
 }
 func (c *reporterRapidProClient) LookupContactByURN(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
 	if !c.lookupByURNFound {
 		return rapidpro.Contact{}, false, nil
+	}
+	if strings.TrimSpace(c.urnContact.UUID) != "" {
+		return c.urnContact, true, nil
 	}
 	return rapidpro.Contact{UUID: "contact-by-urn"}, true, nil
 }
@@ -124,6 +134,9 @@ func (c *reporterRapidProClient) SendMessage(context.Context, rapidpro.Connectio
 }
 func (c *reporterRapidProClient) SendBroadcast(context.Context, rapidpro.Connection, []string, string) (rapidpro.Broadcast, error) {
 	return rapidpro.Broadcast{}, nil
+}
+func (c *reporterRapidProClient) ListMessages(context.Context, rapidpro.Connection, map[string]string) ([]rapidpro.Message, string, error) {
+	return append([]rapidpro.Message(nil), c.messages...), c.messagesNext, nil
 }
 
 type reporterSettingsProvider struct {
@@ -495,6 +508,10 @@ func (c *reporterRapidProClientWithUpsertError) SendBroadcast(ctx context.Contex
 	return c.delegate.SendBroadcast(ctx, conn, contactUUIDs, text)
 }
 
+func (c *reporterRapidProClientWithUpsertError) ListMessages(ctx context.Context, conn rapidpro.Connection, query map[string]string) ([]rapidpro.Message, string, error) {
+	return c.delegate.ListMessages(ctx, conn, query)
+}
+
 func TestSyncReporterFailsWhenRapidProFieldMappingIsInvalid(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{
@@ -736,6 +753,177 @@ func TestBuildRapidProReporterSyncPreviewReturnsRequestShape(t *testing.T) {
 	}
 	if len(preview.ResolvedGroups) != 1 || preview.ResolvedGroups[0].UUID != "group-Lead" {
 		t.Fatalf("expected resolved group preview, got %#v", preview.ResolvedGroups)
+	}
+}
+
+func TestGetRapidProContactDetailsUsesUUIDAndMapsSnapshot(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:           1,
+				Name:         "Alice Reporter",
+				Telephone:    "+256700000001",
+				OrgUnitID:    2,
+				RapidProUUID: "contact-existing",
+				IsActive:     true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{
+		lookupByUUIDFound: true,
+		uuidContact: rapidpro.Contact{
+			UUID:       "contact-existing",
+			Name:       "Alice Reporter",
+			Status:     "active",
+			Language:   "eng",
+			URNs:       []string{"tel:+256700000001"},
+			Groups:     []rapidpro.Group{{UUID: "group-1", Name: "Lead"}},
+			Fields:     map[string]string{"Facility": "Kampala Health Centre"},
+			Flow:       &rapidpro.Flow{UUID: "flow-1", Name: "Registration"},
+			CreatedOn:  "2026-04-20T09:00:00Z",
+			ModifiedOn: "2026-04-22T09:00:00Z",
+			LastSeenOn: "2026-04-23T09:00:00Z",
+		},
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	details, err := service.GetRapidProContactDetails(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("get rapidpro contact details: %v", err)
+	}
+	if !details.Found || details.Contact == nil {
+		t.Fatalf("expected remote contact to be found, got %+v", details)
+	}
+	if details.Contact.Status != "active" || details.Contact.Language != "eng" {
+		t.Fatalf("unexpected contact snapshot: %+v", details.Contact)
+	}
+	if details.Contact.Flow == nil || details.Contact.Flow.Name != "Registration" {
+		t.Fatalf("expected flow to be mapped, got %+v", details.Contact)
+	}
+	if details.Contact.Fields["Facility"] != "Kampala Health Centre" {
+		t.Fatalf("expected custom fields to be preserved, got %+v", details.Contact.Fields)
+	}
+}
+
+func TestGetRapidProMessageHistoryFiltersToReporterConversation(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:           1,
+				Name:         "Alice Reporter",
+				Telephone:    "+256700000001",
+				OrgUnitID:    2,
+				RapidProUUID: "contact-existing",
+				IsActive:     true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{
+		lookupByUUIDFound: true,
+		uuidContact: rapidpro.Contact{
+			UUID: "contact-existing",
+			Name: "Alice Reporter",
+			URNs: []string{"tel:+256700000001"},
+		},
+		messages: []rapidpro.Message{
+			{
+				ID:         10,
+				Direction:  "incoming",
+				Status:     "handled",
+				Text:       "Hello there",
+				URN:        "tel:+256700000001",
+				CreatedOn:  "2026-04-22T10:00:00Z",
+				ModifiedOn: "2026-04-22T10:01:00Z",
+				Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
+			},
+			{
+				ID:         11,
+				Direction:  "outgoing",
+				Status:     "sent",
+				Text:       "Thanks",
+				URN:        "tel:+256700000001",
+				CreatedOn:  "2026-04-22T10:05:00Z",
+				ModifiedOn: "2026-04-22T10:06:00Z",
+				Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
+				Channel:    &rapidpro.Channel{UUID: "chan-1", Name: "Vonage"},
+			},
+			{
+				ID:         12,
+				Direction:  "incoming",
+				Status:     "handled",
+				Text:       "Ignore me",
+				URN:        "tel:+256700000099",
+				CreatedOn:  "2026-04-22T10:10:00Z",
+				ModifiedOn: "2026-04-22T10:11:00Z",
+				Contact:    rapidpro.Contact{UUID: "contact-other", Name: "Other"},
+			},
+		},
+		messagesNext: "https://rapidpro.example.com/api/v2/messages.json?cursor=next",
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	history, err := service.GetRapidProMessageHistory(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("get rapidpro message history: %v", err)
+	}
+	if !history.Found {
+		t.Fatalf("expected reporter contact to be found")
+	}
+	if len(history.Items) != 2 {
+		t.Fatalf("expected two matching messages, got %+v", history.Items)
+	}
+	if history.Items[0].Direction != "incoming" || history.Items[1].Direction != "outgoing" {
+		t.Fatalf("unexpected directions: %+v", history.Items)
+	}
+	if history.Items[1].Channel == nil || history.Items[1].Channel.Name != "Vonage" {
+		t.Fatalf("expected channel metadata, got %+v", history.Items[1])
+	}
+	if history.Next == "" {
+		t.Fatalf("expected next cursor to be preserved")
+	}
+}
+
+func TestGetRapidProMessageHistoryReturnsEmptyWhenContactMissing(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, &reporterRapidProClient{})
+
+	history, err := service.GetRapidProMessageHistory(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("get rapidpro message history: %v", err)
+	}
+	if history.Found {
+		t.Fatalf("expected missing remote contact")
+	}
+	if len(history.Items) != 0 {
+		t.Fatalf("expected no history items, got %+v", history.Items)
 	}
 }
 

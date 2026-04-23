@@ -21,6 +21,13 @@ import { DataGrid } from '@mui/x-data-grid'
 import { useApiClient } from '../api/useApiClient'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { handleAppError } from '../errors/handleAppError'
+import {
+  ChatHistoryDialog,
+  RapidProDetailsDialog,
+  ReporterDetailsDialog,
+  type RapidProContactDetailsResponse,
+  type RapidProMessageHistoryResponse,
+} from './reporter-dialogs'
 
 interface Reporter {
   id: number
@@ -132,6 +139,14 @@ export function ReportersPage() {
   const [messageDialog, setMessageDialog] = React.useState<MessageDialogState | null>(null)
   const [messageText, setMessageText] = React.useState('')
   const [messageSending, setMessageSending] = React.useState(false)
+  const [rapidProReporter, setRapidProReporter] = React.useState<Reporter | null>(null)
+  const [rapidProDetails, setRapidProDetails] = React.useState<RapidProContactDetailsResponse | null>(null)
+  const [rapidProDetailsLoading, setRapidProDetailsLoading] = React.useState(false)
+  const [rapidProDetailsError, setRapidProDetailsError] = React.useState('')
+  const [chatHistoryReporter, setChatHistoryReporter] = React.useState<Reporter | null>(null)
+  const [chatHistory, setChatHistory] = React.useState<RapidProMessageHistoryResponse | null>(null)
+  const [chatHistoryLoading, setChatHistoryLoading] = React.useState(false)
+  const [chatHistoryError, setChatHistoryError] = React.useState('')
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -164,6 +179,43 @@ export function ReportersPage() {
     [form.groups, reporterGroupOptions],
   )
 
+  const getOrgUnitName = React.useCallback((id?: number | null) => {
+    if (!id) {
+      return ''
+    }
+    return orgUnits.find((unit) => unit.id === id)?.name ?? String(id)
+  }, [orgUnits])
+
+  const openRapidProDetails = React.useCallback(async (reporter: Reporter) => {
+    setRapidProReporter(reporter)
+    setRapidProDetails(null)
+    setRapidProDetailsError('')
+    setRapidProDetailsLoading(true)
+    try {
+      const response = await apiClient.request<RapidProContactDetailsResponse>(`/api/v1/reporters/${reporter.id}/rapidpro-contact`)
+      setRapidProDetails(response)
+    } catch (detailError) {
+      setRapidProDetailsError(detailError instanceof Error ? detailError.message : 'Unable to load RapidPro contact details.')
+    } finally {
+      setRapidProDetailsLoading(false)
+    }
+  }, [apiClient])
+
+  const openChatHistoryDialog = React.useCallback(async (reporter: Reporter) => {
+    setChatHistoryReporter(reporter)
+    setChatHistory(null)
+    setChatHistoryError('')
+    setChatHistoryLoading(true)
+    try {
+      const response = await apiClient.request<RapidProMessageHistoryResponse>(`/api/v1/reporters/${reporter.id}/chat-history`)
+      setChatHistory(response)
+    } catch (historyError) {
+      setChatHistoryError(historyError instanceof Error ? historyError.message : 'Unable to load chat history.')
+    } finally {
+      setChatHistoryLoading(false)
+    }
+  }, [apiClient])
+
   const columns = React.useMemo<GridColDef<Reporter>[]>(
     () => [
       {
@@ -185,7 +237,24 @@ export function ReportersPage() {
         ),
       },
       { field: 'name', headerName: 'Reporter', flex: 1, minWidth: 180 },
-      { field: 'telephone', headerName: 'Telephone', width: 150 },
+      {
+        field: 'telephone',
+        headerName: 'Telephone',
+        width: 170,
+        renderCell: ({ row }) =>
+          row.telephone ? (
+            <Button
+              size="small"
+              variant="text"
+              sx={{ p: 0, minWidth: 0, justifyContent: 'flex-start', textTransform: 'none' }}
+              onClick={() => void openChatHistoryDialog(row)}
+            >
+              {row.telephone}
+            </Button>
+          ) : (
+            '-'
+          ),
+      },
       {
         field: 'syncStatus',
         headerName: 'Sync Status',
@@ -205,14 +274,14 @@ export function ReportersPage() {
         headerName: 'Facility',
         flex: 1,
         minWidth: 180,
-        valueGetter: (_value, row) => orgUnits.find((unit) => unit.id === row.orgUnitId)?.name ?? '',
+        valueGetter: (_value, row) => getOrgUnitName(row.orgUnitId),
       },
       { field: 'groups', headerName: 'Groups', flex: 1, minWidth: 160, valueGetter: (_value, row) => row.groups.join(', ') },
       { field: 'isActive', headerName: 'Active', width: 100, type: 'boolean' },
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 120,
+        width: 140,
         sortable: false,
         filterable: false,
         renderCell: ({ row }) => (
@@ -220,6 +289,7 @@ export function ReportersPage() {
             rowLabel={row.name}
             actions={[
               { id: 'view', label: 'View details', icon: 'view', onClick: () => setViewing(row) },
+              { id: 'rapidpro', label: 'View RapidPro Details', onClick: () => void openRapidProDetails(row) },
               { id: 'edit', label: 'Edit', icon: 'edit', onClick: () => openDialog(row) },
               { id: 'sync', label: 'Sync to RapidPro', onClick: () => void syncReporter(row.id) },
               { id: 'send', label: 'Send SMS', onClick: () => openMessageDialog('single', row) },
@@ -237,7 +307,7 @@ export function ReportersPage() {
         ),
       },
     ],
-    [orgUnits, selectedIds],
+    [getOrgUnitName, openChatHistoryDialog, openRapidProDetails, selectedIds],
   )
 
   function openDialog(reporter?: Reporter) {
@@ -417,45 +487,41 @@ export function ReportersPage() {
         sx={dataGridSx}
       />
 
-      <Dialog open={Boolean(viewing)} onClose={() => setViewing(null)} fullWidth maxWidth="md">
-        <DialogTitle>Reporter Details</DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              pt: 1,
-              display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-            }}
-          >
-            <TextField label="Name" value={viewing?.name ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Telephone" value={viewing?.telephone ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="WhatsApp" value={viewing?.whatsapp ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Telegram" value={viewing?.telegram ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="UID" value={viewing?.uid ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="RapidPro UUID" value={viewing?.rapidProUuid ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Facility" value={viewing ? orgUnits.find((unit) => unit.id === viewing.orgUnitId)?.name ?? String(viewing.orgUnitId) : ''} InputProps={{ readOnly: true }} />
-            <TextField label="Reporting Location" value={viewing?.reportingLocation ?? ''} InputProps={{ readOnly: true }} />
-            <TextField
-              label="District"
-              value={viewing?.districtId ? orgUnits.find((unit) => unit.id === viewing.districtId)?.name ?? String(viewing.districtId) : ''}
-              InputProps={{ readOnly: true }}
-            />
-            <TextField label="Last Login" value={viewing?.lastLoginAt ? new Date(viewing.lastLoginAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
-            <TextField label="Total Reports" value={String(viewing?.totalReports ?? 0)} InputProps={{ readOnly: true }} />
-            <TextField label="Last Reporting Date" value={viewing?.lastReportingDate ? new Date(viewing.lastReportingDate).toLocaleString() : ''} InputProps={{ readOnly: true }} />
-            <TextField label="SMS Code" value={viewing?.smsCode ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="SMS Code Expires At" value={viewing?.smsCodeExpiresAt ? new Date(viewing.smsCodeExpiresAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
-            <TextField label="MT UUID" value={viewing?.mtuuid ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Created At" value={viewing?.createdAt ? new Date(viewing.createdAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
-            <TextField label="Updated At" value={viewing?.updatedAt ? new Date(viewing.updatedAt).toLocaleString() : ''} InputProps={{ readOnly: true }} />
-            <TextField label="Reporter Groups" value={viewing?.groups?.join(', ') ?? ''} InputProps={{ readOnly: true }} sx={{ gridColumn: '1 / -1' }} />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewing(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <ReporterDetailsDialog
+        open={Boolean(viewing)}
+        reporter={viewing}
+        facilityName={getOrgUnitName(viewing?.orgUnitId)}
+        districtName={getOrgUnitName(viewing?.districtId)}
+        onClose={() => setViewing(null)}
+      />
+
+      <RapidProDetailsDialog
+        open={Boolean(rapidProReporter)}
+        reporter={rapidProReporter}
+        loading={rapidProDetailsLoading}
+        error={rapidProDetailsError}
+        details={rapidProDetails}
+        onClose={() => {
+          setRapidProReporter(null)
+          setRapidProDetails(null)
+          setRapidProDetailsError('')
+          setRapidProDetailsLoading(false)
+        }}
+      />
+
+      <ChatHistoryDialog
+        open={Boolean(chatHistoryReporter)}
+        reporter={chatHistoryReporter}
+        loading={chatHistoryLoading}
+        error={chatHistoryError}
+        history={chatHistory}
+        onClose={() => {
+          setChatHistoryReporter(null)
+          setChatHistory(null)
+          setChatHistoryError('')
+          setChatHistoryLoading(false)
+        }}
+      />
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="lg">
         <DialogTitle>{editing ? 'Edit Reporter' : 'New Reporter'}</DialogTitle>
@@ -505,7 +571,7 @@ export function ReportersPage() {
             <TextField label="Reporting Location" value={editing?.reportingLocation ?? 'Derived from facility'} InputProps={{ readOnly: true }} />
             <TextField
               label="District"
-              value={editing?.districtId ? orgUnits.find((unit) => unit.id === editing.districtId)?.name ?? String(editing.districtId) : 'Derived from hierarchy'}
+              value={editing?.districtId ? getOrgUnitName(editing.districtId) : 'Derived from hierarchy'}
               InputProps={{ readOnly: true }}
             />
             <TextField label="Total Reports" value={editing?.totalReports ?? 0} InputProps={{ readOnly: true }} />

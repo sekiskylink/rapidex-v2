@@ -42,6 +42,15 @@ func TestRapidexRoutesRequireAuthAndPermissions(t *testing.T) {
 			t.Fatalf("expected %s with permission to return 200, got %d body=%s", path, w.Code, w.Body.String())
 		}
 	}
+
+	for _, path := range []string{"/api/v1/reporters/1/rapidpro-contact", "/api/v1/reporters/1/chat-history"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected %s without auth to return 401, got %d", path, w.Code)
+		}
+	}
 }
 
 func TestRapidexRoutesRejectMissingPermission(t *testing.T) {

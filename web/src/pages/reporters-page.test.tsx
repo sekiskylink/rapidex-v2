@@ -101,6 +101,61 @@ function buildReporter() {
   }
 }
 
+function buildRapidProDetails() {
+  return {
+    reporter: buildReporter(),
+    found: true,
+    contact: {
+      uuid: 'rapidpro-11',
+      name: 'Alice Reporter',
+      status: 'active',
+      language: 'eng',
+      urns: ['tel:+256700000001'],
+      groups: [{ uuid: 'group-lead', name: 'Lead' }],
+      fields: { Facility: 'Kampala Health Centre' },
+      flow: { uuid: 'flow-1', name: 'Registration' },
+      createdOn: '2026-04-01T08:00:00Z',
+      modifiedOn: '2026-04-12T08:00:00Z',
+      lastSeenOn: '2026-04-13T08:00:00Z',
+    },
+  }
+}
+
+function buildChatHistory() {
+  return {
+    reporter: buildReporter(),
+    found: true,
+    items: [
+      {
+        id: 1,
+        direction: 'incoming',
+        type: 'text',
+        status: 'handled',
+        visibility: 'visible',
+        text: 'Hello there',
+        urn: 'tel:+256700000001',
+        createdOn: '2026-04-12T08:00:00Z',
+        sentOn: '',
+        modifiedOn: '2026-04-12T08:00:00Z',
+      },
+      {
+        id: 2,
+        direction: 'outgoing',
+        type: 'text',
+        status: 'sent',
+        visibility: 'visible',
+        text: 'Thanks for reporting',
+        urn: 'tel:+256700000001',
+        channel: { uuid: 'chan-1', name: 'Vonage' },
+        flow: { uuid: 'flow-1', name: 'Registration' },
+        createdOn: '2026-04-12T08:05:00Z',
+        sentOn: '2026-04-12T08:05:30Z',
+        modifiedOn: '2026-04-12T08:05:30Z',
+      },
+    ],
+  }
+}
+
 describe('reporters page', () => {
   let apiRequestSpy: MockInstance
 
@@ -280,6 +335,52 @@ describe('reporters page', () => {
       reporterIds: [11],
       text: 'Test broadcast',
     })
+  })
+
+  it('shows informational reporter details, RapidPro details, and chat history dialogs', async () => {
+    authenticate(['reporters.read', 'reporters.write'])
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }, { id: 9, name: 'Kampala District' }], totalCount: 2, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/11/rapidpro-contact' && (!init?.method || init.method === 'GET')) {
+        return buildRapidProDetails()
+      }
+      if (path === '/reporters/11/chat-history' && (!init?.method || init.method === 'GET')) {
+        return buildChatHistory()
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View details' }))
+    const detailsDialog = await screen.findByRole('dialog', { name: 'Reporter Details' })
+    expect(within(detailsDialog).getByText('RapidPro synced')).toBeInTheDocument()
+    expect(within(detailsDialog).getByText('Contact Channels')).toBeInTheDocument()
+    expect(within(detailsDialog).getAllByText('Kampala Health Centre').length).toBeGreaterThan(0)
+    fireEvent.click(within(detailsDialog).getByRole('button', { name: 'Close' }))
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View RapidPro Details' }))
+    const rapidProDialog = await screen.findByRole('dialog', { name: 'RapidPro Contact Details' })
+    expect(within(rapidProDialog).getByText('Language: eng')).toBeInTheDocument()
+    expect(within(rapidProDialog).getByText(/Registration/)).toBeInTheDocument()
+    expect(within(rapidProDialog).getByText('Facility')).toBeInTheDocument()
+    fireEvent.click(within(rapidProDialog).getByRole('button', { name: 'Close' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: '+256700000001' }))
+    const chatDialog = await screen.findByRole('dialog', { name: 'Reporter Chat History' })
+    expect(within(chatDialog).getByText('Hello there')).toBeInTheDocument()
+    expect(within(chatDialog).getByText('Thanks for reporting')).toBeInTheDocument()
+    expect(within(chatDialog).getByText('Vonage')).toBeInTheDocument()
   })
 
   it('shows actionable sync validation detail in the error banner', async () => {

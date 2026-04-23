@@ -35,11 +35,43 @@ type Group struct {
 	Name string `json:"name"`
 }
 
+type Flow struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type Channel struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type Attachment struct {
+	ContentType string `json:"content_type"`
+	URL         string `json:"url"`
+}
+
+type QuickReply struct {
+	Text  string `json:"text"`
+	Extra string `json:"extra"`
+}
+
+type Label struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
 type Contact struct {
-	UUID   string   `json:"uuid"`
-	Name   string   `json:"name"`
-	URNs   []string `json:"urns"`
-	Groups []Group  `json:"groups"`
+	UUID       string            `json:"uuid"`
+	Name       string            `json:"name"`
+	Status     string            `json:"status"`
+	Language   string            `json:"language"`
+	URNs       []string          `json:"urns"`
+	Groups     []Group           `json:"groups"`
+	Fields     map[string]string `json:"fields"`
+	Flow       *Flow             `json:"flow"`
+	CreatedOn  string            `json:"created_on"`
+	ModifiedOn string            `json:"modified_on"`
+	LastSeenOn string            `json:"last_seen_on"`
 }
 
 type ContactField struct {
@@ -49,9 +81,23 @@ type ContactField struct {
 }
 
 type Message struct {
-	ID      int64   `json:"id"`
-	Text    string  `json:"text"`
-	Contact Contact `json:"contact"`
+	ID           int64        `json:"id"`
+	BroadcastID  *int64       `json:"broadcast"`
+	Contact      Contact      `json:"contact"`
+	URN          string       `json:"urn"`
+	Channel      *Channel     `json:"channel"`
+	Direction    string       `json:"direction"`
+	Type         string       `json:"type"`
+	Status       string       `json:"status"`
+	Visibility   string       `json:"visibility"`
+	Text         string       `json:"text"`
+	Attachments  []Attachment `json:"attachments"`
+	QuickReplies []QuickReply `json:"quick_replies"`
+	Labels       []Label      `json:"labels"`
+	Flow         *Flow        `json:"flow"`
+	CreatedOn    string       `json:"created_on"`
+	SentOn       string       `json:"sent_on"`
+	ModifiedOn   string       `json:"modified_on"`
 }
 
 type Broadcast struct {
@@ -69,6 +115,12 @@ type UpsertContactInput struct {
 
 type listResponse[T any] struct {
 	Results []T `json:"results"`
+}
+
+type paginatedResponse[T any] struct {
+	Next     string `json:"next"`
+	Previous string `json:"previous"`
+	Results  []T    `json:"results"`
 }
 
 type RequestError struct {
@@ -190,6 +242,14 @@ func (c *Client) SendBroadcast(ctx context.Context, conn Connection, contactUUID
 		return Broadcast{}, err
 	}
 	return broadcast, nil
+}
+
+func (c *Client) ListMessages(ctx context.Context, conn Connection, query map[string]string) ([]Message, string, error) {
+	var response paginatedResponse[Message]
+	if err := c.doJSON(ctx, conn, http.MethodGet, "/messages.json", query, nil, &response); err != nil {
+		return nil, "", err
+	}
+	return response.Results, response.Next, nil
 }
 
 func (c *Client) listContacts(ctx context.Context, conn Connection, query map[string]string) ([]Contact, error) {

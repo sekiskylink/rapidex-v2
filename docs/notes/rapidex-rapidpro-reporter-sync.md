@@ -60,3 +60,30 @@
 - Web and desktop navigation now use distinct icons for every visible Rapidex link, including the parent Sukumad section and the new org-unit/reporter links.
 - Web and desktop Reporters pages now expose row actions and bulk actions for RapidPro operations while keeping `rapidProUuid` read-only in the edit form.
 - Web and desktop scheduler forms now support creating and editing `rapidpro_reporter_sync` jobs.
+
+## Reporter details and chat history
+- Added backend reporter read endpoints for RapidPro-linked detail views:
+  - `GET /api/v1/reporters/:id/rapidpro-contact`
+  - `GET /api/v1/reporters/:id/chat-history`
+- Reporter contact detail lookup reuses the existing sync identity rules:
+  - prefer stored `rapidpro_uuid` when present and valid
+  - fall back to normalized `tel:` URN lookup when the UUID is missing or stale
+- RapidPro contact snapshots now expose richer read fields for UI inspection, including:
+  - status
+  - language
+  - custom fields
+  - current flow
+  - groups
+  - created/modified/last-seen timestamps
+- Reporter chat history reads recent RapidPro messages and normalizes them into a UI-safe conversation timeline with:
+  - direction
+  - status
+  - text
+  - channel
+  - flow
+  - created/sent/modified timestamps
+- The current implementation filters the recent RapidPro message page to the reporter conversation and does not yet provide message pagination.
+- Web and desktop Reporters pages now:
+  - use an informational detail dialog for `View details`
+  - expose a dedicated `View RapidPro Details` action
+  - open a conversation-style chat history dialog from the `Telephone` column

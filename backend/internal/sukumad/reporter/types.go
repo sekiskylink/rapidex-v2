@@ -101,3 +101,56 @@ type BroadcastResult struct {
 	ReporterIDs []int64 `json:"reporterIds"`
 	Message     string  `json:"message"`
 }
+
+type RapidProContactSnapshot struct {
+	UUID       string            `json:"uuid"`
+	Name       string            `json:"name"`
+	Status     string            `json:"status"`
+	Language   string            `json:"language"`
+	URNs       []string          `json:"urns"`
+	Groups     []RapidProGroup   `json:"groups"`
+	Fields     map[string]string `json:"fields"`
+	Flow       *RapidProFlow     `json:"flow,omitempty"`
+	CreatedOn  string            `json:"createdOn"`
+	ModifiedOn string            `json:"modifiedOn"`
+	LastSeenOn string            `json:"lastSeenOn"`
+}
+
+type RapidProGroup struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type RapidProFlow struct {
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+}
+
+type RapidProContactDetailsResult struct {
+	Reporter Reporter                 `json:"reporter"`
+	Found    bool                     `json:"found"`
+	Contact  *RapidProContactSnapshot `json:"contact,omitempty"`
+}
+
+type RapidProMessageRecord struct {
+	ID          int64         `json:"id"`
+	BroadcastID *int64        `json:"broadcastId,omitempty"`
+	Direction   string        `json:"direction"`
+	Type        string        `json:"type"`
+	Status      string        `json:"status"`
+	Visibility  string        `json:"visibility"`
+	Text        string        `json:"text"`
+	URN         string        `json:"urn"`
+	Channel     *RapidProFlow `json:"channel,omitempty"`
+	Flow        *RapidProFlow `json:"flow,omitempty"`
+	CreatedOn   string        `json:"createdOn"`
+	SentOn      string        `json:"sentOn"`
+	ModifiedOn  string        `json:"modifiedOn"`
+}
+
+type RapidProMessageHistoryResult struct {
+	Reporter Reporter                `json:"reporter"`
+	Found    bool                    `json:"found"`
+	Items    []RapidProMessageRecord `json:"items"`
+	Next     string                  `json:"next,omitempty"`
+}

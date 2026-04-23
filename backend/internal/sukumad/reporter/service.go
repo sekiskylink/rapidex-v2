@@ -31,6 +31,7 @@ type rapidProClient interface {
 	CreateGroup(context.Context, rapidpro.Connection, string) (rapidpro.Group, error)
 	SendMessage(context.Context, rapidpro.Connection, string, string) (rapidpro.Message, error)
 	SendBroadcast(context.Context, rapidpro.Connection, []string, string) (rapidpro.Broadcast, error)
+	ListMessages(context.Context, rapidpro.Connection, map[string]string) ([]rapidpro.Message, string, error)
 }
 
 type rapidProReporterSyncSettingsProvider interface {
@@ -169,6 +170,73 @@ func (s *Service) BuildRapidProReporterSyncPreview(ctx context.Context, id int64
 		ResolvedGroups: built.ResolvedGroups,
 	}
 	return preview, nil
+}
+
+func (s *Service) GetRapidProContactDetails(ctx context.Context, id int64) (RapidProContactDetailsResult, error) {
+	reporter, err := s.Get(ctx, id)
+	if err != nil {
+		return RapidProContactDetailsResult{}, err
+	}
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return RapidProContactDetailsResult{}, err
+	}
+	contact, found, err := s.lookupRapidProContact(ctx, conn, reporter)
+	if err != nil {
+		return RapidProContactDetailsResult{}, err
+	}
+	result := RapidProContactDetailsResult{
+		Reporter: reporter,
+		Found:    found,
+	}
+	if found {
+		snapshot := toRapidProContactSnapshot(contact)
+		result.Contact = &snapshot
+	}
+	return result, nil
+}
+
+func (s *Service) GetRapidProMessageHistory(ctx context.Context, id int64) (RapidProMessageHistoryResult, error) {
+	reporter, err := s.Get(ctx, id)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, err
+	}
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, err
+	}
+	contact, found, err := s.lookupRapidProContact(ctx, conn, reporter)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, err
+	}
+	result := RapidProMessageHistoryResult{
+		Reporter: reporter,
+		Found:    found,
+		Items:    []RapidProMessageRecord{},
+	}
+	if !found {
+		return result, nil
+	}
+	messages, next, err := s.rapidProClient.ListMessages(ctx, conn, nil)
+	if err != nil {
+		return RapidProMessageHistoryResult{}, mapRapidProRequestError(err)
+	}
+	targetURNs := make(map[string]struct{}, len(contact.URNs))
+	for _, urn := range contact.URNs {
+		normalized := strings.ToLower(strings.TrimSpace(urn))
+		if normalized == "" {
+			continue
+		}
+		targetURNs[normalized] = struct{}{}
+	}
+	for _, message := range messages {
+		if !messageMatchesReporter(message, contact.UUID, targetURNs) {
+			continue
+		}
+		result.Items = append(result.Items, toRapidProMessageRecord(message))
+	}
+	result.Next = next
+	return result, nil
 }
 
 // Create validates and persists a new Reporter.
@@ -386,6 +454,28 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 		},
 	})
 	return SyncResult{Reporter: updatedReporter, Operation: built.Operation, GroupCount: len(built.ResolvedGroups)}, nil
+}
+
+func (s *Service) lookupRapidProContact(ctx context.Context, conn rapidpro.Connection, reporter Reporter) (rapidpro.Contact, bool, error) {
+	reporter.RapidProUUID = strings.TrimSpace(reporter.RapidProUUID)
+	if reporter.RapidProUUID != "" {
+		contact, found, err := s.rapidProClient.LookupContactByUUID(ctx, conn, reporter.RapidProUUID)
+		if err != nil {
+			return rapidpro.Contact{}, false, mapRapidProRequestError(err)
+		}
+		if found {
+			return contact, true, nil
+		}
+	}
+	urn := phoneURN(reporter.Telephone)
+	if urn == "" {
+		return rapidpro.Contact{}, false, nil
+	}
+	contact, found, err := s.rapidProClient.LookupContactByURN(ctx, conn, urn)
+	if err != nil {
+		return rapidpro.Contact{}, false, mapRapidProRequestError(err)
+	}
+	return contact, found, nil
 }
 
 type rapidProContactData struct {
@@ -846,6 +936,73 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func toRapidProContactSnapshot(contact rapidpro.Contact) RapidProContactSnapshot {
+	result := RapidProContactSnapshot{
+		UUID:       strings.TrimSpace(contact.UUID),
+		Name:       strings.TrimSpace(contact.Name),
+		Status:     strings.TrimSpace(contact.Status),
+		Language:   strings.TrimSpace(contact.Language),
+		URNs:       append([]string(nil), contact.URNs...),
+		Groups:     make([]RapidProGroup, 0, len(contact.Groups)),
+		Fields:     cloneStringMap(contact.Fields),
+		CreatedOn:  strings.TrimSpace(contact.CreatedOn),
+		ModifiedOn: strings.TrimSpace(contact.ModifiedOn),
+		LastSeenOn: strings.TrimSpace(contact.LastSeenOn),
+	}
+	for _, group := range contact.Groups {
+		result.Groups = append(result.Groups, RapidProGroup{
+			UUID: strings.TrimSpace(group.UUID),
+			Name: strings.TrimSpace(group.Name),
+		})
+	}
+	if contact.Flow != nil {
+		result.Flow = &RapidProFlow{
+			UUID: strings.TrimSpace(contact.Flow.UUID),
+			Name: strings.TrimSpace(contact.Flow.Name),
+		}
+	}
+	return result
+}
+
+func toRapidProMessageRecord(message rapidpro.Message) RapidProMessageRecord {
+	result := RapidProMessageRecord{
+		ID:          message.ID,
+		BroadcastID: message.BroadcastID,
+		Direction:   strings.TrimSpace(message.Direction),
+		Type:        strings.TrimSpace(message.Type),
+		Status:      strings.TrimSpace(message.Status),
+		Visibility:  strings.TrimSpace(message.Visibility),
+		Text:        strings.TrimSpace(message.Text),
+		URN:         strings.TrimSpace(message.URN),
+		CreatedOn:   strings.TrimSpace(message.CreatedOn),
+		SentOn:      strings.TrimSpace(message.SentOn),
+		ModifiedOn:  strings.TrimSpace(message.ModifiedOn),
+	}
+	if message.Channel != nil {
+		result.Channel = &RapidProFlow{
+			UUID: strings.TrimSpace(message.Channel.UUID),
+			Name: strings.TrimSpace(message.Channel.Name),
+		}
+	}
+	if message.Flow != nil {
+		result.Flow = &RapidProFlow{
+			UUID: strings.TrimSpace(message.Flow.UUID),
+			Name: strings.TrimSpace(message.Flow.Name),
+		}
+	}
+	return result
+}
+
+func messageMatchesReporter(message rapidpro.Message, contactUUID string, urns map[string]struct{}) bool {
+	messageContactUUID := strings.TrimSpace(message.Contact.UUID)
+	targetUUID := strings.TrimSpace(contactUUID)
+	if messageContactUUID != "" && strings.EqualFold(messageContactUUID, targetUUID) {
+		return true
+	}
+	_, ok := urns[strings.ToLower(strings.TrimSpace(message.URN))]
+	return ok
 }
 
 func (s *Service) logAudit(ctx context.Context, event audit.Event) {
