@@ -86,12 +86,12 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	}
 	offset := query.Page * limit
 	listQuery := fmt.Sprintf(`
-		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
-		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
-		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
+		SELECT reporters.id, reporters.uid, reporters.name, reporters.telephone, reporters.whatsapp, reporters.telegram, reporters.org_unit_id, reporters.reporting_location,
+		       reporters.district_id, reporters.total_reports, reporters.last_reporting_date, reporters.sms_code, reporters.sms_code_expires_at,
+		       reporters.mtuuid, reporters.synced, reporters.rapidpro_uuid, reporters.is_active, reporters.created_at, reporters.updated_at, reporters.last_login_at
 		%s
 		%s
-		ORDER BY name ASC, id ASC
+		ORDER BY reporters.name ASC, reporters.id ASC
 		LIMIT %d OFFSET %d
 	`, from, where, limit, offset)
 	rows := []reporterRow{}

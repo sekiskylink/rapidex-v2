@@ -206,6 +206,11 @@ export function UsersPage() {
   const [editUser, setEditUser] = React.useState<UserRow | null>(null)
   const [editForm, setEditForm] = React.useState<UserFormState>(defaultCreateForm)
   const [editRoles, setEditRoles] = React.useState<string[]>([])
+  const [editAssignmentOptions, setEditAssignmentOptions] = React.useState<OrgUnitOption[]>([])
+  const [editAssignmentSelection, setEditAssignmentSelection] = React.useState<OrgUnitOption[]>([])
+  const [editAssignmentInitialIDs, setEditAssignmentInitialIDs] = React.useState<number[]>([])
+  const [editAssignmentSearch, setEditAssignmentSearch] = React.useState('')
+  const [editAssignmentLoading, setEditAssignmentLoading] = React.useState(false)
   const [editErrors, setEditErrors] = React.useState<UserFormErrors>({})
   const [editErrorMessage, setEditErrorMessage] = React.useState('')
 
@@ -278,6 +283,23 @@ export function UsersPage() {
     return nextIDs
   }, [])
 
+  const loadUserOrgUnitAssignments = React.useCallback(async (userID: number) => {
+    const [currentAssignments, availableOptions] = await Promise.all([
+      apiRequest<UserOrgUnitAssignmentsResponse>(`/user-org-units/${userID}`),
+      loadOrgUnitOptions(''),
+    ])
+    const selected = (currentAssignments.items ?? []).map((item) => ({
+      id: item.orgUnitId,
+      name: item.orgUnitName,
+      displayPath: item.displayPath,
+    }))
+    return {
+      options: mergeOrgUnitOptions(availableOptions, selected),
+      selection: selected,
+      initialIDs: currentAssignments.orgUnitIds ?? selected.map((item) => item.id),
+    }
+  }, [loadOrgUnitOptions])
+
   const onCreateAssignmentSearchChange = React.useCallback(async (value: string) => {
     setCreateAssignmentSearch(value)
     try {
@@ -299,6 +321,19 @@ export function UsersPage() {
     setCreateErrorMessage('')
   }, [])
 
+  const resetEditDialog = React.useCallback(() => {
+    setEditUser(null)
+    setEditForm(defaultCreateForm)
+    setEditRoles([])
+    setEditAssignmentOptions([])
+    setEditAssignmentSelection([])
+    setEditAssignmentInitialIDs([])
+    setEditAssignmentSearch('')
+    setEditAssignmentLoading(false)
+    setEditErrors({})
+    setEditErrorMessage('')
+  }, [])
+
   const openCreateDialog = React.useCallback(async () => {
     resetCreateDialog()
     setCreateOpen(true)
@@ -312,6 +347,43 @@ export function UsersPage() {
       setCreateAssignmentLoading(false)
     }
   }, [loadOrgUnitOptions, resetCreateDialog])
+
+  const onEditAssignmentSearchChange = React.useCallback(async (value: string) => {
+    setEditAssignmentSearch(value)
+    try {
+      const options = await loadOrgUnitOptions(value)
+      setEditAssignmentOptions((current) => mergeOrgUnitOptions(current, options, editAssignmentSelection))
+    } catch {
+      // Keep the current options if incremental search fails.
+    }
+  }, [editAssignmentSelection, loadOrgUnitOptions])
+
+  const openEditDialog = React.useCallback(async (row: UserRow) => {
+    resetEditDialog()
+    setEditUser(row)
+    setEditForm(toUserForm(row))
+    setEditRoles(row.roles ?? [])
+    setEditOpen(true)
+    setEditAssignmentLoading(true)
+    try {
+      const assignmentState = await loadUserOrgUnitAssignments(row.id)
+      setEditAssignmentOptions(assignmentState.options)
+      setEditAssignmentSelection(assignmentState.selection)
+      setEditAssignmentInitialIDs(assignmentState.initialIDs)
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to load org unit assignments.',
+        notifier: notify,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setEditErrorMessage(`Unable to load org unit assignments.${requestId}`)
+      setEditAssignmentOptions([])
+      setEditAssignmentSelection([])
+      setEditAssignmentInitialIDs([])
+    } finally {
+      setEditAssignmentLoading(false)
+    }
+  }, [loadUserOrgUnitAssignments, notify, resetEditDialog])
 
   const onCreateUser = async () => {
     setSubmitting(true)
@@ -394,11 +466,10 @@ export function UsersPage() {
         method: 'PATCH',
         body: JSON.stringify(payload),
       })
+      await saveOrgUnitAssignments(editUser.id, editAssignmentInitialIDs, editAssignmentSelection)
       notify.success('User updated.')
       setEditOpen(false)
-      setEditUser(null)
-      setEditForm(defaultCreateForm)
-      setEditRoles([])
+      resetEditDialog()
       refreshGrid()
     } catch (error) {
       const { error: normalized } = await handleAppError(error, {
@@ -440,18 +511,10 @@ export function UsersPage() {
     setAssignmentErrorMessage('')
     setAssignmentSearch('')
     try {
-      const [currentAssignments, availableOptions] = await Promise.all([
-        apiRequest<UserOrgUnitAssignmentsResponse>(`/user-org-units/${row.id}`),
-        loadOrgUnitOptions(''),
-      ])
-      const selected = (currentAssignments.items ?? []).map((item) => ({
-        id: item.orgUnitId,
-        name: item.orgUnitName,
-        displayPath: item.displayPath,
-      }))
-      setAssignmentSelection(selected)
-      setAssignmentInitialIDs(currentAssignments.orgUnitIds ?? selected.map((item) => item.id))
-      setAssignmentOptions(mergeOrgUnitOptions(availableOptions, selected))
+      const assignmentState = await loadUserOrgUnitAssignments(row.id)
+      setAssignmentSelection(assignmentState.selection)
+      setAssignmentInitialIDs(assignmentState.initialIDs)
+      setAssignmentOptions(assignmentState.options)
     } catch (error) {
       const { error: normalized } = await handleAppError(error, {
         fallbackMessage: 'Unable to load org unit assignments.',
@@ -465,7 +528,7 @@ export function UsersPage() {
     } finally {
       setAssignmentLoading(false)
     }
-  }, [loadOrgUnitOptions, notify])
+  }, [loadUserOrgUnitAssignments, notify])
 
   const onAssignmentSearchChange = React.useCallback(async (value: string) => {
     setAssignmentSearch(value)
@@ -561,12 +624,7 @@ export function UsersPage() {
                 icon: 'edit',
                 disabled: !canWrite,
                 onClick: () => {
-                  setEditUser(params.row)
-                  setEditForm(toUserForm(params.row))
-                  setEditRoles(params.row.roles ?? [])
-                  setEditErrors({})
-                  setEditErrorMessage('')
-                  setEditOpen(true)
+                  void openEditDialog(params.row)
                 },
               },
               {
@@ -593,7 +651,7 @@ export function UsersPage() {
         ),
       },
     ],
-    [canWrite, onToggleActive],
+    [canWrite, onToggleActive, openEditDialog],
   )
 
   return (
@@ -919,6 +977,34 @@ export function UsersPage() {
                   placeholder="Assign roles"
                   error={Boolean(editErrors.roles)}
                   helperText={editErrors.roles}
+                />
+              )}
+            />
+            <Autocomplete
+              multiple
+              options={editAssignmentOptions}
+              loading={editAssignmentLoading}
+              value={editAssignmentSelection}
+              inputValue={editAssignmentSearch}
+              onInputChange={(_event, value) => void onEditAssignmentSearchChange(value)}
+              onChange={(_event, value) => {
+                setEditAssignmentSelection(value)
+                setEditAssignmentOptions((current) => mergeOrgUnitOptions(current, value))
+              }}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              getOptionLabel={(option) => option.name}
+              sx={{ gridColumn: '1 / -1' }}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip label={option.displayPath ? `${option.name} (${option.displayPath})` : option.name} {...getTagProps({ index })} key={option.id} size="small" />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Assigned Org Units"
+                  placeholder="Search facilities or jurisdiction roots"
+                  helperText="Users can access any descendants of the selected org units."
                 />
               )}
             />

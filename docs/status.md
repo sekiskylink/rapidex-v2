@@ -1,5 +1,49 @@
 # Status
 
+## Milestone — Reporter List SQL Ambiguity Fix (Complete)
+
+### What changed
+- Fixed the RapidEx reporters list query so joined `org_units` scope enforcement no longer produces ambiguous column references in PostgreSQL.
+- Qualified the selected and ordered reporter columns in `backend/internal/sukumad/reporter/pg_repository.go`, which restores `GET /api/v1/reporters` for scoped and unscoped users.
+- The failure was introduced by the reporter list join used for org-unit jurisdiction filtering; the SQL now consistently addresses `reporters.*` columns explicitly.
+
+### Added or updated tests
+- No new test files were needed for this targeted backend fix.
+- Re-verified the existing backend reporter/org-unit suites and both frontend route smoke suites against the patched query path.
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in frontend route tests.
+- The web route suite still emits an existing MUI X `rowCount` warning in one observability test path.
+
+## Milestone — User Edit Org-Unit Assignment Flow (Complete)
+
+### What changed
+- Extended the Users page edit flow in both web and desktop so admins can change a user’s assigned organisation units directly from the `Edit User` dialog.
+- The edit dialogs now preload the user’s current org-unit assignments, support multi-select updates inline, and persist scope changes together with the normal user patch flow.
+- Kept the separate `Org Unit Scope` action available for dedicated scope management, but editing no longer requires leaving the main user dialog for common assignment changes.
+
+### Added or updated tests
+- Web:
+  - Users page edit-flow coverage now verifies current org-unit assignments are loaded and that new assignments can be added during edit
+- Desktop:
+  - matching route/page coverage now verifies edit-time org-unit assignment updates
+
+### Verification summary
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/users-audit-pages.test.tsx`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- The edit flow currently patches the user record first and then applies org-unit assignment deltas; if assignment persistence fails, the user update still succeeds and scope can be corrected from the same edit dialog or the dedicated `Org Unit Scope` action.
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — User Creation Org-Unit Assignment Flow (Complete)
 
 ### What changed

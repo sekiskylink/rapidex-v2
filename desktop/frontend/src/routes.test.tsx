@@ -1205,6 +1205,7 @@ describe('app shell routes', () => {
 
     let patchCalls = 0
     let patchPayload: Record<string, unknown> | null = null
+    const assignmentPayloads: Array<Record<string, unknown>> = []
 
     vi.stubGlobal(
       'fetch',
@@ -1249,6 +1250,29 @@ describe('app shell routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.includes('/api/v1/orgunits')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: 11, name: 'Kampala', displayPath: 'Uganda / Kampala' },
+                { id: 12, name: 'Wakiso', displayPath: 'Uganda / Wakiso' },
+              ],
+              totalCount: 2,
+              page: 0,
+              pageSize: 50,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/user-org-units/7') && (init?.method === undefined || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              orgUnitIds: [11],
+              items: [{ orgUnitId: 11, orgUnitName: 'Kampala', displayPath: 'Uganda / Kampala' }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         if (url.endsWith('/api/v1/users/7') && init?.method === 'PATCH') {
           patchCalls += 1
           patchPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
@@ -1256,6 +1280,10 @@ describe('app shell routes', () => {
             JSON.stringify({ id: 7, username: 'jane', isActive: true }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
+        }
+        if (url.endsWith('/api/v1/user-org-units') && init?.method === 'POST') {
+          assignmentPayloads.push(JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>)
+          return new Response('{}', { status: 201, headers: { 'Content-Type': 'application/json' } })
         }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
       }),
@@ -1273,10 +1301,17 @@ describe('app shell routes', () => {
     fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Email' }), { target: { value: 'jane-updated@example.com' } })
     fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Phone Number' }), { target: { value: '+15559876543' } })
     fireEvent.change(within(editDialog).getByRole('textbox', { name: 'Display Name' }), { target: { value: 'Jane Updated' } })
+    const orgUnitsInput = within(editDialog).getByRole('combobox', { name: 'Assigned Org Units' })
+    fireEvent.mouseDown(orgUnitsInput)
+    fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
     fireEvent.click(within(editDialog).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(patchCalls).toBe(1)
+    })
+    await waitFor(() => {
+      expect(assignmentPayloads).toHaveLength(1)
     })
     expect(patchPayload).toMatchObject({
       username: 'jane',
@@ -1290,6 +1325,7 @@ describe('app shell routes', () => {
       telegramHandle: '@janedoe',
       isActive: true,
     })
+    expect(assignmentPayloads).toEqual([{ userId: 7, orgUnitId: 12 }])
     expect(patchPayload).not.toHaveProperty('password')
   })
 
