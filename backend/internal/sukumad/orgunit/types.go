@@ -56,6 +56,7 @@ type OrgUnit struct {
 	ParentID        *int64     `db:"parent_id" json:"parentId,omitempty"`
 	HierarchyLevel  int        `db:"hierarchy_level" json:"hierarchyLevel"`
 	Path            string     `db:"path" json:"path"`
+	DisplayPath     string     `db:"display_path" json:"displayPath"`
 	Address         string     `db:"address" json:"address"`
 	Email           string     `db:"email" json:"email"`
 	URL             string     `db:"url" json:"url"`
@@ -65,15 +66,18 @@ type OrgUnit struct {
 	OpeningDate     *time.Time `db:"opening_date" json:"openingDate,omitempty"`
 	Deleted         bool       `db:"deleted" json:"deleted"`
 	LastSyncDate    *time.Time `db:"last_sync_date" json:"lastSyncDate,omitempty"`
+	HasChildren     bool       `db:"has_children" json:"hasChildren"`
 	CreatedAt       time.Time  `db:"created_at" json:"createdAt"`
 	UpdatedAt       time.Time  `db:"updated_at" json:"updatedAt"`
 }
 
 type ListQuery struct {
-	Page     int
-	PageSize int
-	Search   string
-	ParentID *int64
+	Page      int
+	PageSize  int
+	Search    string
+	ParentID  *int64
+	RootsOnly bool
+	LeafOnly  bool
 }
 
 type ListResult struct {

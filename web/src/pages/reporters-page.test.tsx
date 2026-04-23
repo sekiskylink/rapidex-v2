@@ -206,8 +206,17 @@ describe('reporters page', () => {
       if (path === '/reporter-groups/options') {
         return { items: [{ id: 1, name: 'Lead' }] }
       }
-      if (path.includes('/orgunits?')) {
+      if (path.includes('/orgunits?') && path.includes('rootsOnly=true')) {
+        return { items: [{ id: 9, name: 'Kampala District', hasChildren: true, path: '/UG/Kampala/', displayPath: 'Uganda' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path.includes('/orgunits?') && path.includes('parentId=9')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre', hasChildren: false, path: '/UG/Kampala/Kampala Health Centre/', displayPath: 'Uganda / Kampala District' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/orgunits?page=0&pageSize=200') {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path.includes('/orgunits?') && path.includes('search=Kampala') && path.includes('leafOnly=true')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre', displayPath: 'Uganda / Kampala District' }], totalCount: 1, page: 1, pageSize: 25 }
       }
       if (path === '/reporters' && init?.method === 'POST') {
         createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
@@ -226,12 +235,18 @@ describe('reporters page', () => {
     expect(within(dialog).queryByLabelText('Created At')).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText('Updated At')).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText('Last Login At')).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('RapidPro UUID')).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('Reporting Location')).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('District')).not.toBeInTheDocument()
 
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Alice Reporter' } })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Telephone' }), { target: { value: '+256700000001' } })
-    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Facility' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'Kampala Health Centre' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Browse hierarchy' }))
+    const browser = await screen.findByRole('dialog', { name: 'Browse Facility Hierarchy' })
+    fireEvent.click(await within(browser).findByRole('button', { name: 'Kampala District Browse children' }))
+    expect(await within(browser).findByText('Uganda / Kampala District')).toBeInTheDocument()
+    fireEvent.click(await within(browser).findByRole('button', { name: 'Kampala Health Centre Select facility' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(createPayload).not.toBeNull())
     expect(createPayload).toMatchObject({
@@ -242,9 +257,11 @@ describe('reporters page', () => {
     expect(createPayload).not.toHaveProperty('smsCode')
     expect(createPayload).not.toHaveProperty('mtuuid')
     expect(createPayload).not.toHaveProperty('rapidProUuid')
+    expect(createPayload).not.toHaveProperty('uid')
+    expect(createPayload).not.toHaveProperty('totalReports')
   })
 
-  it('edit reporter keeps backend-managed RapidPro fields read-only', async () => {
+  it('edit reporter shows a facility summary and keeps backend-managed fields out of the payload', async () => {
     authenticate(['reporters.read', 'reporters.write'])
     let updatePayload: Record<string, unknown> | null = null
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
@@ -254,7 +271,13 @@ describe('reporters page', () => {
       if (path === '/reporter-groups/options') {
         return { items: [{ id: 1, name: 'Lead' }] }
       }
-      if (path.includes('/orgunits?')) {
+      if (path.includes('/orgunits?') && path.includes('rootsOnly=true')) {
+        return { items: [{ id: 9, name: 'Kampala District', hasChildren: true, path: '/UG/Kampala/' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path.includes('/orgunits?') && path.includes('parentId=9')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre', hasChildren: false, path: '/UG/Kampala/Kampala Health Centre/' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/orgunits?page=0&pageSize=200') {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
       }
       if (path === '/reporters/11' && init?.method === 'PUT') {
@@ -275,22 +298,30 @@ describe('reporters page', () => {
     expect(within(dialog).queryByLabelText('Created At')).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText('Updated At')).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText('Last Login At')).not.toBeInTheDocument()
-
-    expect(within(dialog).getByDisplayValue('rapidpro-11')).toBeInTheDocument()
-    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Alice Reporter Updated' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(within(dialog).queryByLabelText('RapidPro UUID')).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('Reporting Location')).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('District')).not.toBeInTheDocument()
+    expect(within(dialog).getByText('Facility summary')).toBeInTheDocument()
+    expect(within(dialog).getByText('Facility: Kampala Health Centre')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Browse hierarchy' }))
+    const browser = await screen.findByRole('dialog', { name: 'Browse Facility Hierarchy' })
+    fireEvent.click(await within(browser).findByRole('button', { name: 'Kampala District Browse children' }))
+    fireEvent.click(await within(browser).findByRole('button', { name: 'Kampala Health Centre Select facility' }))
+    fireEvent.change(within(dialog).getByDisplayValue('Alice Reporter'), { target: { value: 'Alice Reporter Updated' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(updatePayload).not.toBeNull())
     expect(updatePayload).toMatchObject({
-      uid: 'rep-11',
       name: 'Alice Reporter Updated',
-      totalReports: 12,
-      lastReportingDate: '2026-04-10T09:00:00Z',
-      lastLoginAt: '2026-04-13T08:00:00Z',
+      orgUnitId: 2,
     })
     expect(updatePayload).not.toHaveProperty('smsCode')
     expect(updatePayload).not.toHaveProperty('mtuuid')
     expect(updatePayload).not.toHaveProperty('rapidProUuid')
+    expect(updatePayload).not.toHaveProperty('uid')
+    expect(updatePayload).not.toHaveProperty('totalReports')
+    expect(updatePayload).not.toHaveProperty('lastReportingDate')
+    expect(updatePayload).not.toHaveProperty('lastLoginAt')
   })
 
   it('supports row sync and bulk broadcast actions', async () => {

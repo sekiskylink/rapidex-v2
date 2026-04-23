@@ -15,6 +15,17 @@ type PgRepository struct {
 	db *sqlx.DB
 }
 
+const orgUnitDisplayPathSQL = `
+	COALESCE(
+		(
+			SELECT string_agg(ancestor.name, ' / ' ORDER BY path_parts.ordinality)
+			FROM unnest(string_to_array(trim(org_units.path, '/'), '/')) WITH ORDINALITY AS path_parts(uid, ordinality)
+			JOIN org_units ancestor ON ancestor.uid = path_parts.uid
+			WHERE ancestor.uid <> org_units.uid
+		),
+		''
+	) AS display_path`
+
 type orgUnitRow struct {
 	ID              int64      `db:"id"`
 	UID             string     `db:"uid"`
@@ -25,6 +36,7 @@ type orgUnitRow struct {
 	ParentID        *int64     `db:"parent_id"`
 	HierarchyLevel  int        `db:"hierarchy_level"`
 	Path            string     `db:"path"`
+	DisplayPath     string     `db:"display_path"`
 	Address         string     `db:"address"`
 	Email           string     `db:"email"`
 	URL             string     `db:"url"`
@@ -34,6 +46,7 @@ type orgUnitRow struct {
 	OpeningDate     *time.Time `db:"opening_date"`
 	Deleted         bool       `db:"deleted"`
 	LastSyncDate    *time.Time `db:"last_sync_date"`
+	HasChildren     bool       `db:"has_children"`
 	CreatedAt       time.Time  `db:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at"`
 }
@@ -55,6 +68,11 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	if query.ParentID != nil {
 		where += " AND parent_id = ?"
 		args = append(args, *query.ParentID)
+	} else if query.RootsOnly {
+		where += " AND parent_id IS NULL"
+	}
+	if query.LeafOnly {
+		where += " AND NOT EXISTS (SELECT 1 FROM org_units child WHERE child.parent_id = org_units.id)"
 	}
 
 	var total int
@@ -70,13 +88,15 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	offset := query.Page * limit
 	listQuery := fmt.Sprintf(`
 		SELECT id, uid, code, name, short_name, description, parent_id, hierarchy_level, path,
+		       %s,
 		       address, email, url, phone_number, extras, attribute_values, opening_date, deleted,
+		       EXISTS (SELECT 1 FROM org_units child WHERE child.parent_id = org_units.id) AS has_children,
 		       last_sync_date, created_at, updated_at
 		FROM org_units
 		%s
 		ORDER BY path ASC, name ASC
 		LIMIT %d OFFSET %d
-	`, where, limit, offset)
+	`, orgUnitDisplayPathSQL, where, limit, offset)
 
 	rows := []orgUnitRow{}
 	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(listQuery), args...); err != nil {
@@ -301,7 +321,9 @@ func (r *PgRepository) getByWhere(ctx context.Context, where string, arg any) (O
 	row := orgUnitRow{}
 	query := `
 		SELECT id, uid, code, name, short_name, description, parent_id, hierarchy_level, path,
+		       ` + orgUnitDisplayPathSQL + `,
 		       address, email, url, phone_number, extras, attribute_values, opening_date, deleted,
+		       EXISTS (SELECT 1 FROM org_units child WHERE child.parent_id = org_units.id) AS has_children,
 		       last_sync_date, created_at, updated_at
 		FROM org_units
 		WHERE ` + where
@@ -315,7 +337,9 @@ func (r *PgRepository) getByIDTx(ctx context.Context, tx *sqlx.Tx, id int64) (Or
 	row := orgUnitRow{}
 	if err := tx.GetContext(ctx, &row, `
 		SELECT id, uid, code, name, short_name, description, parent_id, hierarchy_level, path,
+		       `+orgUnitDisplayPathSQL+`,
 		       address, email, url, phone_number, extras, attribute_values, opening_date, deleted,
+		       EXISTS (SELECT 1 FROM org_units child WHERE child.parent_id = org_units.id) AS has_children,
 		       last_sync_date, created_at, updated_at
 		FROM org_units
 		WHERE id = $1
@@ -371,6 +395,7 @@ func (r orgUnitRow) toOrgUnit() OrgUnit {
 		ParentID:        r.ParentID,
 		HierarchyLevel:  r.HierarchyLevel,
 		Path:            r.Path,
+		DisplayPath:     r.DisplayPath,
 		Address:         r.Address,
 		Email:           r.Email,
 		URL:             r.URL,
@@ -380,6 +405,7 @@ func (r orgUnitRow) toOrgUnit() OrgUnit {
 		OpeningDate:     r.OpeningDate,
 		Deleted:         r.Deleted,
 		LastSyncDate:    r.LastSyncDate,
+		HasChildren:     r.HasChildren,
 		CreatedAt:       r.CreatedAt,
 		UpdatedAt:       r.UpdatedAt,
 	}

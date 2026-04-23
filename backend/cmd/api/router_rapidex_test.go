@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -73,10 +74,57 @@ func TestRapidexRoutesRejectMissingPermission(t *testing.T) {
 	}
 }
 
-type rapidexOrgUnitRepo struct{}
+func TestRapidexOrgUnitRoutePassesHierarchyQueryFlags(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(122, "rapidex-query-reader", time.Now().UTC())
+	repo := &rapidexOrgUnitRepo{}
 
-func (r *rapidexOrgUnitRepo) List(context.Context, orgunit.ListQuery) (orgunit.ListResult, error) {
-	return orgunit.ListResult{Items: []orgunit.OrgUnit{}, Total: 0, Page: 0, PageSize: 20}, nil
+	router := newRouter(AppDeps{
+		JWTManager:          jwt,
+		RBACService:         rbacServiceWithPermissions(map[int64][]string{122: {rbac.PermissionOrgUnitsRead}}),
+		ModuleFlagsProvider: func() map[string]bool { return map[string]bool{} },
+		OrgUnitService:      orgunit.NewService(repo),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/orgunits?page=2&pageSize=15&search=hospital&rootsOnly=true&leafOnly=true", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	if repo.lastQuery.Page != 2 || repo.lastQuery.PageSize != 15 {
+		t.Fatalf("expected pagination to be passed through, got %+v", repo.lastQuery)
+	}
+	if repo.lastQuery.Search != "hospital" {
+		t.Fatalf("expected search to be passed through, got %+v", repo.lastQuery)
+	}
+	if !repo.lastQuery.RootsOnly || !repo.lastQuery.LeafOnly {
+		t.Fatalf("expected rootsOnly and leafOnly to be true, got %+v", repo.lastQuery)
+	}
+
+	var body struct {
+		Items []orgunit.OrgUnit `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if len(body.Items) != 1 || !body.Items[0].HasChildren {
+		t.Fatalf("expected response to include org unit with hasChildren=true, got %+v", body.Items)
+	}
+}
+
+type rapidexOrgUnitRepo struct {
+	lastQuery orgunit.ListQuery
+}
+
+func (r *rapidexOrgUnitRepo) List(_ context.Context, query orgunit.ListQuery) (orgunit.ListResult, error) {
+	r.lastQuery = query
+	return orgunit.ListResult{
+		Items: []orgunit.OrgUnit{{ID: 1, Name: "Kampala Health Centre", HasChildren: true}},
+		Total: 1, Page: query.Page, PageSize: query.PageSize,
+	}, nil
 }
 func (r *rapidexOrgUnitRepo) GetByID(context.Context, int64) (orgunit.OrgUnit, error) {
 	return orgunit.OrgUnit{}, nil

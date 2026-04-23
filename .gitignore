@@ -4,6 +4,7 @@ docs/plans/
 
 # Backend
 backend/.env
+backend/api
 backend/bin/
 backend/dist/
 backend/coverage.out

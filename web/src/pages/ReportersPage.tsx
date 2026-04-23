@@ -6,12 +6,17 @@ import {
   Button,
   Checkbox,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
+  DialogContentText,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControlLabel,
-  MenuItem,
+  List,
+  ListItemButton,
+  ListItemText,
   Stack,
   TextField,
   Typography,
@@ -55,7 +60,13 @@ interface Reporter {
 
 interface OrgUnit {
   id: number
+  uid?: string
   name: string
+  parentId?: number | null
+  hierarchyLevel?: number
+  path?: string
+  displayPath?: string
+  hasChildren?: boolean
 }
 
 interface ReporterGroupOption {
@@ -66,6 +77,11 @@ interface ReporterGroupOption {
 interface ListResponse<T> {
   items: T[]
   totalCount: number
+}
+
+type FacilityBrowserEntry = {
+  unit?: OrgUnit
+  label: string
 }
 
 type ReporterFormState = {
@@ -123,6 +139,31 @@ function formatActionError(prefix: string, normalized: { message: string; fieldE
   return `${prefix} ${detail}${requestId}`
 }
 
+function uniqOrgUnits(items: OrgUnit[]) {
+  const seen = new Set<number>()
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false
+    }
+    seen.add(item.id)
+    return true
+  })
+}
+
+function formatFacilityPath(unit: OrgUnit | null) {
+  if (unit?.displayPath) {
+    return unit.displayPath
+  }
+  if (!unit?.path) {
+    return ''
+  }
+  return unit.path
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' / ')
+}
+
 export function ReportersPage() {
   const [reporters, setReporters] = React.useState<Reporter[]>([])
   const [orgUnits, setOrgUnits] = React.useState<OrgUnit[]>([])
@@ -147,6 +188,14 @@ export function ReportersPage() {
   const [chatHistoryLoading, setChatHistoryLoading] = React.useState(false)
   const [chatHistoryError, setChatHistoryError] = React.useState('')
   const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({ page: 0, pageSize: 25 })
+  const [selectedFacility, setSelectedFacility] = React.useState<OrgUnit | null>(null)
+  const [facilitySearchInput, setFacilitySearchInput] = React.useState('')
+  const [facilityOptions, setFacilityOptions] = React.useState<OrgUnit[]>([])
+  const [facilitySearchLoading, setFacilitySearchLoading] = React.useState(false)
+  const [facilityBrowserOpen, setFacilityBrowserOpen] = React.useState(false)
+  const [facilityBrowserTrail, setFacilityBrowserTrail] = React.useState<FacilityBrowserEntry[]>([])
+  const [facilityBrowserItems, setFacilityBrowserItems] = React.useState<OrgUnit[]>([])
+  const [facilityBrowserLoading, setFacilityBrowserLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -191,6 +240,76 @@ export function ReportersPage() {
     }
     return orgUnits.find((unit) => unit.id === id)?.name ?? String(id)
   }, [orgUnits])
+
+  const fetchFacilityOptions = React.useCallback(async (search: string) => {
+    const response = await apiRequest<ListResponse<OrgUnit>>(`/orgunits?page=0&pageSize=20&leafOnly=true&search=${encodeURIComponent(search)}`)
+    return response.items ?? []
+  }, [])
+
+  const loadFacilityBrowserLevel = React.useCallback(async (trail: FacilityBrowserEntry[]) => {
+    setFacilityBrowserLoading(true)
+    try {
+      const current = trail[trail.length - 1]?.unit
+      const query = current ? `parentId=${current.id}` : 'rootsOnly=true'
+      const response = await apiRequest<ListResponse<OrgUnit>>(`/orgunits?page=0&pageSize=200&${query}`)
+      setFacilityBrowserTrail(trail)
+      setFacilityBrowserItems(response.items ?? [])
+    } catch (browserError) {
+      setError(browserError instanceof Error ? browserError.message : 'Unable to load facility hierarchy.')
+    } finally {
+      setFacilityBrowserLoading(false)
+    }
+  }, [])
+
+  const applyFacilitySelection = React.useCallback((unit: OrgUnit | null) => {
+    setSelectedFacility(unit)
+    setForm((current) => ({
+      ...current,
+      orgUnitId: unit ? String(unit.id) : '',
+    }))
+    setFacilitySearchInput(unit?.name ?? '')
+    setFacilityOptions(unit ? [unit] : [])
+  }, [])
+
+  React.useEffect(() => {
+    if (!dialogOpen) {
+      return
+    }
+    const search = facilitySearchInput.trim()
+    if (search === '') {
+      setFacilityOptions(selectedFacility ? [selectedFacility] : [])
+      setFacilitySearchLoading(false)
+      return
+    }
+
+    let active = true
+    setFacilitySearchLoading(true)
+    const timeoutId = window.setTimeout(() => {
+      void fetchFacilityOptions(search)
+        .then((items) => {
+          if (!active) {
+            return
+          }
+          setFacilityOptions(uniqOrgUnits([...(selectedFacility ? [selectedFacility] : []), ...items]))
+        })
+        .catch((searchError) => {
+          if (!active) {
+            return
+          }
+          setError(searchError instanceof Error ? searchError.message : 'Unable to search facilities.')
+        })
+        .finally(() => {
+          if (active) {
+            setFacilitySearchLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [dialogOpen, facilitySearchInput, fetchFacilityOptions, selectedFacility])
 
   const openRapidProDetails = React.useCallback(async (reporter: Reporter) => {
     setRapidProReporter(reporter)
@@ -345,6 +464,19 @@ export function ReportersPage() {
   function openDialog(reporter?: Reporter) {
     setEditing(reporter ?? null)
     setForm(toForm(reporter ?? null))
+    const initialFacility =
+      orgUnits.find((unit) => unit.id === reporter?.orgUnitId) ??
+      (reporter?.orgUnitId
+        ? {
+            id: reporter.orgUnitId,
+            name: getOrgUnitName(reporter.orgUnitId),
+            parentId: reporter.districtId ?? null,
+            hasChildren: false,
+          }
+        : null)
+    setSelectedFacility(initialFacility)
+    setFacilitySearchInput(initialFacility?.name ?? '')
+    setFacilityOptions(initialFacility ? [initialFacility] : [])
     setDialogOpen(true)
     setError('')
   }
@@ -356,6 +488,12 @@ export function ReportersPage() {
     setDialogOpen(false)
     setEditing(null)
     setForm(emptyForm)
+    setSelectedFacility(null)
+    setFacilitySearchInput('')
+    setFacilityOptions([])
+    setFacilityBrowserOpen(false)
+    setFacilityBrowserTrail([])
+    setFacilityBrowserItems([])
   }
 
   function openMessageDialog(mode: 'single' | 'bulk', reporter?: Reporter | null) {
@@ -372,6 +510,21 @@ export function ReportersPage() {
     setMessageText('')
   }
 
+  function openFacilityBrowser() {
+    setFacilityBrowserOpen(true)
+    void loadFacilityBrowserLevel([])
+  }
+
+  function handleFacilityBrowserNavigate(unit: OrgUnit) {
+    const nextTrail = [...facilityBrowserTrail, { unit, label: unit.name }]
+    void loadFacilityBrowserLevel(nextTrail)
+  }
+
+  function handleFacilityBrowserCrumb(index: number) {
+    const nextTrail = facilityBrowserTrail.slice(0, index + 1)
+    void loadFacilityBrowserLevel(nextTrail)
+  }
+
   async function submitReporter() {
     setSubmitting(true)
     setError('')
@@ -379,7 +532,6 @@ export function ReportersPage() {
       await apiRequest<Reporter>(editing ? `/reporters/${editing.id}` : '/reporters', {
         method: editing ? 'PUT' : 'POST',
         body: JSON.stringify({
-          uid: editing?.uid ?? '',
           name: form.name.trim(),
           telephone: form.telephone.trim(),
           whatsapp: form.whatsapp.trim(),
@@ -387,10 +539,6 @@ export function ReportersPage() {
           orgUnitId: Number(form.orgUnitId),
           isActive: form.isActive,
           groups: form.groups,
-          synced: editing?.synced ?? false,
-          totalReports: editing?.totalReports ?? 0,
-          lastReportingDate: editing?.lastReportingDate ?? null,
-          lastLoginAt: editing?.lastLoginAt ?? null,
         }),
       })
       closeDialog()
@@ -572,15 +720,72 @@ export function ReportersPage() {
             <TextField label="Telephone" value={form.telephone} onChange={(event) => setForm({ ...form, telephone: event.target.value })} required />
             <TextField label="WhatsApp" value={form.whatsapp} onChange={(event) => setForm({ ...form, whatsapp: event.target.value })} />
             <TextField label="Telegram" value={form.telegram} onChange={(event) => setForm({ ...form, telegram: event.target.value })} />
-            <TextField select label="Facility" value={form.orgUnitId} onChange={(event) => setForm({ ...form, orgUnitId: event.target.value })} required>
-              <MenuItem value="">Select facility</MenuItem>
-              {orgUnits.map((unit) => (
-                <MenuItem key={unit.id} value={String(unit.id)}>
-                  {unit.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField label="RapidPro UUID" value={editing?.rapidProUuid ?? 'Generated by sync'} InputProps={{ readOnly: true }} />
+            <Stack spacing={1.25} sx={{ gridColumn: '1 / -1' }}>
+              <Autocomplete
+                options={facilityOptions}
+                value={selectedFacility}
+                inputValue={facilitySearchInput}
+                loading={facilitySearchLoading}
+                filterOptions={(options) => options}
+                onInputChange={(_event, value, reason) => {
+                  if (reason === 'reset' && selectedFacility) {
+                    setFacilitySearchInput(selectedFacility.name)
+                    return
+                  }
+                  setFacilitySearchInput(value)
+                  if (value.trim() === '') {
+                    applyFacilitySelection(null)
+                  }
+                }}
+                onChange={(_event, value) => applyFacilitySelection(value)}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                getOptionLabel={(option) => option.name ?? ''}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props}>
+                    <Stack spacing={0.25}>
+                      <Typography variant="body2">{option.name}</Typography>
+                      {formatFacilityPath(option) ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {formatFacilityPath(option)}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Facility"
+                    required
+                    placeholder="Search facilities"
+                    helperText="Search for a facility or browse the hierarchy."
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {facilitySearchLoading ? <CircularProgress color="inherit" size={18} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button variant="outlined" onClick={openFacilityBrowser}>
+                  Browse hierarchy
+                </Button>
+                {selectedFacility ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Selected: {selectedFacility.name}
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No facility selected.
+                  </Typography>
+                )}
+              </Stack>
+            </Stack>
             <Autocomplete
               multiple
               options={reporterGroupNames}
@@ -600,16 +805,16 @@ export function ReportersPage() {
               control={<Checkbox checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />}
               label="Reporter is active"
             />
-            <Box />
-            <TextField label="UID" value={editing?.uid ?? 'Generated on save'} InputProps={{ readOnly: true }} />
-            <TextField label="Reporting Location" value={editing?.reportingLocation ?? 'Derived from facility'} InputProps={{ readOnly: true }} />
-            <TextField
-              label="District"
-              value={editing?.districtId ? getOrgUnitName(editing.districtId) : 'Derived from hierarchy'}
-              InputProps={{ readOnly: true }}
-            />
-            <TextField label="Total Reports" value={editing?.totalReports ?? 0} InputProps={{ readOnly: true }} />
-            <TextField label="Synced" value={editing ? String(editing.synced) : 'Pending'} InputProps={{ readOnly: true }} />
+            {editing ? (
+              <Box sx={{ gridColumn: '1 / -1', border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 2, p: 2 }}>
+                <Stack spacing={0.75}>
+                  <Typography variant="subtitle2">Facility summary</Typography>
+                  <Typography variant="body2">Facility: {selectedFacility?.name || getOrgUnitName(editing.orgUnitId) || '-'}</Typography>
+                  <Typography variant="body2">District: {editing.districtId ? getOrgUnitName(editing.districtId) : 'Derived from hierarchy'}</Typography>
+                  <Typography variant="body2">Reporting location: {editing.reportingLocation || 'Derived from facility'}</Typography>
+                </Stack>
+              </Box>
+            ) : null}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -617,6 +822,54 @@ export function ReportersPage() {
           <Button onClick={() => void submitReporter()} disabled={submitting || !form.name.trim() || !form.telephone.trim() || !form.orgUnitId} variant="contained">
             {editing ? 'Save' : 'Create'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={facilityBrowserOpen} onClose={() => setFacilityBrowserOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Browse Facility Hierarchy</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <DialogContentText>Select a facility from the hierarchy. Parent nodes drill down; leaf nodes select the facility.</DialogContentText>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Button size="small" variant={facilityBrowserTrail.length === 0 ? 'contained' : 'outlined'} onClick={() => void loadFacilityBrowserLevel([])}>
+                Root
+              </Button>
+              {facilityBrowserTrail.map((entry, index) => (
+                <Button key={`${entry.label}-${index}`} size="small" variant={index === facilityBrowserTrail.length - 1 ? 'contained' : 'outlined'} onClick={() => handleFacilityBrowserCrumb(index)}>
+                  {entry.label}
+                </Button>
+              ))}
+            </Stack>
+            <Divider />
+            {facilityBrowserLoading ? <CircularProgress size={24} /> : null}
+            {!facilityBrowserLoading ? (
+              <List dense sx={{ py: 0 }}>
+                {facilityBrowserItems.map((unit) => (
+                  <ListItemButton
+                    key={unit.id}
+                    aria-label={`${unit.name} ${unit.hasChildren ? 'Browse children' : 'Select facility'}`}
+                    onClick={() => {
+                      if (unit.hasChildren) {
+                        handleFacilityBrowserNavigate(unit)
+                        return
+                      }
+                      applyFacilitySelection(unit)
+                      setFacilityBrowserOpen(false)
+                    }}
+                  >
+                    <ListItemText
+                      primary={unit.name}
+                      secondary={unit.hasChildren ? 'Browse children' : formatFacilityPath(unit) || 'Select facility'}
+                    />
+                  </ListItemButton>
+                ))}
+                {facilityBrowserItems.length === 0 ? <Typography color="text.secondary">No facilities found at this level.</Typography> : null}
+              </List>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFacilityBrowserOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 

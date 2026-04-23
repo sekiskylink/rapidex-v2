@@ -303,13 +303,17 @@ func registerOrgUnitRoutes(
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 		pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 		search := c.Query("search")
+		rootsOnly, _ := strconv.ParseBool(c.DefaultQuery("rootsOnly", "false"))
+		leafOnly, _ := strconv.ParseBool(c.DefaultQuery("leafOnly", "false"))
 		var parentID *int64
 		if pid := c.Query("parentId"); pid != "" {
 			if id64, err := strconv.ParseInt(pid, 10, 64); err == nil {
 				parentID = &id64
 			}
 		}
-		result, err := service.List(c.Request.Context(), orgunit.ListQuery{Page: page, PageSize: pageSize, Search: search, ParentID: parentID})
+		result, err := service.List(c.Request.Context(), orgunit.ListQuery{
+			Page: page, PageSize: pageSize, Search: search, ParentID: parentID, RootsOnly: rootsOnly, LeafOnly: leafOnly,
+		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
