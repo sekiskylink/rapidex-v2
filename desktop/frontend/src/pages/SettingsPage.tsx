@@ -1,4 +1,9 @@
 import React from 'react'
+import BrushRoundedIcon from '@mui/icons-material/BrushRounded'
+import HubRoundedIcon from '@mui/icons-material/HubRounded'
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
+import WidgetsRoundedIcon from '@mui/icons-material/WidgetsRounded'
 import {
   Alert,
   Avatar,
@@ -107,6 +112,14 @@ const settingsSections: Array<{ key: SettingsSection; label: string; description
     anchorId: 'settings-about',
   },
 ]
+
+const settingsSectionIcons: Record<SettingsSection, React.ReactNode> = {
+  general: <TuneRoundedIcon />,
+  branding: <BrushRoundedIcon />,
+  modules: <WidgetsRoundedIcon />,
+  integrations: <HubRoundedIcon />,
+  about: <InfoRoundedIcon />,
+}
 
 export function SettingsPage({ section = 'general' }: { section?: SettingsSection }) {
   const router = useRouter()
@@ -705,15 +718,35 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   return (
     <Stack spacing={2.5}>
       <Box>
-        <Typography variant="h5" component="h1" gutterBottom>
-          Settings
-        </Typography>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+          <Avatar
+            variant="rounded"
+            sx={{
+              width: 46,
+              height: 46,
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              boxShadow: (theme) => `0 10px 24px ${theme.palette.primary.main}33`,
+            }}
+          >
+            {settingsSectionIcons[currentSection.key]}
+          </Avatar>
+          <Box>
+            <Typography variant="h5" component="h1">
+              Settings
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {currentSection.label}
+            </Typography>
+          </Box>
+        </Stack>
         <Typography color="text.secondary">{currentSection.description}</Typography>
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
           {settingsSections.map((item) => (
             <Button
               key={item.key}
               variant={item.key === currentSection.key ? 'contained' : 'outlined'}
+              startIcon={settingsSectionIcons[item.key]}
               onClick={() => void router.navigate({ to: item.path })}
             >
               {item.label}

@@ -42,6 +42,21 @@ export const ExpandMoreRoundedIcon = makeIcon('m6 10 6 6 6-6z')
 export const PaletteRoundedIcon = makeIcon(
   'M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10c1.38 0 2.5-1.12 2.5-2.5 0-.61-.23-1.2-.64-1.67-.08-.1-.13-.21-.13-.33 0-.28.22-.5.5-.5H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9m5.5 11c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5m-3-4c-.83 0-1.5-.67-1.5-1.5S13.67 6 14.5 6s1.5.67 1.5 1.5S15.33 9 14.5 9M5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S7.33 13 6.5 13 5 12.33 5 11.5m6-4c0 .83-.67 1.5-1.5 1.5S8 8.33 8 7.5 8.67 6 9.5 6s1.5.67 1.5 1.5',
 )
+export const TuneRoundedIcon = makeIcon(
+  'M3 17v2h6v-2zm0-12v2h10V5zm10 16v-2h8v-2h-8v-2h-2v6zm-6-10H3v2h4v2h2V9H7zm14 2V11h-10v2zm-6-8v2h6V5zm-2 2V5h-2v6h2z',
+)
+export const BrushRoundedIcon = makeIcon(
+  'M7 16c0 .55.45 1 1 1 .53 0 1.04-.21 1.41-.59l8.29-8.29a1.996 1.996 0 0 0 0-2.83l-1-1a1.996 1.996 0 0 0-2.83 0L5.58 12.58C5.21 12.95 5 13.46 5 14c0 1.66-1.34 3-3 3 0 1.1.9 2 2 2 1.86 0 3.41-1.28 3.86-3M15 5.5l1.5 1.5-1 1L14 6.5z',
+)
+export const WidgetsRoundedIcon = makeIcon(
+  'M13 13h8v8h-8zm-10 0h8v8H3zm10-10h8v8h-8zM3 3h8v8H3z',
+)
+export const HubRoundedIcon = makeIcon(
+  'M17 16c-.74 0-1.38.4-1.73 1H8.73A2.99 2.99 0 0 0 7 15.27V8.73A2.99 2.99 0 0 0 8.73 7h6.54A2.99 2.99 0 0 0 17 8.73v6.54A2.99 2.99 0 0 0 17 16M7 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4m10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4M7 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4m10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
+)
+export const InfoRoundedIcon = makeIcon(
+  'M11 7h2V5h-2zm1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m1 15h-2v-6h2zm0-8h-2V9h2z',
+)
 
 export const LogoutRoundedIcon = makeIcon('M5 5h6c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h6c.55 0 1-.45 1-1s-.45-1-1-1H5z')
 export const LogoutRoundedArrowIcon = makeIcon(

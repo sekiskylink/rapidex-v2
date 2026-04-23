@@ -30,7 +30,14 @@ import { hasPermission } from '../rbac/permissions'
 import type { ModuleEffectiveConfig } from '../registry/moduleEnablement'
 import { moduleRegistry } from '../registry/modules'
 import { type UiThemeMode } from '../ui/preferences'
-import { PaletteRoundedIcon } from '../ui/icons'
+import {
+  BrushRoundedIcon,
+  HubRoundedIcon,
+  InfoRoundedIcon,
+  PaletteRoundedIcon,
+  TuneRoundedIcon,
+  WidgetsRoundedIcon,
+} from '../ui/icons'
 import { PalettePresetPicker } from '../ui/theme/PalettePresetPicker'
 import { palettePresets } from '../ui/theme/presets'
 import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
@@ -147,6 +154,14 @@ const settingsSections: Array<{ key: SettingsSection; label: string; description
     anchorId: 'settings-about',
   },
 ]
+
+const settingsSectionIcons: Record<SettingsSection, React.ReactNode> = {
+  general: <TuneRoundedIcon />,
+  branding: <BrushRoundedIcon />,
+  modules: <WidgetsRoundedIcon />,
+  integrations: <HubRoundedIcon />,
+  about: <InfoRoundedIcon />,
+}
 
 export function SettingsPage({ section = 'general' }: { section?: SettingsSection }) {
   const navigate = useNavigate()
@@ -671,15 +686,35 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   return (
     <Stack spacing={3}>
       <Paper elevation={1} sx={{ p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Settings
-        </Typography>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+          <Avatar
+            variant="rounded"
+            sx={{
+              width: 48,
+              height: 48,
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              boxShadow: (theme) => `0 10px 24px ${theme.palette.primary.main}33`,
+            }}
+          >
+            {settingsSectionIcons[currentSection.key]}
+          </Avatar>
+          <Box>
+            <Typography variant="h4" component="h1">
+              Settings
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {currentSection.label}
+            </Typography>
+          </Box>
+        </Stack>
         <Typography color="text.secondary">{currentSection.description}</Typography>
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
           {settingsSections.map((item) => (
             <Button
               key={item.key}
               variant={item.key === currentSection.key ? 'contained' : 'outlined'}
+              startIcon={settingsSectionIcons[item.key]}
               onClick={() => void navigate({ to: item.path })}
             >
               {item.label}

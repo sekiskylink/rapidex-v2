@@ -23,6 +23,11 @@ import { alpha } from '@mui/material/styles'
 import MenuIcon from '@mui/icons-material/Menu'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
+import BrushRoundedIcon from '@mui/icons-material/BrushRounded'
+import WidgetsRoundedIcon from '@mui/icons-material/WidgetsRounded'
+import HubRoundedIcon from '@mui/icons-material/HubRounded'
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded'
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded'
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded'
@@ -152,11 +157,11 @@ export function AppShell() {
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
-    'settings-general': <SettingsRoundedIcon fontSize="small" />,
-    'settings-branding': <SettingsRoundedIcon fontSize="small" />,
-    'settings-modules': <SettingsRoundedIcon fontSize="small" />,
-    'settings-integrations': <SettingsRoundedIcon fontSize="small" />,
-    'settings-about': <SettingsRoundedIcon fontSize="small" />,
+    'settings-general': <TuneRoundedIcon fontSize="small" />,
+    'settings-branding': <BrushRoundedIcon fontSize="small" />,
+    'settings-modules': <WidgetsRoundedIcon fontSize="small" />,
+    'settings-integrations': <HubRoundedIcon fontSize="small" />,
+    'settings-about': <InfoRoundedIcon fontSize="small" />,
     sukumad: <AccountBalanceWalletRoundedIcon fontSize="small" />,
     users: <GroupRoundedIcon fontSize="small" />,
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
