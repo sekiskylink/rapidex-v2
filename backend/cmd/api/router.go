@@ -21,6 +21,7 @@ import (
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/reporter"
+	"basepro/backend/internal/sukumad/reportergroup"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
@@ -60,6 +61,7 @@ type AppDeps struct {
 	DocumentationHandler *documentation.Handler
 	OrgUnitService       *orgunit.Service
 	ReporterService      *reporter.Service
+	ReporterGroupHandler *reportergroup.Handler
 	UserOrgUnitService   *userorg.Service
 }
 
@@ -224,6 +226,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		DocumentationHandler: deps.DocumentationHandler,
 		OrgUnitService:       deps.OrgUnitService,
 		ReporterService:      deps.ReporterService,
+		ReporterGroupHandler: deps.ReporterGroupHandler,
 		UserOrgUnitService:   deps.UserOrgUnitService,
 	})
 

@@ -13,6 +13,7 @@ import (
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
+	"basepro/backend/internal/sukumad/reportergroup"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
 
@@ -27,6 +28,7 @@ type rapidProClient interface {
 	LookupContactByURN(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error)
 	UpsertContact(context.Context, rapidpro.Connection, rapidpro.UpsertContactInput) (rapidpro.Contact, error)
 	LookupGroupByName(context.Context, rapidpro.Connection, string) (rapidpro.Group, bool, error)
+	CreateGroup(context.Context, rapidpro.Connection, string) (rapidpro.Group, error)
 	SendMessage(context.Context, rapidpro.Connection, string, string) (rapidpro.Message, error)
 	SendBroadcast(context.Context, rapidpro.Connection, []string, string) (rapidpro.Broadcast, error)
 }
@@ -39,6 +41,11 @@ type orgUnitLookup interface {
 	Get(context.Context, int64) (orgunit.OrgUnit, error)
 }
 
+type reporterGroupCatalog interface {
+	ValidateActiveNames(context.Context, []string) ([]string, error)
+	EnsureRapidProGroups(context.Context, []string) ([]rapidpro.Group, error)
+}
+
 // Service encapsulates business logic for reporters and depends on a Repository.
 type Service struct {
 	repo             Repository
@@ -47,6 +54,7 @@ type Service struct {
 	rapidProClient   rapidProClient
 	rapidProSettings rapidProReporterSyncSettingsProvider
 	orgUnitLookup    orgUnitLookup
+	groupCatalog     reporterGroupCatalog
 	clock            func() time.Time
 }
 
@@ -95,6 +103,14 @@ func (s *Service) WithClock(clock func() time.Time) *Service {
 		return s
 	}
 	s.clock = clock
+	return s
+}
+
+func (s *Service) WithReporterGroupCatalog(catalog reporterGroupCatalog) *Service {
+	if s == nil {
+		return s
+	}
+	s.groupCatalog = catalog
 	return s
 }
 
@@ -160,6 +176,13 @@ func (s *Service) Create(ctx context.Context, r Reporter) (Reporter, error) {
 	if err := validateReporter(r, false); err != nil {
 		return Reporter{}, err
 	}
+	if s.groupCatalog != nil {
+		validated, err := s.groupCatalog.ValidateActiveNames(ctx, r.Groups)
+		if err != nil {
+			return Reporter{}, err
+		}
+		r.Groups = validated
+	}
 	now := s.clock()
 	r.CreatedAt = now
 	r.UpdatedAt = now
@@ -171,6 +194,13 @@ func (s *Service) Create(ctx context.Context, r Reporter) (Reporter, error) {
 func (s *Service) Update(ctx context.Context, r Reporter) (Reporter, error) {
 	if err := validateReporter(r, true); err != nil {
 		return Reporter{}, err
+	}
+	if s.groupCatalog != nil {
+		validated, err := s.groupCatalog.ValidateActiveNames(ctx, r.Groups)
+		if err != nil {
+			return Reporter{}, err
+		}
+		r.Groups = validated
 	}
 	r.Groups = normalizeGroups(r.Groups)
 	r.UpdatedAt = s.clock()
@@ -578,6 +608,20 @@ func (s *Service) lookupRapidProGroups(ctx context.Context, conn rapidpro.Connec
 	if len(normalized) == 0 {
 		return nil, nil
 	}
+	if s.groupCatalog != nil {
+		groups, err := s.groupCatalog.EnsureRapidProGroups(ctx, normalized)
+		if err != nil {
+			return nil, err
+		}
+		resolved := make([]settings.RapidProResolvedGroup, 0, len(groups))
+		for _, group := range groups {
+			resolved = append(resolved, settings.RapidProResolvedGroup{
+				Name: group.Name,
+				UUID: group.UUID,
+			})
+		}
+		return resolved, nil
+	}
 	resolved := make([]settings.RapidProResolvedGroup, 0, len(normalized))
 	missing := make([]string, 0)
 	for _, group := range normalized {
@@ -601,6 +645,8 @@ func (s *Service) lookupRapidProGroups(ctx context.Context, conn rapidpro.Connec
 	}
 	return resolved, nil
 }
+
+var _ reporterGroupCatalog = (*reportergroup.Service)(nil)
 
 func (s *Service) rapidProConnection(ctx context.Context) (rapidpro.Connection, error) {
 	if s.serverLookup == nil || s.rapidProClient == nil {

@@ -35,6 +35,7 @@ import (
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	"basepro/backend/internal/sukumad/reporter"
+	"basepro/backend/internal/sukumad/reportergroup"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/retention"
 	"basepro/backend/internal/sukumad/scheduler"
@@ -179,9 +180,13 @@ func run() error {
 			}
 			return raw
 		})
+	sukumadReporterGroupService := reportergroup.NewService(reportergroup.NewSQLRepository(database)).
+		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
+		WithRapidProSettings(settingsService)
 	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database), auditService).
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
 		WithRapidProSettings(settingsService).
+		WithReporterGroupCatalog(sukumadReporterGroupService).
 		WithOrgUnitLookup(sukumadOrgUnitService)
 	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
 	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
@@ -323,6 +328,7 @@ func run() error {
 			DocumentationHandler: documentation.NewHandler(sukumadDocumentationService),
 			OrgUnitService:       sukumadOrgUnitService,
 			ReporterService:      sukumadReporterService,
+			ReporterGroupHandler: reportergroup.NewHandler(sukumadReporterGroupService),
 			UserOrgUnitService:   sukumadUserOrgUnitService,
 		}),
 	}

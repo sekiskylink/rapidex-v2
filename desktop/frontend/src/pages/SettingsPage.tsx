@@ -45,6 +45,12 @@ import { THEME_MODES, type AppSettings, type ThemeMode } from '../settings/types
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
 
+interface ReporterGroupRecord {
+  id: number
+  name: string
+  isActive: boolean
+}
+
 type RuntimeConfigFormat = 'json' | 'yaml'
 
 const navigationLabelFields = [
@@ -208,6 +214,13 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [rapidProPreview, setRapidProPreview] = React.useState<RapidProReporterSyncPreviewResponse | null>(null)
   const [rapidProPreviewLoading, setRapidProPreviewLoading] = React.useState(false)
   const [rapidProPreviewError, setRapidProPreviewError] = React.useState('')
+  const [reporterGroups, setReporterGroups] = React.useState<ReporterGroupRecord[]>([])
+  const [reporterGroupsLoading, setReporterGroupsLoading] = React.useState(true)
+  const [reporterGroupsSavingId, setReporterGroupsSavingId] = React.useState<number | null>(null)
+  const [reporterGroupsCreating, setReporterGroupsCreating] = React.useState(false)
+  const [reporterGroupsError, setReporterGroupsError] = React.useState('')
+  const [newReporterGroupName, setNewReporterGroupName] = React.useState('')
+  const [newReporterGroupActive, setNewReporterGroupActive] = React.useState(true)
   const rapidProBuiltInFields = React.useMemo(() => rapidProFields.filter((field) => isRapidProBuiltInField(field)), [rapidProFields])
   const rapidProCustomFields = React.useMemo(() => rapidProFields.filter((field) => !isRapidProBuiltInField(field)), [rapidProFields])
   const rapidProPreviewJSON = React.useMemo(() => formatRapidProPreviewJSON(rapidProPreview), [rapidProPreview])
@@ -400,6 +413,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   React.useEffect(() => {
     if (!isIntegrationsSection) {
       setRapidProSyncLoading(false)
+      setReporterGroupsLoading(false)
       setRapidProFields([])
       setRapidProMappings([])
       setRapidProValidation({ isValid: true })
@@ -407,10 +421,13 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProPreviewReporterId('')
       setRapidProPreview(null)
       setRapidProPreviewError('')
+      setReporterGroups([])
+      setReporterGroupsError('')
       return
     }
     if (!canReadModuleEnablement) {
       setRapidProSyncLoading(false)
+      setReporterGroupsLoading(false)
       setRapidProFields([])
       setRapidProMappings([])
       setRapidProValidation({ isValid: true })
@@ -418,18 +435,23 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProPreviewReporterId('')
       setRapidProPreview(null)
       setRapidProPreviewError('')
+      setReporterGroups([])
+      setReporterGroupsError('')
       return
     }
     let active = true
     setRapidProSyncLoading(true)
+    setReporterGroupsLoading(true)
     Promise.all([
       apiClient.getRapidProReporterSyncSettings(),
       apiClient.listRapidProReporterSyncPreviewReporters(),
+      apiClient.request<{ items: ReporterGroupRecord[] }>('/api/v1/reporter-groups?page=0&pageSize=200'),
     ])
-      .then(([payload, reporterPayload]) => {
+      .then(([payload, reporterPayload, groupPayload]) => {
         if (active) {
           applyRapidProSyncPayload(payload)
           const items = reporterPayload.items ?? []
+          setReporterGroups(groupPayload.items ?? [])
           setRapidProPreviewReporters(items)
           setRapidProPreviewReporterId((current) => {
             if (current && items.some((item) => String(item.id) === current)) {
@@ -448,6 +470,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       .finally(() => {
         if (active) {
           setRapidProSyncLoading(false)
+          setReporterGroupsLoading(false)
         }
       })
     return () => {
@@ -785,6 +808,66 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProSyncError(`${normalized.message}${requestId}`)
     } finally {
       setRapidProSyncSaving(false)
+    }
+  }
+
+  const onCreateReporterGroup = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setReporterGroupsCreating(true)
+    setReporterGroupsError('')
+    try {
+      const payload = await apiClient.request<ReporterGroupRecord>('/api/v1/reporter-groups', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newReporterGroupName.trim(),
+          isActive: newReporterGroupActive,
+        }),
+      })
+      setReporterGroups((current) => [...current, payload].sort((left, right) => left.name.localeCompare(right.name)))
+      setNewReporterGroupName('')
+      setNewReporterGroupActive(true)
+      notify.success('Reporter group created.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to create reporter group.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setReporterGroupsError(`${normalized.message}${requestId}`)
+    } finally {
+      setReporterGroupsCreating(false)
+    }
+  }
+
+  const onSaveReporterGroup = async (group: ReporterGroupRecord) => {
+    if (!canWriteBranding) {
+      return
+    }
+    setReporterGroupsSavingId(group.id)
+    setReporterGroupsError('')
+    try {
+      const payload = await apiClient.request<ReporterGroupRecord>(`/api/v1/reporter-groups/${group.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: group.name.trim(),
+          isActive: group.isActive,
+        }),
+      })
+      setReporterGroups((current) =>
+        current.map((item) => (item.id === payload.id ? payload : item)).sort((left, right) => left.name.localeCompare(right.name)),
+      )
+      notify.success('Reporter group updated.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to save reporter group.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setReporterGroupsError(`${normalized.message}${requestId}`)
+    } finally {
+      setReporterGroupsSavingId(null)
     }
   }
 
@@ -1327,6 +1410,77 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                               </Stack>
                             ) : null}
                           </>
+                        )}
+                      </Stack>
+                      <Divider />
+                      <Stack spacing={1.5}>
+                        <Typography variant="subtitle1">Reporter Groups</Typography>
+                        <Typography color="text.secondary">
+                          RapidEx manages the canonical reporter group catalog. Active groups are selectable on reporter forms and are created in RapidPro automatically.
+                        </Typography>
+                        {reporterGroupsError ? <Alert severity="error">{reporterGroupsError}</Alert> : null}
+                        {reporterGroupsLoading ? (
+                          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                            <CircularProgress size={24} />
+                          </Box>
+                        ) : (
+                          <Stack spacing={1.25}>
+                            {reporterGroups.length === 0 ? <Alert severity="info">No reporter groups have been created yet.</Alert> : null}
+                            {reporterGroups.map((group) => (
+                              <Stack key={group.id} direction={{ xs: 'column', md: 'row' }} spacing={1.25} alignItems={{ md: 'center' }}>
+                                <TextField
+                                  label={`Reporter Group ${group.id}`}
+                                  value={group.name}
+                                  onChange={(event) =>
+                                    setReporterGroups((current) =>
+                                      current.map((item) => (item.id === group.id ? { ...item, name: event.target.value } : item)),
+                                    )
+                                  }
+                                  fullWidth
+                                />
+                                <FormControlLabel
+                                  control={
+                                    <Switch
+                                      checked={group.isActive}
+                                      onChange={(event) =>
+                                        setReporterGroups((current) =>
+                                          current.map((item) => (item.id === group.id ? { ...item, isActive: event.target.checked } : item)),
+                                        )
+                                      }
+                                    />
+                                  }
+                                  label={group.isActive ? 'Active' : 'Inactive'}
+                                />
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => void onSaveReporterGroup(group)}
+                                  disabled={!canWriteBranding || reporterGroupsSavingId === group.id || !group.name.trim()}
+                                >
+                                  {reporterGroupsSavingId === group.id ? 'Saving...' : 'Save Group'}
+                                </Button>
+                              </Stack>
+                            ))}
+                            <Divider />
+                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25} alignItems={{ md: 'center' }}>
+                              <TextField
+                                label="New Reporter Group"
+                                value={newReporterGroupName}
+                                onChange={(event) => setNewReporterGroupName(event.target.value)}
+                                fullWidth
+                              />
+                              <FormControlLabel
+                                control={<Switch checked={newReporterGroupActive} onChange={(event) => setNewReporterGroupActive(event.target.checked)} />}
+                                label={newReporterGroupActive ? 'Active' : 'Inactive'}
+                              />
+                              <Button
+                                variant="contained"
+                                onClick={() => void onCreateReporterGroup()}
+                                disabled={!canWriteBranding || reporterGroupsCreating || !newReporterGroupName.trim()}
+                              >
+                                {reporterGroupsCreating ? 'Creating...' : 'Create Group'}
+                              </Button>
+                            </Stack>
+                          </Stack>
                         )}
                       </Stack>
                       {!rapidProValidation.isValid ? (

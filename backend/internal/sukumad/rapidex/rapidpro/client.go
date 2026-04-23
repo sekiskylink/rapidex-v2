@@ -158,6 +158,16 @@ func (c *Client) LookupGroupByName(ctx context.Context, conn Connection, name st
 	return Group{}, false, nil
 }
 
+func (c *Client) CreateGroup(ctx context.Context, conn Connection, name string) (Group, error) {
+	var group Group
+	if err := c.doJSON(ctx, conn, http.MethodPost, "/groups.json", nil, map[string]any{
+		"name": strings.TrimSpace(name),
+	}, &group); err != nil {
+		return Group{}, err
+	}
+	return group, nil
+}
+
 func (c *Client) SendMessage(ctx context.Context, conn Connection, contactUUID string, text string) (Message, error) {
 	var message Message
 	if err := c.doJSON(ctx, conn, http.MethodPost, "/messages.json", nil, map[string]any{

@@ -15,6 +15,7 @@ import (
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/reporter"
+	"basepro/backend/internal/sukumad/reportergroup"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/scheduler"
 	"basepro/backend/internal/sukumad/server"
@@ -36,6 +37,7 @@ type RouteDeps struct {
 	DocumentationHandler *documentation.Handler
 	OrgUnitService       *orgunit.Service
 	ReporterService      *reporter.Service
+	ReporterGroupHandler *reportergroup.Handler
 	UserOrgUnitService   *userorg.Service
 }
 
@@ -50,6 +52,7 @@ func RegisterRoutes(api *gin.RouterGroup, deps RouteDeps) {
 	registerDocumentationRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.DocumentationHandler)
 	registerOrgUnitRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.OrgUnitService)
 	registerReporterRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ReporterService)
+	registerReporterGroupRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.ReporterGroupHandler)
 	registerUserOrgUnitRoutes(api, deps.ModuleFlagsProvider, deps.JWTManager, deps.RBACService, deps.UserOrgUnitService)
 }
 
@@ -503,6 +506,30 @@ func registerReporterRoutes(
 		}
 		c.JSON(http.StatusOK, result)
 	})
+}
+
+func registerReporterGroupRoutes(
+	api *gin.RouterGroup,
+	moduleFlagsProvider func() map[string]bool,
+	jwtManager *auth.JWTManager,
+	rbacService *rbac.Service,
+	handler *reportergroup.Handler,
+) {
+	if handler == nil {
+		return
+	}
+
+	group := api.Group("")
+	group.Use(
+		middleware.RequireModuleEnabled(moduleFlagsProvider, "reporters"),
+		middleware.ResolveJWTPrincipal(jwtManager),
+		middleware.RequireAuth(),
+		middleware.RequireJWTUser(),
+	)
+	group.GET("/reporter-groups", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), handler.List)
+	group.GET("/reporter-groups/options", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), handler.ListOptions)
+	group.POST("/reporter-groups", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), handler.Create)
+	group.PUT("/reporter-groups/:id", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), handler.Update)
 }
 
 func registerUserOrgUnitRoutes(

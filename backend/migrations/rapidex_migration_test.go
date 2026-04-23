@@ -8,7 +8,7 @@ import (
 )
 
 func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
-	files, err := filepath.Glob("0000{2[6-9],30}_*.sql")
+	files, err := filepath.Glob("0000{2[6-9],3[0-1]}_*.sql")
 	if err != nil {
 		t.Fatalf("glob migrations: %v", err)
 	}
@@ -17,9 +17,9 @@ func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("glob fallback migrations: %v", err)
 		}
-		extra, err := filepath.Glob("000030_*.sql")
+		extra, err := filepath.Glob("00003[0-1]_*.sql")
 		if err != nil {
-			t.Fatalf("glob 000030 migrations: %v", err)
+			t.Fatalf("glob 00003x migrations: %v", err)
 		}
 		files = append(files, extra...)
 	}
@@ -122,6 +122,22 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 	dropContactDown := readMigration(t, "000030_drop_reporter_contact_uuid.down.sql")
 	if !strings.Contains(dropContactDown, "ADD COLUMN IF NOT EXISTS contact_uuid") {
 		t.Fatal("expected contact uuid rollback migration to restore contact_uuid")
+	}
+
+	reporterGroupCatalogUp := readMigration(t, "000031_create_reporter_group_catalog.up.sql")
+	for _, fragment := range []string{
+		"CREATE TABLE IF NOT EXISTS reporter_group_catalog",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_reporter_group_catalog_name_unique",
+		"INSERT INTO reporter_group_catalog",
+	} {
+		if !strings.Contains(reporterGroupCatalogUp, fragment) {
+			t.Fatalf("expected reporter group catalog migration to contain %q", fragment)
+		}
+	}
+
+	reporterGroupCatalogDown := readMigration(t, "000031_create_reporter_group_catalog.down.sql")
+	if !strings.Contains(reporterGroupCatalogDown, "DROP TABLE IF EXISTS reporter_group_catalog") {
+		t.Fatal("expected reporter group catalog rollback to drop reporter_group_catalog")
 	}
 }
 

@@ -125,6 +125,9 @@ describe('reporters page', () => {
       if (path.includes('/reporters?')) {
         return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
       }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
       if (path.includes('/orgunits?')) {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
       }
@@ -144,6 +147,9 @@ describe('reporters page', () => {
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/reporters?')) {
         return { items: [], totalCount: 0, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
       }
       if (path.includes('/orgunits?')) {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
@@ -189,6 +195,9 @@ describe('reporters page', () => {
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/reporters?')) {
         return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
       }
       if (path.includes('/orgunits?')) {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
@@ -237,6 +246,9 @@ describe('reporters page', () => {
       if (path.includes('/reporters?')) {
         return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
       }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
       if (path.includes('/orgunits?')) {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
       }
@@ -275,6 +287,9 @@ describe('reporters page', () => {
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/reporters?')) {
         return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
       }
       if (path.includes('/orgunits?')) {
         return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }

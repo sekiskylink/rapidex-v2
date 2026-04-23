@@ -239,6 +239,9 @@ describe('web auth routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.endsWith('/reporter-groups/options')) {
+          return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
       }),
     )

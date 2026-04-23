@@ -157,6 +157,12 @@ describe('desktop reporters page', () => {
             headers: { 'Content-Type': 'application/json' },
           })
         }
+        if (url.endsWith('/api/v1/reporter-groups/options')) {
+          return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
         if (url.includes('/api/v1/orgunits?')) {
           return new Response(JSON.stringify({ items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }), {
             status: 200,
@@ -209,6 +215,12 @@ describe('desktop reporters page', () => {
       }
       if (url.includes('/api/v1/reporters?')) {
         return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporter-groups/options')) {
+        return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -338,6 +350,12 @@ describe('desktop reporters page', () => {
       }
       if (url.includes('/api/v1/reporters?')) {
         return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporter-groups/options')) {
+        return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })

@@ -1,5 +1,49 @@
 # Status
 
+## Milestone — RapidEx Reporter Group Catalog and RapidPro Auto-Provisioning (Complete)
+
+### What changed
+- Added a canonical RapidEx reporter group catalog backed by a new `reporter_group_catalog` table, seeded from existing distinct reporter group names during migration.
+- Added authenticated backend reporter-group APIs for:
+  - listing all catalog entries
+  - listing active options for reporter forms
+  - creating groups
+  - updating group names and active state
+- Updated reporter create/update validation so reporter group assignments must match active RapidEx catalog entries instead of arbitrary free-text values.
+- Updated RapidPro group handling so active RapidEx groups are provisioned automatically in RapidPro:
+  - when an active group is created or updated in the catalog
+  - when reporter sync encounters a missing RapidPro group for an active RapidEx group
+- Replaced the free-text reporter groups input in both web and desktop Reporters pages with a multi-select autocomplete backed by the active reporter-group catalog.
+- Extended both web and desktop Settings integrations pages with a Reporter Groups management section for:
+  - creating groups
+  - renaming groups
+  - activating/deactivating groups
+- Extended RapidPro client support with group creation requests and updated migration coverage for the new catalog table.
+
+### Added or updated tests
+- Backend:
+  - full backend suite coverage remains green after reporter-group catalog wiring and RapidPro group-creation support
+  - migration coverage updated for the new reporter-group catalog migration pair
+- Web:
+  - reporters page and route coverage updated for the new reporter-group options endpoint
+  - settings integrations route coverage remains green with reporter-group catalog loading
+- Desktop:
+  - reporters page and route coverage updated for the new reporter-group options endpoint
+  - settings integrations route coverage remains green with reporter-group catalog loading
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Reporter-group settings currently support create/update and active-state management, but do not yet support delete/archive history beyond deactivation.
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in some frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — RapidPro Sync Preview and Group Validation (Complete)
 
 ### What changed

@@ -115,6 +115,9 @@ func (c *reporterRapidProClient) LookupGroupByName(_ context.Context, _ rapidpro
 	}
 	return rapidpro.Group{UUID: "group-" + name, Name: name}, true, nil
 }
+func (c *reporterRapidProClient) CreateGroup(_ context.Context, _ rapidpro.Connection, name string) (rapidpro.Group, error) {
+	return rapidpro.Group{UUID: "group-" + name, Name: name}, nil
+}
 func (c *reporterRapidProClient) SendMessage(context.Context, rapidpro.Connection, string, string) (rapidpro.Message, error) {
 	c.messageCalls++
 	return rapidpro.Message{}, nil
@@ -478,6 +481,10 @@ func (c *reporterRapidProClientWithUpsertError) UpsertContact(context.Context, r
 
 func (c *reporterRapidProClientWithUpsertError) LookupGroupByName(ctx context.Context, conn rapidpro.Connection, name string) (rapidpro.Group, bool, error) {
 	return c.delegate.LookupGroupByName(ctx, conn, name)
+}
+
+func (c *reporterRapidProClientWithUpsertError) CreateGroup(ctx context.Context, conn rapidpro.Connection, name string) (rapidpro.Group, error) {
+	return c.delegate.CreateGroup(ctx, conn, name)
 }
 
 func (c *reporterRapidProClientWithUpsertError) SendMessage(ctx context.Context, conn rapidpro.Connection, contactUUID string, text string) (rapidpro.Message, error) {

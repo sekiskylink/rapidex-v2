@@ -22,3 +22,4 @@ web/.env
 # General
 .DS_Store
 *.log
+.idea/

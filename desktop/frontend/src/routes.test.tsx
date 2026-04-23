@@ -373,6 +373,9 @@ describe('app shell routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.endsWith('/api/v1/reporter-groups/options')) {
+          return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
         if (url.includes('/api/v1/bootstrap')) {
           return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
         }
