@@ -123,6 +123,7 @@ describe('app shell routes', () => {
     renderWithRouter('/dashboard', store)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveClass('Mui-selected')
     expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
     expect(screen.getAllByRole('button', { name: 'Users' }).length).toBeGreaterThan(0)

@@ -1257,6 +1257,7 @@ describe('web AppShell layout behavior', () => {
 
     expect(await screen.findByTestId('app-shell')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveClass('Mui-selected')
   })
 
   it('shows username and desktop-style user menu actions', async () => {

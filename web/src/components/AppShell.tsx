@@ -19,6 +19,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { useBootstrapSnapshot } from '../bootstrap/state'
@@ -69,16 +70,33 @@ function navItemStyles(selected: boolean) {
     minHeight: 46,
     mb: 0.5,
     borderRadius: 1.5,
+    overflow: 'hidden',
+    '&.Mui-selected': {
+      backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.1 : 0.16),
+    },
+    '&.Mui-selected:hover': {
+      backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.14 : 0.22),
+    },
     '&::before': {
       content: '""',
       position: 'absolute',
-      left: 6,
-      top: 8,
-      bottom: 8,
-      width: 4,
-      borderRadius: '0 999px 999px 0',
-      backgroundColor: selected ? 'primary.main' : 'transparent',
-      transition: 'background-color 120ms ease',
+      left: 4,
+      top: 3,
+      bottom: 3,
+      width: 19,
+      border: '2px solid',
+      borderRight: '0 solid transparent',
+      borderColor: selected ? 'primary.main' : 'transparent',
+      borderTopLeftRadius: 999,
+      borderBottomLeftRadius: 999,
+      borderTopRightRadius: 10,
+      borderBottomRightRadius: 10,
+      pointerEvents: 'none',
+      opacity: selected ? 0.95 : 0,
+      transition: 'border-color 120ms ease, opacity 120ms ease',
+    },
+    '&::after': {
+      content: 'none',
     },
   } as const
 }
@@ -221,7 +239,7 @@ export function AppShell() {
     const icon = navIcons[item.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />
 
     if ('children' in item) {
-      const selected = pathname.startsWith('/settings')
+      const selected = false
       const button = (
         <ListItemButton
           key={item.key}
