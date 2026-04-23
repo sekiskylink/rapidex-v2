@@ -89,7 +89,7 @@ describe('web registries', () => {
 
   it('enforces navigation access from required permissions', () => {
     const settingsOnly = userWith(['settings.read'], ['Staff'])
-    expect(canAccessNavigationPath('/settings', settingsOnly)).toBe(false)
+    expect(canAccessNavigationPath('/settings', settingsOnly)).toBe(true)
     const settingsWriter = userWith(['settings.write'], ['Staff'])
     expect(canAccessNavigationPath('/settings', settingsWriter)).toBe(true)
     expect(canAccessNavigationPath('/users', settingsOnly)).toBe(false)

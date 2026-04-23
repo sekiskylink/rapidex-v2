@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const maxErrorBodySummaryLength = 240
+
 type Connection struct {
 	BaseURL string
 	Headers map[string]string
@@ -59,7 +61,6 @@ type Broadcast struct {
 
 type UpsertContactInput struct {
 	UUID   string
-	URN    string
 	Name   string
 	URNs   []string
 	Groups []string
@@ -68,6 +69,21 @@ type UpsertContactInput struct {
 
 type listResponse[T any] struct {
 	Results []T `json:"results"`
+}
+
+type RequestError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *RequestError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Body == "" {
+		return fmt.Sprintf("rapidpro request failed with status %d", e.StatusCode)
+	}
+	return fmt.Sprintf("rapidpro request failed with status %d: %s", e.StatusCode, e.Body)
 }
 
 func (c *Client) LookupContactByUUID(ctx context.Context, conn Connection, uuid string) (Contact, bool, error) {
@@ -93,10 +109,15 @@ func (c *Client) LookupContactByURN(ctx context.Context, conn Connection, urn st
 }
 
 func (c *Client) UpsertContact(ctx context.Context, conn Connection, input UpsertContactInput) (Contact, error) {
+	urns := normalizeStrings(input.URNs)
+	groups := normalizeStrings(input.Groups)
+	if groups == nil {
+		groups = []string{}
+	}
 	body := map[string]any{
 		"name":   strings.TrimSpace(input.Name),
-		"urns":   normalizeStrings(input.URNs),
-		"groups": normalizeStrings(input.Groups),
+		"urns":   urns,
+		"groups": groups,
 	}
 	if len(input.Fields) > 0 {
 		body["fields"] = normalizeFieldMap(input.Fields)
@@ -104,8 +125,6 @@ func (c *Client) UpsertContact(ctx context.Context, conn Connection, input Upser
 	query := map[string]string{}
 	if uuid := strings.TrimSpace(input.UUID); uuid != "" {
 		query["uuid"] = uuid
-	} else if urn := strings.TrimSpace(input.URN); urn != "" {
-		query["urn"] = urn
 	}
 	var contact Contact
 	if err := c.doJSON(ctx, conn, http.MethodPost, "/contacts.json", query, body, &contact); err != nil {
@@ -122,7 +141,7 @@ func (c *Client) ListContactFields(ctx context.Context, conn Connection) ([]Cont
 	return response.Results, nil
 }
 
-func (c *Client) EnsureGroup(ctx context.Context, conn Connection, name string) (Group, bool, error) {
+func (c *Client) LookupGroupByName(ctx context.Context, conn Connection, name string) (Group, bool, error) {
 	normalized := strings.TrimSpace(name)
 	if normalized == "" {
 		return Group{}, false, fmt.Errorf("group name is required")
@@ -133,14 +152,10 @@ func (c *Client) EnsureGroup(ctx context.Context, conn Connection, name string) 
 	}
 	for _, group := range groups {
 		if strings.EqualFold(strings.TrimSpace(group.Name), normalized) {
-			return group, false, nil
+			return group, true, nil
 		}
 	}
-	var created Group
-	if err := c.doJSON(ctx, conn, http.MethodPost, "/groups.json", nil, map[string]string{"name": normalized}, &created); err != nil {
-		return Group{}, false, err
-	}
-	return created, true, nil
+	return Group{}, false, nil
 }
 
 func (c *Client) SendMessage(ctx context.Context, conn Connection, contactUUID string, text string) (Message, error) {
@@ -220,7 +235,10 @@ func (c *Client) doJSON(ctx context.Context, conn Connection, method string, pat
 		return fmt.Errorf("read RapidPro response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("rapidpro request failed with status %d", resp.StatusCode)
+		return &RequestError{
+			StatusCode: resp.StatusCode,
+			Body:       summarizeErrorBody(responseBody),
+		}
 	}
 	if target == nil || len(bytes.TrimSpace(responseBody)) == 0 {
 		return nil
@@ -275,6 +293,20 @@ func normalizeStrings(values []string) []string {
 		normalized = append(normalized, trimmed)
 	}
 	return normalized
+}
+
+func summarizeErrorBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
+	trimmed = strings.ReplaceAll(trimmed, "\r", " ")
+	trimmed = strings.Join(strings.Fields(trimmed), " ")
+	if len(trimmed) <= maxErrorBodySummaryLength {
+		return trimmed
+	}
+	return strings.TrimSpace(trimmed[:maxErrorBodySummaryLength]) + "..."
 }
 
 func normalizeFieldMap(values map[string]string) map[string]string {

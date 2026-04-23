@@ -48,6 +48,11 @@ type rapidProFieldClient interface {
 	ListContactFields(context.Context, rapidpro.Connection) ([]rapidpro.ContactField, error)
 }
 
+type rapidProReporterSyncPreviewProvider interface {
+	ListRapidProReporterSyncPreviewReporters(context.Context) ([]RapidProReporterOption, error)
+	BuildRapidProReporterSyncPreview(context.Context, int64) (RapidProReporterSyncPreview, error)
+}
+
 type RapidProReporterFieldMapping struct {
 	SourceKey        string `json:"sourceKey"`
 	SourceLabel      string `json:"sourceLabel"`
@@ -70,6 +75,35 @@ type RapidProReporterSyncSettings struct {
 type RapidProReporterSyncUpdateInput struct {
 	RapidProServerCode string                         `json:"rapidProServerCode"`
 	Mappings           []RapidProReporterFieldMapping `json:"mappings"`
+}
+
+type RapidProReporterOption struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type RapidProResolvedGroup struct {
+	Name string `json:"name"`
+	UUID string `json:"uuid"`
+}
+
+type RapidProReporterSyncPreviewReporter struct {
+	ID            int64    `json:"id"`
+	Name          string   `json:"name"`
+	Telephone     string   `json:"telephone"`
+	RapidProUUID  string   `json:"rapidProUuid"`
+	Groups        []string `json:"groups"`
+	FacilityName  string   `json:"facilityName,omitempty"`
+	FacilityUID   string   `json:"facilityUid,omitempty"`
+	SyncOperation string   `json:"syncOperation"`
+}
+
+type RapidProReporterSyncPreview struct {
+	Reporter       RapidProReporterSyncPreviewReporter `json:"reporter"`
+	RequestPath    string                              `json:"requestPath"`
+	RequestQuery   map[string]string                   `json:"requestQuery"`
+	RequestBody    map[string]any                      `json:"requestBody"`
+	ResolvedGroups []RapidProResolvedGroup             `json:"resolvedGroups"`
 }
 
 type rapidProReporterSyncStored struct {
@@ -169,6 +203,24 @@ func (s *Service) UpdateRapidProReporterSync(ctx context.Context, input RapidPro
 		},
 	})
 	return result, nil
+}
+
+func (s *Service) ListRapidProReporterSyncPreviewReporters(ctx context.Context) ([]RapidProReporterOption, error) {
+	if s.rapidProPreview == nil {
+		return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidpro": []string{"RapidPro preview is not configured"},
+		})
+	}
+	return s.rapidProPreview.ListRapidProReporterSyncPreviewReporters(ctx)
+}
+
+func (s *Service) GetRapidProReporterSyncPreview(ctx context.Context, reporterID int64) (RapidProReporterSyncPreview, error) {
+	if s.rapidProPreview == nil {
+		return RapidProReporterSyncPreview{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidpro": []string{"RapidPro preview is not configured"},
+		})
+	}
+	return s.rapidProPreview.BuildRapidProReporterSyncPreview(ctx, reporterID)
 }
 
 func (s *Service) getRapidProReporterSyncStored(ctx context.Context) (rapidProReporterSyncStored, error) {

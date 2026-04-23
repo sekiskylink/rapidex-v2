@@ -1,5 +1,44 @@
 # Status
 
+## Milestone — RapidPro Sync Preview and Group Validation (Complete)
+
+### What changed
+- Fixed the RapidPro reporter contact upsert contract so sync no longer sends the invalid request shape that combines URL URN mode with body `urns`, which RapidPro rejects with HTTP 400.
+- Refactored reporter sync and settings preview to share one backend payload builder so preview and live sync use the same resolved name, URNs, field mappings, and facility-derived values.
+- Changed reporter group handling from auto-create to validate-existing:
+  - reporter group names must already exist in RapidPro
+  - missing remote groups now fail preview and sync with actionable validation detail
+- Added RapidPro sync preview endpoints under the existing Settings module so operators can choose a reporter and inspect:
+  - request path and query mode
+  - formatted request JSON body
+  - resolved RapidPro groups
+- Extended both web and desktop Settings pages with a `Preview Reporter` selector and read-only RapidPro sync preview panel.
+- Hardened the web and desktop integrations preview UI so `resolvedGroups: null` from older responses is treated safely as an empty list instead of crashing the page.
+- Updated the RapidPro sync implementation notes and saved a prompt traceability copy in `docs/prompts/2026-04-23-rapidpro-sync-preview-and-group-validation.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - RapidPro client coverage for valid UUID upsert query behavior and empty-groups serialization
+  - reporter sync coverage for preview payload generation and missing RapidPro group validation
+  - settings router coverage for preview route access
+- Web:
+  - settings route coverage for rendering the RapidPro sync preview
+- Desktop:
+  - matching settings route coverage for rendering the RapidPro sync preview
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in some frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — RapidPro Reporter Field Mapping Settings (Complete)
 
 ### What changed

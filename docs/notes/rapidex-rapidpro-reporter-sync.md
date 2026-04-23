@@ -15,11 +15,14 @@
 - If a contact exists remotely, Rapidex updates it and persists the returned UUID locally.
 - If no contact exists, Rapidex creates it and stores the created UUID in `reporters.rapidpro_uuid`.
 - Successful syncs mark the reporter as `synced=true`.
-- Reporter group names are normalized and mapped to RapidPro groups, creating missing groups before attaching the contact.
+- Reporter group names are normalized and mapped to existing RapidPro groups.
+- Sync now fails with actionable validation detail when a reporter references a group name that does not already exist in RapidPro.
+- The contact upsert flow no longer mixes URL URN lookup mode with body `urns`, which RapidPro rejects with HTTP 400.
 
 ## Reporter field mapping settings
 - Added a server-backed RapidPro reporter sync settings payload under the existing Settings module.
 - Operators can refresh available RapidPro contact fields from the configured integration server and save reusable mappings once.
+- Settings now expose a per-reporter RapidPro sync preview so operators can inspect the exact outbound request body, query mode, and resolved groups before syncing.
 - Saved mappings are applied uniformly to:
   - row sync
   - bulk sync
@@ -30,6 +33,7 @@
 - Sync now fails early with validation detail when:
   - a saved RapidPro field mapping points to a field that no longer exists remotely
   - a mapped reporter/facility value is missing for the current reporter
+  - a mapped reporter group does not exist remotely in RapidPro
 - RapidPro contact upsert now includes the mapped `fields` payload in addition to the existing contact name, URNs, and groups.
 
 ## Messaging behavior

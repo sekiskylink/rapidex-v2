@@ -183,6 +183,7 @@ func run() error {
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
 		WithRapidProSettings(settingsService).
 		WithOrgUnitLookup(sukumadOrgUnitService)
+	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
 	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()

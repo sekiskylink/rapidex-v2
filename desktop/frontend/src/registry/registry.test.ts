@@ -89,7 +89,7 @@ describe('desktop registries', () => {
 
   it('enforces navigation access from required permissions', () => {
     const settingsOnly = principalWith(['settings.read'], ['Staff'])
-    expect(canAccessNavigationPath(settingsOnly, '/settings')).toBe(false)
+    expect(canAccessNavigationPath(settingsOnly, '/settings')).toBe(true)
     const settingsWriter = principalWith(['settings.write'], ['Staff'])
     expect(canAccessNavigationPath(settingsWriter, '/settings')).toBe(true)
     expect(canAccessNavigationPath(settingsOnly, '/users')).toBe(false)

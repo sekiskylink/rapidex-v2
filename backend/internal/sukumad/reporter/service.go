@@ -16,7 +16,7 @@ import (
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
 
-const rapidProServerCode = "rapidpro"
+const defaultRapidProServerCode = "rapidpro"
 
 type rapidProServerLookup interface {
 	GetServerByCode(context.Context, string) (sukumadserver.Record, error)
@@ -26,7 +26,7 @@ type rapidProClient interface {
 	LookupContactByUUID(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error)
 	LookupContactByURN(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error)
 	UpsertContact(context.Context, rapidpro.Connection, rapidpro.UpsertContactInput) (rapidpro.Contact, error)
-	EnsureGroup(context.Context, rapidpro.Connection, string) (rapidpro.Group, bool, error)
+	LookupGroupByName(context.Context, rapidpro.Connection, string) (rapidpro.Group, bool, error)
 	SendMessage(context.Context, rapidpro.Connection, string, string) (rapidpro.Message, error)
 	SendBroadcast(context.Context, rapidpro.Connection, []string, string) (rapidpro.Broadcast, error)
 }
@@ -112,6 +112,49 @@ func (s *Service) Get(ctx context.Context, id int64) (Reporter, error) {
 	return reporter, nil
 }
 
+func (s *Service) ListRapidProReporterSyncPreviewReporters(ctx context.Context) ([]settings.RapidProReporterOption, error) {
+	result, err := s.repo.List(ctx, ListQuery{Page: 0, PageSize: 200})
+	if err != nil {
+		return nil, err
+	}
+	options := make([]settings.RapidProReporterOption, 0, len(result.Items))
+	for _, reporter := range result.Items {
+		options = append(options, settings.RapidProReporterOption{
+			ID:   reporter.ID,
+			Name: reporter.Name,
+		})
+	}
+	return options, nil
+}
+
+func (s *Service) BuildRapidProReporterSyncPreview(ctx context.Context, id int64) (settings.RapidProReporterSyncPreview, error) {
+	reporter, err := s.Get(ctx, id)
+	if err != nil {
+		return settings.RapidProReporterSyncPreview{}, err
+	}
+	built, err := s.buildRapidProSync(ctx, reporter)
+	if err != nil {
+		return settings.RapidProReporterSyncPreview{}, err
+	}
+	preview := settings.RapidProReporterSyncPreview{
+		Reporter: settings.RapidProReporterSyncPreviewReporter{
+			ID:            reporter.ID,
+			Name:          reporter.Name,
+			Telephone:     reporter.Telephone,
+			RapidProUUID:  reporter.RapidProUUID,
+			Groups:        append([]string(nil), reporter.Groups...),
+			FacilityName:  built.ContactData.FacilityName,
+			FacilityUID:   built.ContactData.FacilityUID,
+			SyncOperation: built.Operation,
+		},
+		RequestPath:    "/api/v2/contacts.json",
+		RequestQuery:   built.RequestQuery,
+		RequestBody:    built.RequestBody,
+		ResolvedGroups: built.ResolvedGroups,
+	}
+	return preview, nil
+}
+
 // Create validates and persists a new Reporter.
 func (s *Service) Create(ctx context.Context, r Reporter) (Reporter, error) {
 	if err := validateReporter(r, false); err != nil {
@@ -188,7 +231,7 @@ func (s *Service) SendMessage(ctx context.Context, id int64, text string) (Messa
 		return MessageResult{}, err
 	}
 	if _, err := s.rapidProClient.SendMessage(ctx, conn, syncResult.Reporter.RapidProUUID, message); err != nil {
-		return MessageResult{}, err
+		return MessageResult{}, mapRapidProRequestError(err)
 	}
 	s.logAudit(ctx, audit.Event{
 		Action:     "reporter.message.sent",
@@ -229,7 +272,7 @@ func (s *Service) BroadcastMessage(ctx context.Context, ids []int64, text string
 		reporterIDs = append(reporterIDs, reporter.ID)
 	}
 	if _, err := s.rapidProClient.SendBroadcast(ctx, conn, contactUUIDs, message); err != nil {
-		return BroadcastResult{}, err
+		return BroadcastResult{}, mapRapidProRequestError(err)
 	}
 	s.logAudit(ctx, audit.Event{
 		Action:     "reporter.broadcast.sent",
@@ -289,65 +332,13 @@ func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, d
 }
 
 func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResult, error) {
-	reporter.RapidProUUID = strings.TrimSpace(reporter.RapidProUUID)
-	conn, err := s.rapidProConnection(ctx)
+	built, err := s.buildRapidProSync(ctx, reporter)
 	if err != nil {
 		return SyncResult{}, err
 	}
-	groupUUIDs, _, err := s.ensureRapidProGroups(ctx, conn, reporter.Groups)
+	contact, err := s.rapidProClient.UpsertContact(ctx, built.Connection, built.UpsertInput)
 	if err != nil {
-		return SyncResult{}, err
-	}
-	urn := phoneURN(reporter.Telephone)
-	if urn == "" {
-		return SyncResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{"telephone": []string{"must resolve to a RapidPro tel: URN"}})
-	}
-
-	operation := "updated"
-	resolvedUUID := reporter.RapidProUUID
-	upsertInput := rapidpro.UpsertContactInput{
-		Name:   strings.TrimSpace(reporter.Name),
-		URN:    urn,
-		URNs:   []string{urn},
-		Groups: groupUUIDs,
-	}
-	mapped, err := s.rapidProContactData(ctx, reporter)
-	if err != nil {
-		return SyncResult{}, err
-	}
-	if mapped.Name != "" {
-		upsertInput.Name = mapped.Name
-	}
-	if len(mapped.URNs) > 0 {
-		upsertInput.URNs = mapped.URNs
-	}
-	upsertInput.Fields = mapped.Fields
-	if resolvedUUID != "" {
-		contact, found, lookupErr := s.rapidProClient.LookupContactByUUID(ctx, conn, resolvedUUID)
-		if lookupErr != nil {
-			return SyncResult{}, lookupErr
-		}
-		if found {
-			resolvedUUID = contact.UUID
-		} else {
-			resolvedUUID = ""
-		}
-	}
-	if resolvedUUID == "" {
-		contact, found, lookupErr := s.rapidProClient.LookupContactByURN(ctx, conn, urn)
-		if lookupErr != nil {
-			return SyncResult{}, lookupErr
-		}
-		if found {
-			resolvedUUID = contact.UUID
-		} else {
-			operation = "created"
-		}
-	}
-	upsertInput.UUID = resolvedUUID
-	contact, err := s.rapidProClient.UpsertContact(ctx, conn, upsertInput)
-	if err != nil {
-		return SyncResult{}, err
+		return SyncResult{}, mapRapidProRequestError(err)
 	}
 	updatedReporter, err := s.repo.UpdateRapidProStatus(ctx, reporter.ID, contact.UUID, true)
 	if err != nil {
@@ -359,18 +350,115 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 		EntityID:   strPtr(fmt.Sprintf("%d", updatedReporter.ID)),
 		Metadata: map[string]any{
 			"name":         updatedReporter.Name,
-			"operation":    operation,
+			"operation":    built.Operation,
 			"rapidProUuid": updatedReporter.RapidProUUID,
-			"groupCount":   len(groupUUIDs),
+			"groupCount":   len(built.ResolvedGroups),
 		},
 	})
-	return SyncResult{Reporter: updatedReporter, Operation: operation, GroupCount: len(groupUUIDs)}, nil
+	return SyncResult{Reporter: updatedReporter, Operation: built.Operation, GroupCount: len(built.ResolvedGroups)}, nil
 }
 
 type rapidProContactData struct {
-	Name   string
-	URNs   []string
-	Fields map[string]string
+	Name         string
+	URNs         []string
+	Fields       map[string]string
+	FacilityName string
+	FacilityUID  string
+}
+
+type rapidProSyncBuild struct {
+	Connection     rapidpro.Connection
+	Operation      string
+	UpsertInput    rapidpro.UpsertContactInput
+	RequestQuery   map[string]string
+	RequestBody    map[string]any
+	ResolvedGroups []settings.RapidProResolvedGroup
+	ContactData    rapidProContactData
+}
+
+func (s *Service) buildRapidProSync(ctx context.Context, reporter Reporter) (rapidProSyncBuild, error) {
+	reporter.RapidProUUID = strings.TrimSpace(reporter.RapidProUUID)
+	conn, err := s.rapidProConnection(ctx)
+	if err != nil {
+		return rapidProSyncBuild{}, err
+	}
+	urn := phoneURN(reporter.Telephone)
+	if urn == "" {
+		return rapidProSyncBuild{}, apperror.ValidationWithDetails("validation failed", map[string]any{"telephone": []string{"must resolve to a RapidPro tel: URN"}})
+	}
+	mapped, err := s.rapidProContactData(ctx, reporter)
+	if err != nil {
+		return rapidProSyncBuild{}, err
+	}
+	resolvedGroups, err := s.lookupRapidProGroups(ctx, conn, reporter.Groups)
+	if err != nil {
+		return rapidProSyncBuild{}, err
+	}
+	if resolvedGroups == nil {
+		resolvedGroups = []settings.RapidProResolvedGroup{}
+	}
+	groupUUIDs := make([]string, 0, len(resolvedGroups))
+	for _, group := range resolvedGroups {
+		groupUUIDs = append(groupUUIDs, group.UUID)
+	}
+
+	operation := "updated"
+	resolvedUUID := reporter.RapidProUUID
+	if resolvedUUID != "" {
+		contact, found, lookupErr := s.rapidProClient.LookupContactByUUID(ctx, conn, resolvedUUID)
+		if lookupErr != nil {
+			return rapidProSyncBuild{}, mapRapidProRequestError(lookupErr)
+		}
+		if found {
+			resolvedUUID = contact.UUID
+		} else {
+			resolvedUUID = ""
+		}
+	}
+	if resolvedUUID == "" {
+		contact, found, lookupErr := s.rapidProClient.LookupContactByURN(ctx, conn, urn)
+		if lookupErr != nil {
+			return rapidProSyncBuild{}, mapRapidProRequestError(lookupErr)
+		}
+		if found {
+			resolvedUUID = contact.UUID
+		} else {
+			operation = "created"
+		}
+	}
+
+	upsertInput := rapidpro.UpsertContactInput{
+		UUID:   resolvedUUID,
+		Name:   mapped.Name,
+		URNs:   mapped.URNs,
+		Groups: groupUUIDs,
+		Fields: mapped.Fields,
+	}
+	requestQuery := map[string]string{}
+	if resolvedUUID != "" {
+		requestQuery["uuid"] = resolvedUUID
+	}
+	requestBody := map[string]any{
+		"name":   upsertInput.Name,
+		"urns":   append([]string(nil), upsertInput.URNs...),
+		"groups": []string{},
+	}
+	if len(upsertInput.Groups) > 0 {
+		requestBody["groups"] = append([]string(nil), upsertInput.Groups...)
+	}
+	if len(mapped.Fields) > 0 {
+		requestBody["fields"] = cloneStringMap(mapped.Fields)
+	}
+
+	return rapidProSyncBuild{
+		Connection:     conn,
+		Operation:      operation,
+		UpsertInput:    upsertInput,
+		RequestQuery:   requestQuery,
+		RequestBody:    requestBody,
+		ResolvedGroups: resolvedGroups,
+		ContactData:    mapped,
+	}, nil
 }
 
 func (s *Service) rapidProContactData(ctx context.Context, reporter Reporter) (rapidProContactData, error) {
@@ -418,17 +506,23 @@ func (s *Service) rapidProContactData(ctx context.Context, reporter Reporter) (r
 			})
 		}
 		unit = loaded
+		result.FacilityName = strings.TrimSpace(unit.Name)
+		result.FacilityUID = strings.TrimSpace(unit.UID)
 	}
 
 	values := make(map[string]string, len(config.Mappings))
 	for _, mapping := range config.Mappings {
 		resolved := strings.TrimSpace(resolveRapidProSourceValue(mapping.SourceKey, reporter, unit))
+		targetKey := strings.ToLower(strings.TrimSpace(mapping.RapidProFieldKey))
 		if resolved == "" {
+			if targetKey == settingsTargetURNWhats() {
+				continue
+			}
 			return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
 				"rapidproMapping": []string{fmt.Sprintf("%s is required for RapidPro field %q", mapping.SourceLabel, mapping.RapidProFieldKey)},
 			})
 		}
-		switch strings.ToLower(strings.TrimSpace(mapping.RapidProFieldKey)) {
+		switch targetKey {
 		case settingsTargetName():
 			result.Name = resolved
 		case settingsTargetURNTel():
@@ -479,41 +573,74 @@ func resolveRapidProSourceValue(sourceKey string, reporter Reporter, unit orguni
 	}
 }
 
-func (s *Service) ensureRapidProGroups(ctx context.Context, conn rapidpro.Connection, groups []string) ([]string, int, error) {
+func (s *Service) lookupRapidProGroups(ctx context.Context, conn rapidpro.Connection, groups []string) ([]settings.RapidProResolvedGroup, error) {
 	normalized := normalizeGroups(groups)
 	if len(normalized) == 0 {
-		return nil, 0, nil
+		return nil, nil
 	}
-	groupUUIDs := make([]string, 0, len(normalized))
-	createdCount := 0
+	resolved := make([]settings.RapidProResolvedGroup, 0, len(normalized))
+	missing := make([]string, 0)
 	for _, group := range normalized {
-		resolved, created, err := s.rapidProClient.EnsureGroup(ctx, conn, group)
+		match, found, err := s.rapidProClient.LookupGroupByName(ctx, conn, group)
 		if err != nil {
-			return nil, 0, err
+			return nil, mapRapidProRequestError(err)
 		}
-		if created {
-			createdCount++
+		if !found {
+			missing = append(missing, group)
+			continue
 		}
-		groupUUIDs = append(groupUUIDs, resolved.UUID)
+		resolved = append(resolved, settings.RapidProResolvedGroup{
+			Name: match.Name,
+			UUID: match.UUID,
+		})
 	}
-	return groupUUIDs, createdCount, nil
+	if len(missing) > 0 {
+		return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidproGroups": []string{fmt.Sprintf("RapidPro groups must exist before sync: %s", strings.Join(missing, ", "))},
+		})
+	}
+	return resolved, nil
 }
 
 func (s *Service) rapidProConnection(ctx context.Context) (rapidpro.Connection, error) {
 	if s.serverLookup == nil || s.rapidProClient == nil {
 		return rapidpro.Connection{}, apperror.ValidationWithDetails("validation failed", map[string]any{"rapidpro": []string{"RapidPro integration is not configured"}})
 	}
-	record, err := s.serverLookup.GetServerByCode(ctx, rapidProServerCode)
+	serverCode, err := s.rapidProServerCode(ctx)
+	if err != nil {
+		return rapidpro.Connection{}, err
+	}
+	record, err := s.serverLookup.GetServerByCode(ctx, serverCode)
 	if err != nil {
 		return rapidpro.Connection{}, err
 	}
 	if record.Suspended {
-		return rapidpro.Connection{}, apperror.ValidationWithDetails("validation failed", map[string]any{"rapidpro": []string{"RapidPro server is suspended"}})
+		return rapidpro.Connection{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidpro":           []string{"RapidPro server is suspended"},
+			"rapidProServerCode": []string{serverCode},
+		})
 	}
 	if strings.TrimSpace(record.BaseURL) == "" {
-		return rapidpro.Connection{}, apperror.ValidationWithDetails("validation failed", map[string]any{"rapidpro": []string{"RapidPro server base URL is required"}})
+		return rapidpro.Connection{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidpro":           []string{"RapidPro server base URL is required"},
+			"rapidProServerCode": []string{serverCode},
+		})
 	}
 	return rapidpro.Connection{BaseURL: record.BaseURL, Headers: record.Headers}, nil
+}
+
+func (s *Service) rapidProServerCode(ctx context.Context) (string, error) {
+	if s.rapidProSettings == nil {
+		return defaultRapidProServerCode, nil
+	}
+	config, err := s.rapidProSettings.GetRapidProReporterSync(ctx)
+	if err != nil {
+		return "", err
+	}
+	if code := strings.TrimSpace(config.RapidProServerCode); code != "" {
+		return code, nil
+	}
+	return defaultRapidProServerCode, nil
 }
 
 func (s *Service) loadByIDs(ctx context.Context, ids []int64) ([]Reporter, error) {
@@ -564,6 +691,23 @@ func mapReporterLookupError(err error) error {
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"reporter not found"}})
+	}
+	return mapRapidProRequestError(err)
+}
+
+func mapRapidProRequestError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var requestErr *rapidpro.RequestError
+	if errors.As(err, &requestErr) && requestErr.StatusCode >= 400 && requestErr.StatusCode < 500 {
+		detail := fmt.Sprintf("RapidPro rejected the request (status %d)", requestErr.StatusCode)
+		if requestErr.Body != "" {
+			detail += ": " + requestErr.Body
+		}
+		return apperror.ValidationWithDetails("validation failed", map[string]any{
+			"rapidpro": []string{detail},
+		})
 	}
 	return err
 }
@@ -645,6 +789,17 @@ func normalizeGroups(groups []string) []string {
 		normalized = append(normalized, value)
 	}
 	return normalized
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func (s *Service) logAudit(ctx context.Context, event audit.Event) {

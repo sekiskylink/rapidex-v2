@@ -2,6 +2,7 @@ package settings
 
 import (
 	"net/http"
+	"strconv"
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/auth"
@@ -129,6 +130,31 @@ func (h *Handler) UpdateRapidProReporterSync(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) ListRapidProReporterSyncPreviewReporters(c *gin.Context) {
+	reporters, err := h.service.ListRapidProReporterSyncPreviewReporters(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": reporters})
+}
+
+func (h *Handler) GetRapidProReporterSyncPreview(c *gin.Context) {
+	reporterID, err := strconv.ParseInt(c.Query("reporterId"), 10, 64)
+	if err != nil || reporterID <= 0 {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"reporterId": []string{"is required"},
+		}))
+		return
+	}
+	preview, err := h.service.GetRapidProReporterSyncPreview(c.Request.Context(), reporterID)
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, preview)
 }
 
 func principalFromContext(c *gin.Context) (auth.Principal, bool) {

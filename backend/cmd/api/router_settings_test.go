@@ -18,6 +18,8 @@ type fakeSettingsRepo struct {
 	values map[string][]byte
 }
 
+type fakeRapidProPreviewProvider struct{}
+
 func (f *fakeSettingsRepo) Get(_ context.Context, category string, key string) (json.RawMessage, error) {
 	if len(f.values) == 0 {
 		return nil, settings.ErrNotFound
@@ -34,6 +36,26 @@ func (f *fakeSettingsRepo) Upsert(_ context.Context, category string, key string
 	}
 	f.values[category+"::"+key] = append([]byte{}, value...)
 	return nil
+}
+
+func (fakeRapidProPreviewProvider) ListRapidProReporterSyncPreviewReporters(context.Context) ([]settings.RapidProReporterOption, error) {
+	return []settings.RapidProReporterOption{{ID: 11, Name: "Alice Reporter"}}, nil
+}
+
+func (fakeRapidProPreviewProvider) BuildRapidProReporterSyncPreview(context.Context, int64) (settings.RapidProReporterSyncPreview, error) {
+	return settings.RapidProReporterSyncPreview{
+		Reporter: settings.RapidProReporterSyncPreviewReporter{
+			ID:            11,
+			Name:          "Alice Reporter",
+			Telephone:     "+256700000001",
+			SyncOperation: "created",
+		},
+		RequestPath:  "/api/v2/contacts.json",
+		RequestQuery: map[string]string{},
+		RequestBody: map[string]any{
+			"name": "Alice Reporter",
+		},
+	}, nil
 }
 
 func TestLoginBrandingPublicRouteAccessibleWithoutAuth(t *testing.T) {
@@ -205,6 +227,45 @@ func TestRapidProReporterSyncReadRouteAcceptsSettingsReader(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "rapidProServerCode") {
 		t.Fatalf("expected rapidpro sync settings payload, got %s", w.Body.String())
+	}
+}
+
+func TestRapidProReporterSyncPreviewRoutesAcceptSettingsReader(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(202, "reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		202: []string{"settings.read"},
+	})
+	handler := settings.NewHandler(
+		settings.NewService(&fakeSettingsRepo{}, nil).
+			WithRapidProPreviewProvider(fakeRapidProPreviewProvider{}),
+	)
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	reportersReq := httptest.NewRequest(http.MethodGet, "/api/v1/settings/rapidpro-reporter-sync/preview-reporters", nil)
+	reportersReq.Header.Set("Authorization", "Bearer "+token)
+	reportersRes := httptest.NewRecorder()
+	router.ServeHTTP(reportersRes, reportersReq)
+	if reportersRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 from preview reporters, got %d body=%s", reportersRes.Code, reportersRes.Body.String())
+	}
+	if !strings.Contains(reportersRes.Body.String(), "Alice Reporter") {
+		t.Fatalf("expected preview reporters payload, got %s", reportersRes.Body.String())
+	}
+
+	previewReq := httptest.NewRequest(http.MethodGet, "/api/v1/settings/rapidpro-reporter-sync/preview?reporterId=11", nil)
+	previewReq.Header.Set("Authorization", "Bearer "+token)
+	previewRes := httptest.NewRecorder()
+	router.ServeHTTP(previewRes, previewReq)
+	if previewRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 from preview, got %d body=%s", previewRes.Code, previewRes.Body.String())
+	}
+	if !strings.Contains(previewRes.Body.String(), "contacts.json") {
+		t.Fatalf("expected preview payload, got %s", previewRes.Body.String())
 	}
 }
 

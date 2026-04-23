@@ -2,9 +2,12 @@ package reporter
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
@@ -61,16 +64,28 @@ func (r *reporterServiceRepo) Delete(context.Context, int64) error {
 }
 
 type reporterServerLookup struct {
-	record sukumadserver.Record
+	record         sukumadserver.Record
+	records        map[string]sukumadserver.Record
+	requestedCodes []string
 }
 
-func (s reporterServerLookup) GetServerByCode(context.Context, string) (sukumadserver.Record, error) {
+func (s *reporterServerLookup) GetServerByCode(_ context.Context, code string) (sukumadserver.Record, error) {
+	s.requestedCodes = append(s.requestedCodes, code)
+	if len(s.records) > 0 {
+		record, ok := s.records[code]
+		if !ok {
+			return sukumadserver.Record{}, errors.New("server not found")
+		}
+		return record, nil
+	}
 	return s.record, nil
 }
 
 type reporterRapidProClient struct {
 	lookupByUUIDFound bool
 	lookupByURNFound  bool
+	lookupGroupFound  bool
+	groupLookupSet    bool
 	messageCalls      int
 	lastUpsertInput   rapidpro.UpsertContactInput
 }
@@ -94,7 +109,10 @@ func (c *reporterRapidProClient) UpsertContact(_ context.Context, _ rapidpro.Con
 	}
 	return rapidpro.Contact{UUID: "contact-created"}, nil
 }
-func (c *reporterRapidProClient) EnsureGroup(_ context.Context, _ rapidpro.Connection, name string) (rapidpro.Group, bool, error) {
+func (c *reporterRapidProClient) LookupGroupByName(_ context.Context, _ rapidpro.Connection, name string) (rapidpro.Group, bool, error) {
+	if c.groupLookupSet && !c.lookupGroupFound {
+		return rapidpro.Group{}, false, nil
+	}
 	return rapidpro.Group{UUID: "group-" + name, Name: name}, true, nil
 }
 func (c *reporterRapidProClient) SendMessage(context.Context, rapidpro.Connection, string, string) (rapidpro.Message, error) {
@@ -136,14 +154,15 @@ func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {
 		},
 	}
 	client := &reporterRapidProClient{lookupByUUIDFound: true}
+	serverLookup := &reporterServerLookup{
+		record: sukumadserver.Record{
+			Code:    "rapidpro",
+			BaseURL: "https://rapidpro.example.com",
+			Headers: map[string]string{"Authorization": "Token secret"},
+		},
+	}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
-			record: sukumadserver.Record{
-				Code:    "rapidpro",
-				BaseURL: "https://rapidpro.example.com",
-				Headers: map[string]string{"Authorization": "Token secret"},
-			},
-		}, client)
+		WithRapidProIntegration(serverLookup, client)
 
 	result, err := service.SyncReporter(context.Background(), 1)
 	if err != nil {
@@ -160,6 +179,9 @@ func TestSyncReporterUpdatesExistingRapidProContact(t *testing.T) {
 	}
 	if repo.updateCalls != 1 {
 		t.Fatalf("expected one rapidpro status update, got %d", repo.updateCalls)
+	}
+	if len(serverLookup.requestedCodes) != 1 || serverLookup.requestedCodes[0] != "rapidpro" {
+		t.Fatalf("expected default server code lookup, got %#v", serverLookup.requestedCodes)
 	}
 }
 
@@ -178,7 +200,7 @@ func TestSyncReporterIncludesConfiguredRapidProContactFields(t *testing.T) {
 	}
 	client := &reporterRapidProClient{}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
+		WithRapidProIntegration(&reporterServerLookup{
 			record: sukumadserver.Record{
 				Code:    "rapidpro",
 				BaseURL: "https://rapidpro.example.com",
@@ -228,7 +250,7 @@ func TestSyncReporterMapsBuiltInRapidProTargets(t *testing.T) {
 	}
 	client := &reporterRapidProClient{}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
+		WithRapidProIntegration(&reporterServerLookup{
 			record: sukumadserver.Record{
 				Code:    "rapidpro",
 				BaseURL: "https://rapidpro.example.com",
@@ -270,6 +292,202 @@ func TestSyncReporterMapsBuiltInRapidProTargets(t *testing.T) {
 	}
 }
 
+func TestSyncReporterAllowsMissingWhatsAppForOptionalURNMapping(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:                1,
+				Name:              "Alice Reporter",
+				Telephone:         "+256700000001",
+				ReportingLocation: "Kampala",
+				OrgUnitID:         2,
+				IsActive:          true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Mappings: []settings.RapidProReporterFieldMapping{
+					{SourceKey: "telephone", SourceLabel: "Telephone", RapidProFieldKey: "urn.tel"},
+					{SourceKey: "whatsapp", SourceLabel: "WhatsApp", RapidProFieldKey: "urn.whatsapp"},
+				},
+				Validation: settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		})
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if len(client.lastUpsertInput.URNs) != 1 {
+		t.Fatalf("expected only telephone URN when whatsapp is missing, got %#v", client.lastUpsertInput.URNs)
+	}
+	if client.lastUpsertInput.URNs[0] != "tel:+256700000001" {
+		t.Fatalf("expected telephone URN to remain, got %#v", client.lastUpsertInput.URNs)
+	}
+}
+
+func TestSyncReporterUsesRapidProServerCodeFromSettings(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	serverLookup := &reporterServerLookup{
+		records: map[string]sukumadserver.Record{
+			"rapidpro-custom": {
+				Code:    "rapidpro-custom",
+				BaseURL: "https://custom.example.com",
+			},
+		},
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(serverLookup, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				RapidProServerCode: "rapidpro-custom",
+				Validation:         settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		})
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if len(serverLookup.requestedCodes) == 0 || serverLookup.requestedCodes[0] != "rapidpro-custom" {
+		t.Fatalf("expected custom server code lookup, got %#v", serverLookup.requestedCodes)
+	}
+}
+
+func TestSyncReporterFallsBackToDefaultServerCodeWhenSettingsBlank(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	serverLookup := &reporterServerLookup{
+		record: sukumadserver.Record{
+			Code:    "rapidpro",
+			BaseURL: "https://rapidpro.example.com",
+		},
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(serverLookup, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				RapidProServerCode: "   ",
+				Validation:         settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		})
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if len(serverLookup.requestedCodes) == 0 || serverLookup.requestedCodes[0] != "rapidpro" {
+		t.Fatalf("expected default server code lookup, got %#v", serverLookup.requestedCodes)
+	}
+}
+
+func TestSyncReporterReturnsValidationErrorForRapidProClient400(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	serverLookup := &reporterServerLookup{
+		record: sukumadserver.Record{
+			Code:    "rapidpro",
+			BaseURL: "https://rapidpro.example.com",
+		},
+	}
+	clientError := &rapidpro.RequestError{StatusCode: 400, Body: `{"fields":["Facility is invalid"]}`}
+	service := NewService(repo).
+		WithRapidProIntegration(serverLookup, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Validation: settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		})
+	client.lastUpsertInput = rapidpro.UpsertContactInput{}
+	originalClient := service.rapidProClient
+	service.rapidProClient = &reporterRapidProClientWithUpsertError{delegate: originalClient, err: clientError}
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected sync reporter to fail")
+	}
+	var typed *apperror.AppError
+	if !errors.As(err, &typed) {
+		t.Fatalf("expected app error, got %T", err)
+	}
+	if typed.Code != apperror.CodeValidationFailed {
+		t.Fatalf("expected validation code, got %+v", typed)
+	}
+	message := strings.Join(typed.Details["rapidpro"].([]string), " ")
+	if !strings.Contains(message, "Facility is invalid") {
+		t.Fatalf("expected rapidpro validation detail, got %#v", typed.Details)
+	}
+}
+
+type reporterRapidProClientWithUpsertError struct {
+	delegate rapidProClient
+	err      error
+}
+
+func (c *reporterRapidProClientWithUpsertError) LookupContactByUUID(ctx context.Context, conn rapidpro.Connection, uuid string) (rapidpro.Contact, bool, error) {
+	return c.delegate.LookupContactByUUID(ctx, conn, uuid)
+}
+
+func (c *reporterRapidProClientWithUpsertError) LookupContactByURN(ctx context.Context, conn rapidpro.Connection, urn string) (rapidpro.Contact, bool, error) {
+	return c.delegate.LookupContactByURN(ctx, conn, urn)
+}
+
+func (c *reporterRapidProClientWithUpsertError) UpsertContact(context.Context, rapidpro.Connection, rapidpro.UpsertContactInput) (rapidpro.Contact, error) {
+	return rapidpro.Contact{}, c.err
+}
+
+func (c *reporterRapidProClientWithUpsertError) LookupGroupByName(ctx context.Context, conn rapidpro.Connection, name string) (rapidpro.Group, bool, error) {
+	return c.delegate.LookupGroupByName(ctx, conn, name)
+}
+
+func (c *reporterRapidProClientWithUpsertError) SendMessage(ctx context.Context, conn rapidpro.Connection, contactUUID string, text string) (rapidpro.Message, error) {
+	return c.delegate.SendMessage(ctx, conn, contactUUID, text)
+}
+
+func (c *reporterRapidProClientWithUpsertError) SendBroadcast(ctx context.Context, conn rapidpro.Connection, contactUUIDs []string, text string) (rapidpro.Broadcast, error) {
+	return c.delegate.SendBroadcast(ctx, conn, contactUUIDs, text)
+}
+
 func TestSyncReporterFailsWhenRapidProFieldMappingIsInvalid(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{
@@ -283,7 +501,7 @@ func TestSyncReporterFailsWhenRapidProFieldMappingIsInvalid(t *testing.T) {
 		},
 	}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
+		WithRapidProIntegration(&reporterServerLookup{
 			record: sukumadserver.Record{
 				Code:    "rapidpro",
 				BaseURL: "https://rapidpro.example.com",
@@ -318,7 +536,7 @@ func TestSyncReporterLooksUpByURNWhenRapidProUUIDMissing(t *testing.T) {
 	}
 	client := &reporterRapidProClient{lookupByURNFound: true}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
+		WithRapidProIntegration(&reporterServerLookup{
 			record: sukumadserver.Record{
 				Code:    "rapidpro",
 				BaseURL: "https://rapidpro.example.com",
@@ -357,7 +575,7 @@ func TestSyncReporterCreatesRapidProContactWhenLookupMisses(t *testing.T) {
 	}
 	client := &reporterRapidProClient{}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
+		WithRapidProIntegration(&reporterServerLookup{
 			record: sukumadserver.Record{
 				Code:    "rapidpro",
 				BaseURL: "https://rapidpro.example.com",
@@ -397,7 +615,7 @@ func TestSyncReporterFallsBackToURNWhenStoredRapidProUUIDIsStale(t *testing.T) {
 	}
 	client := &reporterRapidProClient{lookupByURNFound: true}
 	service := NewService(repo).
-		WithRapidProIntegration(reporterServerLookup{
+		WithRapidProIntegration(&reporterServerLookup{
 			record: sukumadserver.Record{
 				Code:    "rapidpro",
 				BaseURL: "https://rapidpro.example.com",
@@ -419,6 +637,98 @@ func TestSyncReporterFallsBackToURNWhenStoredRapidProUUIDIsStale(t *testing.T) {
 	}
 	if repo.updateCalls != 1 {
 		t.Fatalf("expected one persistence update, got %d", repo.updateCalls)
+	}
+}
+
+func TestSyncReporterFailsWhenRapidProGroupDoesNotExist(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				Groups:    []string{"Lead"},
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{groupLookupSet: true, lookupGroupFound: false}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected missing rapidpro group validation")
+	}
+	var typed *apperror.AppError
+	if !errors.As(err, &typed) {
+		t.Fatalf("expected app error, got %T", err)
+	}
+	message := strings.Join(typed.Details["rapidproGroups"].([]string), " ")
+	if !strings.Contains(message, "Lead") {
+		t.Fatalf("expected missing group name in error, got %#v", typed.Details)
+	}
+}
+
+func TestBuildRapidProReporterSyncPreviewReturnsRequestShape(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				Groups:    []string{"Lead"},
+				IsActive:  true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Mappings: []settings.RapidProReporterFieldMapping{
+					{SourceKey: "facilityName", SourceLabel: "Facility Name", RapidProFieldKey: "Facility"},
+				},
+				Validation: settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		}).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			item: orgunit.OrgUnit{ID: 2, UID: "ou-2", Name: "Kampala Health Centre"},
+		})
+
+	preview, err := service.BuildRapidProReporterSyncPreview(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("build preview: %v", err)
+	}
+	if preview.Reporter.SyncOperation != "created" {
+		t.Fatalf("expected create preview operation, got %q", preview.Reporter.SyncOperation)
+	}
+	if preview.RequestPath != "/api/v2/contacts.json" {
+		t.Fatalf("unexpected preview path %q", preview.RequestPath)
+	}
+	urns, ok := preview.RequestBody["urns"].([]string)
+	if !ok || len(urns) != 1 || urns[0] != "tel:+256700000001" {
+		t.Fatalf("expected preview urns, got %#v", preview.RequestBody["urns"])
+	}
+	fields, ok := preview.RequestBody["fields"].(map[string]string)
+	if !ok || fields["Facility"] != "Kampala Health Centre" {
+		t.Fatalf("expected preview facility field, got %#v", preview.RequestBody["fields"])
+	}
+	if len(preview.ResolvedGroups) != 1 || preview.ResolvedGroups[0].UUID != "group-Lead" {
+		t.Fatalf("expected resolved group preview, got %#v", preview.ResolvedGroups)
 	}
 }
 

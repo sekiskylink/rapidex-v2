@@ -91,6 +91,7 @@ type Service struct {
 	runtimeConfigProvider func() map[string]any
 	rapidProServerLookup  rapidProServerLookup
 	rapidProFieldClient   rapidProFieldClient
+	rapidProPreview       rapidProReporterSyncPreviewProvider
 }
 
 func NewService(repo Repository, auditService *audit.Service) *Service {
@@ -99,6 +100,11 @@ func NewService(repo Repository, auditService *audit.Service) *Service {
 
 func (s *Service) WithRuntimeConfigProvider(provider func() map[string]any) *Service {
 	s.runtimeConfigProvider = provider
+	return s
+}
+
+func (s *Service) WithRapidProPreviewProvider(provider rapidProReporterSyncPreviewProvider) *Service {
+	s.rapidProPreview = provider
 	return s
 }
 

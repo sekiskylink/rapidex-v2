@@ -1114,11 +1114,44 @@ describe('web settings page', () => {
             JSON.stringify({
               rapidProServerCode: 'rapidpro',
               availableFields: [
+                { key: 'name', label: 'Contact Name', valueType: 'builtin' },
+                { key: 'urn.tel', label: 'Telephone URN', valueType: 'builtin' },
                 { key: 'Facility', label: 'Facility' },
                 { key: 'FacilityCode', label: 'FacilityCode' },
               ],
               mappings: [{ sourceKey: 'facilityName', sourceLabel: 'Facility Name', rapidProFieldKey: 'Facility' }],
               validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync/preview-reporters') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              items: [{ id: 11, name: 'Alice Reporter' }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/settings/rapidpro-reporter-sync/preview?reporterId=11') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              reporter: {
+                id: 11,
+                name: 'Alice Reporter',
+                telephone: '+256700000001',
+                rapidProUuid: '',
+                groups: ['Lead'],
+                syncOperation: 'created',
+              },
+              requestPath: '/api/v2/contacts.json',
+              requestQuery: {},
+              requestBody: {
+                name: 'Alice Reporter',
+                urns: ['tel:+256700000001'],
+                groups: ['group-Lead'],
+              },
+              resolvedGroups: [{ name: 'Lead', uuid: 'group-Lead' }],
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -1129,6 +1162,8 @@ describe('web settings page', () => {
             JSON.stringify({
               rapidProServerCode: 'rapidpro-custom',
               availableFields: [
+                { key: 'name', label: 'Contact Name', valueType: 'builtin' },
+                { key: 'urn.tel', label: 'Telephone URN', valueType: 'builtin' },
                 { key: 'Facility', label: 'Facility' },
                 { key: 'FacilityCode', label: 'FacilityCode' },
               ],
@@ -1147,8 +1182,12 @@ describe('web settings page', () => {
 
     renderWithRouter('/settings/integrations')
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
+    expect((await screen.findByLabelText('RapidPro Sync Preview JSON') as HTMLInputElement).value).toContain('"name": "Alice Reporter"')
 
     fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Reporter Name' }))
+    expect(await screen.findByRole('option', { name: 'Contact Name (Built-in target)' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('option', { name: 'Do not sync' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Facility UID' }))
     fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode (Custom field)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save RapidPro Sync Settings' }))

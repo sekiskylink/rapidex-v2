@@ -19,7 +19,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import { alpha } from '@mui/material/styles'
+import { alpha, type Theme } from '@mui/material/styles'
 import MenuIcon from '@mui/icons-material/Menu'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
@@ -67,10 +67,12 @@ function navItemStyles(selected: boolean) {
     mb: 0.5,
     overflow: 'hidden',
     '&.Mui-selected': {
-      backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.1 : 0.16),
+      backgroundColor: (theme: Theme) =>
+        alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.1 : 0.16),
     },
     '&.Mui-selected:hover': {
-      backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.14 : 0.22),
+      backgroundColor: (theme: Theme) =>
+        alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.14 : 0.22),
     },
     '&::before': {
       content: '""',

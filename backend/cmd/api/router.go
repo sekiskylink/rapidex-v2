@@ -198,6 +198,8 @@ func newRouter(deps AppDeps) *gin.Engine {
 		)
 		settingsGroup.GET("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetLoginBranding)
 		settingsGroup.GET("/rapidpro-reporter-sync", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidProReporterSync)
+		settingsGroup.GET("/rapidpro-reporter-sync/preview-reporters", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.ListRapidProReporterSyncPreviewReporters)
+		settingsGroup.GET("/rapidpro-reporter-sync/preview", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidProReporterSyncPreview)
 		settingsGroup.GET("/runtime-config", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRuntimeConfig)
 		settingsGroup.PUT("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateLoginBranding)
 		settingsGroup.POST("/rapidpro-reporter-sync/refresh-fields", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.RefreshRapidProReporterSyncFields)

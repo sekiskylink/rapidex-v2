@@ -229,6 +229,33 @@ export interface RapidProReporterSyncSettingsResponse {
   validation: RapidProReporterSyncValidation
 }
 
+export interface RapidProReporterOption {
+  id: number
+  name: string
+}
+
+export interface RapidProResolvedGroup {
+  name: string
+  uuid: string
+}
+
+export interface RapidProReporterSyncPreviewResponse {
+  reporter: {
+    id: number
+    name: string
+    telephone: string
+    rapidProUuid: string
+    groups: string[]
+    facilityName?: string
+    facilityUid?: string
+    syncOperation: string
+  }
+  requestPath: string
+  requestQuery: Record<string, string>
+  requestBody: Record<string, unknown>
+  resolvedGroups: RapidProResolvedGroup[]
+}
+
 interface CreateAPITokenRequest {
   name: string
   expiresInSeconds?: number
@@ -637,6 +664,18 @@ export function createApiClient(deps: ApiClientDeps) {
 
     async getRapidProReporterSyncSettings() {
       return authorizedRequest<RapidProReporterSyncSettingsResponse>('/api/v1/settings/rapidpro-reporter-sync', {
+        method: 'GET',
+      })
+    },
+
+    async listRapidProReporterSyncPreviewReporters() {
+      return authorizedRequest<{ items: RapidProReporterOption[] }>('/api/v1/settings/rapidpro-reporter-sync/preview-reporters', {
+        method: 'GET',
+      })
+    },
+
+    async getRapidProReporterSyncPreview(reporterId: number) {
+      return authorizedRequest<RapidProReporterSyncPreviewResponse>(`/api/v1/settings/rapidpro-reporter-sync/preview?reporterId=${encodeURIComponent(String(reporterId))}`, {
         method: 'GET',
       })
     },

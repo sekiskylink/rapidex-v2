@@ -76,6 +76,33 @@ interface RapidProReporterSyncSettingsResponse {
   validation: RapidProReporterSyncValidation
 }
 
+interface RapidProReporterOption {
+  id: number
+  name: string
+}
+
+interface RapidProResolvedGroup {
+  name: string
+  uuid: string
+}
+
+interface RapidProReporterSyncPreviewResponse {
+  reporter: {
+    id: number
+    name: string
+    telephone: string
+    rapidProUuid: string
+    groups: string[]
+    facilityName?: string
+    facilityUid?: string
+    syncOperation: string
+  }
+  requestPath: string
+  requestQuery: Record<string, string>
+  requestBody: Record<string, unknown>
+  resolvedGroups: RapidProResolvedGroup[]
+}
+
 interface CreateAPITokenResponse {
   id: number
   name: string
@@ -120,7 +147,14 @@ function isRapidProBuiltInField(field: RapidProContactField) {
 }
 
 function getRapidProFieldOptionLabel(field: RapidProContactField) {
-  return isRapidProBuiltInField(field) ? `${field.label} (Built-in)` : `${field.label} (Custom field)`
+  return isRapidProBuiltInField(field) ? `${field.label} (Built-in target)` : `${field.label} (Custom field)`
+}
+
+function formatRapidProPreviewJSON(preview: RapidProReporterSyncPreviewResponse | null) {
+  if (!preview) {
+    return ''
+  }
+  return JSON.stringify(preview.requestBody ?? {}, null, 2)
 }
 
 export type SettingsSection = 'general' | 'branding' | 'modules' | 'integrations' | 'about'
@@ -221,6 +255,21 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [rapidProSyncSaving, setRapidProSyncSaving] = React.useState(false)
   const [rapidProSyncRefreshing, setRapidProSyncRefreshing] = React.useState(false)
   const [rapidProSyncError, setRapidProSyncError] = React.useState('')
+  const [rapidProPreviewReporters, setRapidProPreviewReporters] = React.useState<RapidProReporterOption[]>([])
+  const [rapidProPreviewReporterId, setRapidProPreviewReporterId] = React.useState('')
+  const [rapidProPreview, setRapidProPreview] = React.useState<RapidProReporterSyncPreviewResponse | null>(null)
+  const [rapidProPreviewLoading, setRapidProPreviewLoading] = React.useState(false)
+  const [rapidProPreviewError, setRapidProPreviewError] = React.useState('')
+  const rapidProBuiltInFields = React.useMemo(() => rapidProFields.filter((field) => isRapidProBuiltInField(field)), [rapidProFields])
+  const rapidProCustomFields = React.useMemo(() => rapidProFields.filter((field) => !isRapidProBuiltInField(field)), [rapidProFields])
+  const rapidProPreviewJSON = React.useMemo(() => formatRapidProPreviewJSON(rapidProPreview), [rapidProPreview])
+  const applyRapidProSyncPayload = React.useCallback((payload: RapidProReporterSyncSettingsResponse) => {
+    setRapidProServerCode((payload.rapidProServerCode ?? '').trim() || 'rapidpro')
+    setRapidProFields(payload.availableFields ?? [])
+    setRapidProMappings(payload.mappings ?? [])
+    setRapidProLastFetchedAt(payload.lastFetchedAt ?? null)
+    setRapidProValidation(payload.validation ?? { isValid: true })
+  }, [])
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -367,6 +416,10 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProFields([])
       setRapidProMappings([])
       setRapidProValidation({ isValid: true })
+      setRapidProPreviewReporters([])
+      setRapidProPreviewReporterId('')
+      setRapidProPreview(null)
+      setRapidProPreviewError('')
       return
     }
     if (!canReadModuleEnablement) {
@@ -374,16 +427,31 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProFields([])
       setRapidProMappings([])
       setRapidProValidation({ isValid: true })
+      setRapidProPreviewReporters([])
+      setRapidProPreviewReporterId('')
+      setRapidProPreview(null)
+      setRapidProPreviewError('')
       return
     }
     let active = true
     setRapidProSyncLoading(true)
-    apiRequest<RapidProReporterSyncSettingsResponse>('/settings/rapidpro-reporter-sync', { method: 'GET' })
-      .then((payload) => {
+    Promise.all([
+      apiRequest<RapidProReporterSyncSettingsResponse>('/settings/rapidpro-reporter-sync', { method: 'GET' }),
+      apiRequest<{ items: RapidProReporterOption[] }>('/settings/rapidpro-reporter-sync/preview-reporters', { method: 'GET' }),
+    ])
+      .then(([payload, reporterPayload]) => {
         if (!active) {
           return
         }
         applyRapidProSyncPayload(payload)
+        const items = reporterPayload.items ?? []
+        setRapidProPreviewReporters(items)
+        setRapidProPreviewReporterId((current) => {
+          if (current && items.some((item) => String(item.id) === current)) {
+            return current
+          }
+          return items.length > 0 ? String(items[0].id) : ''
+        })
       })
       .catch((error) => {
         if (active) {
@@ -401,7 +469,48 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     return () => {
       active = false
     }
-  }, [canReadModuleEnablement, isIntegrationsSection, notify])
+  }, [applyRapidProSyncPayload, canReadModuleEnablement, isIntegrationsSection, notify])
+
+  React.useEffect(() => {
+    if (!isIntegrationsSection || !canReadModuleEnablement || !rapidProPreviewReporterId) {
+      setRapidProPreview(null)
+      setRapidProPreviewLoading(false)
+      return
+    }
+    let active = true
+    setRapidProPreviewLoading(true)
+    setRapidProPreviewError('')
+    apiRequest<RapidProReporterSyncPreviewResponse>(
+      `/settings/rapidpro-reporter-sync/preview?reporterId=${encodeURIComponent(rapidProPreviewReporterId)}`,
+      { method: 'GET' },
+    )
+      .then((payload) => {
+        if (active) {
+          setRapidProPreview(payload)
+        }
+      })
+      .catch(async (error) => {
+        if (!active) {
+          return
+        }
+        setRapidProPreview(null)
+        const { error: normalized } = await handleAppError(error, {
+          fallbackMessage: 'Unable to load RapidPro sync preview.',
+          notifier: notify,
+          notifyUser: false,
+        })
+        const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+        setRapidProPreviewError(`${normalized.message}${requestId}`)
+      })
+      .finally(() => {
+        if (active) {
+          setRapidProPreviewLoading(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [canReadModuleEnablement, isIntegrationsSection, notify, rapidProPreviewReporterId])
 
   const brandingUrlValidationError = React.useMemo(() => {
     if (!brandingImageUrl.trim()) {
@@ -492,14 +601,6 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setBrandingSaving(false)
     }
   }
-
-  const applyRapidProSyncPayload = React.useCallback((payload: RapidProReporterSyncSettingsResponse) => {
-    setRapidProServerCode((payload.rapidProServerCode ?? '').trim() || 'rapidpro')
-    setRapidProFields(payload.availableFields ?? [])
-    setRapidProMappings(payload.mappings ?? [])
-    setRapidProLastFetchedAt(payload.lastFetchedAt ?? null)
-    setRapidProValidation(payload.validation ?? { isValid: true })
-  }, [])
 
   const handleRapidProFieldMappingChange = React.useCallback((sourceKey: string, rapidProFieldKey: string) => {
     setRapidProMappings((current) => {
@@ -1118,10 +1219,11 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
               </Typography>
               <Divider />
               <Typography color="text.secondary">
-                Fetch RapidPro custom contact fields once, then map reporter values to RapidPro built-in targets like Contact Name and URNs or to custom fields.
+                Map reporter values to RapidPro built-in targets like Contact Name and URNs, or to fetched custom contact fields.
               </Typography>
               {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view RapidPro sync settings.</Alert> : null}
               {rapidProSyncError ? <Alert severity="error">{rapidProSyncError}</Alert> : null}
+              {rapidProPreviewError ? <Alert severity="error">{rapidProPreviewError}</Alert> : null}
               {canReadModuleEnablement ? (
                 rapidProSyncLoading ? (
                   <Typography color="text.secondary">Loading RapidPro sync settings...</Typography>
@@ -1148,7 +1250,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                     ) : (
                       <Stack spacing={1.5}>
                         <Alert severity="info">
-                          Built-in targets are always available. Custom field targets are fetched from RapidPro <code>/fields.json</code>.
+                          Built-in targets are local mapping options. Only custom contact fields are fetched from RapidPro <code>/fields.json</code>.
                         </Alert>
                         {rapidProReporterSourceOptions.map((option) => {
                           const selected = rapidProMappings.find((item) => item.sourceKey === option.key)?.rapidProFieldKey ?? ''
@@ -1164,7 +1266,12 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                 <MenuItem value="">
                                   <em>Do not sync</em>
                                 </MenuItem>
-                                {rapidProFields.map((field) => (
+                                {rapidProBuiltInFields.map((field) => (
+                                  <MenuItem key={field.key} value={field.key}>
+                                    {getRapidProFieldOptionLabel(field)}
+                                  </MenuItem>
+                                ))}
+                                {rapidProCustomFields.map((field) => (
                                   <MenuItem key={field.key} value={field.key}>
                                     {getRapidProFieldOptionLabel(field)}
                                   </MenuItem>
@@ -1178,6 +1285,68 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                         })}
                       </Stack>
                     )}
+                    <Divider />
+                    <Stack spacing={1.5}>
+                      <Typography variant="subtitle1">RapidPro Sync Preview</Typography>
+                      {rapidProPreviewReporters.length === 0 ? (
+                        <Alert severity="info">No reporters are available yet for preview.</Alert>
+                      ) : (
+                        <>
+                          <TextField
+                            select
+                            label="Preview Reporter"
+                            value={rapidProPreviewReporterId}
+                            onChange={(event) => setRapidProPreviewReporterId(event.target.value)}
+                            sx={{ maxWidth: 360 }}
+                          >
+                            {rapidProPreviewReporters.map((reporter) => (
+                              <MenuItem key={reporter.id} value={String(reporter.id)}>
+                                {reporter.name}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                          {rapidProPreviewLoading ? (
+                            <Typography color="text.secondary">Loading RapidPro sync preview...</Typography>
+                          ) : rapidProPreview ? (
+                            <Stack spacing={1.5}>
+                              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                                <Chip label={`Mode: ${rapidProPreview.reporter.syncOperation}`} size="small" />
+                                <Chip label={`Path: ${rapidProPreview.requestPath}`} size="small" />
+                                <Chip
+                                  label={
+                                    Object.keys(rapidProPreview.requestQuery ?? {}).length > 0
+                                      ? `Query: ${new URLSearchParams(rapidProPreview.requestQuery).toString()}`
+                                      : 'Query: none'
+                                  }
+                                  size="small"
+                                />
+                              </Stack>
+                              <Typography color="text.secondary">
+                                Previewing {rapidProPreview.reporter.name} ({rapidProPreview.reporter.telephone})
+                              </Typography>
+                              <TextField
+                                label="Resolved RapidPro Groups"
+                                value={
+                                  (rapidProPreview.resolvedGroups ?? []).length > 0
+                                    ? (rapidProPreview.resolvedGroups ?? []).map((group) => `${group.name} (${group.uuid})`).join(', ')
+                                    : 'None'
+                                }
+                                InputProps={{ readOnly: true }}
+                                fullWidth
+                              />
+                              <TextField
+                                label="RapidPro Sync Preview JSON"
+                                value={rapidProPreviewJSON}
+                                InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                                multiline
+                                minRows={10}
+                                fullWidth
+                              />
+                            </Stack>
+                          ) : null}
+                        </>
+                      )}
+                    </Stack>
                     {!rapidProValidation.isValid ? (
                       <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
                     ) : (
