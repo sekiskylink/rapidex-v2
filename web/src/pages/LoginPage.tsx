@@ -49,7 +49,11 @@ export function LoginPage() {
       panelSubtitle="Sign in with your platform account to continue."
     >
       <Stack spacing={2.25} component="form" onSubmit={handleSubmit}>
-        {!apiBaseUrl && <Alert severity="warning">VITE_API_BASE_URL is not configured.</Alert>}
+        {!apiBaseUrl && (
+          <Alert severity="warning">
+            VITE_API_BASE_URL is not configured. Set it in `web/.env`, for example `http://127.0.0.1:8080/api/v1`. If you have already signed in before, you can also change it in Settings &gt; General &gt; API Base URL Override for this browser.
+          </Alert>
+        )}
         <TextField
           label="Username or Email"
           autoComplete="username"

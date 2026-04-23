@@ -34,7 +34,7 @@ vi.mock('@mui/x-data-grid', () => ({
       <div>
         <div>
           {columns.map((column: Record<string, any>) => (
-            <span key={column.field}>{column.headerName}</span>
+            <span key={column.field}>{typeof column.renderHeader === 'function' ? column.renderHeader({ colDef: column }) : column.headerName}</span>
           ))}
         </div>
         {rows.map((row: Record<string, any>) => (
@@ -364,7 +364,7 @@ describe('desktop reporters page', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
     await waitFor(() => expect(syncPayload).toEqual({}))
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select reporter Alice Reporter' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all rows' }))
     fireEvent.click(screen.getByRole('button', { name: 'Broadcast to Selected' }))
     const messageDialog = await screen.findByRole('dialog', { name: 'Broadcast to Selected Reporters' })
     fireEvent.change(within(messageDialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Test broadcast' } })
@@ -376,6 +376,78 @@ describe('desktop reporters page', () => {
       text: 'Test broadcast',
     })
   }, 20000)
+
+  it('selects all reporters on the current page from the header checkbox', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/v1/auth/me')) {
+        return new Response(
+          JSON.stringify({
+            id: 5,
+            username: 'alice',
+            roles: ['Staff'],
+            permissions: ['reporters.read', 'reporters.write'],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/v1/reporters?')) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              buildReporter(),
+              {
+                ...buildReporter(),
+                id: 12,
+                uid: 'rep-12',
+                name: 'Bob Reporter',
+                telephone: '+256700000002',
+                rapidProUuid: 'rapidpro-12',
+              },
+            ],
+            totalCount: 2,
+            page: 1,
+            pageSize: 25,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.endsWith('/api/v1/reporter-groups/options')) {
+        return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/orgunits?')) {
+        return new Response(JSON.stringify({ items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/bootstrap')) {
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderRoute('/reporters', store)
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all rows' }))
+    expect(await screen.findByText('2 reporters selected.')).toBeInTheDocument()
+  })
 
   it('shows informational reporter details, RapidPro details, and chat history dialogs', async () => {
     const store = createMockSettingsStore({

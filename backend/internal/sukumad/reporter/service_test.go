@@ -3,6 +3,7 @@ package reporter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +93,12 @@ type reporterRapidProClient struct {
 	urnContact        rapidpro.Contact
 	messages          []rapidpro.Message
 	messagesNext      string
+	messagePages      map[string]rapidProMessagePage
+}
+
+type rapidProMessagePage struct {
+	messages []rapidpro.Message
+	next     string
 }
 
 func (c *reporterRapidProClient) LookupContactByUUID(context.Context, rapidpro.Connection, string) (rapidpro.Contact, bool, error) {
@@ -135,7 +142,19 @@ func (c *reporterRapidProClient) SendMessage(context.Context, rapidpro.Connectio
 func (c *reporterRapidProClient) SendBroadcast(context.Context, rapidpro.Connection, []string, string) (rapidpro.Broadcast, error) {
 	return rapidpro.Broadcast{}, nil
 }
-func (c *reporterRapidProClient) ListMessages(context.Context, rapidpro.Connection, map[string]string) ([]rapidpro.Message, string, error) {
+func (c *reporterRapidProClient) ListMessages(_ context.Context, _ rapidpro.Connection, query map[string]string) ([]rapidpro.Message, string, error) {
+	c.messageCalls++
+	cursor := ""
+	if query != nil {
+		cursor = strings.TrimSpace(query["cursor"])
+	}
+	if len(c.messagePages) > 0 {
+		page, ok := c.messagePages[cursor]
+		if !ok {
+			return nil, "", nil
+		}
+		return append([]rapidpro.Message(nil), page.messages...), page.next, nil
+	}
 	return append([]rapidpro.Message(nil), c.messages...), c.messagesNext, nil
 }
 
@@ -811,7 +830,7 @@ func TestGetRapidProContactDetailsUsesUUIDAndMapsSnapshot(t *testing.T) {
 	}
 }
 
-func TestGetRapidProMessageHistoryFiltersToReporterConversation(t *testing.T) {
+func TestGetRapidProMessageHistoryCollectsRecentConversationAcrossPages(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{
 			1: {
@@ -831,40 +850,53 @@ func TestGetRapidProMessageHistoryFiltersToReporterConversation(t *testing.T) {
 			Name: "Alice Reporter",
 			URNs: []string{"tel:+256700000001"},
 		},
-		messages: []rapidpro.Message{
-			{
-				ID:         10,
-				Direction:  "incoming",
-				Status:     "handled",
-				Text:       "Hello there",
-				URN:        "tel:+256700000001",
-				CreatedOn:  "2026-04-22T10:00:00Z",
-				ModifiedOn: "2026-04-22T10:01:00Z",
-				Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
+		messagePages: map[string]rapidProMessagePage{
+			"": {
+				messages: []rapidpro.Message{
+					{
+						ID:         11,
+						Direction:  "outgoing",
+						Status:     "sent",
+						Text:       "Thanks",
+						URN:        "tel:+256700000001",
+						CreatedOn:  "2026-04-22T10:05:00Z",
+						ModifiedOn: "2026-04-22T10:06:00Z",
+						Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
+						Channel:    &rapidpro.Channel{UUID: "chan-1", Name: "Vonage"},
+					},
+					{
+						ID:         12,
+						Direction:  "incoming",
+						Status:     "handled",
+						Text:       "Ignore me",
+						URN:        "tel:+256700000099",
+						CreatedOn:  "2026-04-22T10:10:00Z",
+						ModifiedOn: "2026-04-22T10:11:00Z",
+						Contact:    rapidpro.Contact{UUID: "contact-other", Name: "Other"},
+					},
+				},
+				next: "https://rapidpro.example.com/api/v2/messages.json?cursor=next-page",
 			},
-			{
-				ID:         11,
-				Direction:  "outgoing",
-				Status:     "sent",
-				Text:       "Thanks",
-				URN:        "tel:+256700000001",
-				CreatedOn:  "2026-04-22T10:05:00Z",
-				ModifiedOn: "2026-04-22T10:06:00Z",
-				Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
-				Channel:    &rapidpro.Channel{UUID: "chan-1", Name: "Vonage"},
+			"next-page": {
+				messages: []rapidpro.Message{
+					{
+						ID:         10,
+						Direction:  "incoming",
+						Status:     "handled",
+						Text:       "Hello there",
+						URN:        "tel:+256700000001",
+						CreatedOn:  "2026-04-22T10:00:00Z",
+						ModifiedOn: "2026-04-22T10:01:00Z",
+						Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
+					},
+				},
+				next: "https://rapidpro.example.com/api/v2/messages.json?cursor=more-history",
 			},
-			{
-				ID:         12,
-				Direction:  "incoming",
-				Status:     "handled",
-				Text:       "Ignore me",
-				URN:        "tel:+256700000099",
-				CreatedOn:  "2026-04-22T10:10:00Z",
-				ModifiedOn: "2026-04-22T10:11:00Z",
-				Contact:    rapidpro.Contact{UUID: "contact-other", Name: "Other"},
+			"more-history": {
+				messages: nil,
+				next:     "",
 			},
 		},
-		messagesNext: "https://rapidpro.example.com/api/v2/messages.json?cursor=next",
 	}
 	service := NewService(repo).
 		WithRapidProIntegration(&reporterServerLookup{
@@ -887,10 +919,81 @@ func TestGetRapidProMessageHistoryFiltersToReporterConversation(t *testing.T) {
 	if history.Items[0].Direction != "incoming" || history.Items[1].Direction != "outgoing" {
 		t.Fatalf("unexpected directions: %+v", history.Items)
 	}
+	if history.Items[0].Text != "Hello there" || history.Items[1].Text != "Thanks" {
+		t.Fatalf("expected oldest-to-newest ordering, got %+v", history.Items)
+	}
 	if history.Items[1].Channel == nil || history.Items[1].Channel.Name != "Vonage" {
 		t.Fatalf("expected channel metadata, got %+v", history.Items[1])
 	}
-	if history.Next == "" {
+	if history.Next != "" {
+		t.Fatalf("expected history to exhaust available test pages, got next %q", history.Next)
+	}
+	if client.messageCalls != 3 {
+		t.Fatalf("expected three rapidpro message page calls, got %d", client.messageCalls)
+	}
+}
+
+func TestGetRapidProMessageHistoryStopsAfterConfiguredHistoryCap(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:           1,
+				Name:         "Alice Reporter",
+				Telephone:    "+256700000001",
+				OrgUnitID:    2,
+				RapidProUUID: "contact-existing",
+				IsActive:     true,
+			},
+		},
+	}
+	pageMessages := make([]rapidpro.Message, 0, 10)
+	for index := 0; index < 10; index++ {
+		pageMessages = append(pageMessages, rapidpro.Message{
+			ID:         int64(index + 1),
+			Direction:  "incoming",
+			Status:     "handled",
+			Text:       fmt.Sprintf("Message %02d", index+1),
+			URN:        "tel:+256700000001",
+			CreatedOn:  fmt.Sprintf("2026-04-22T10:%02d:00Z", index),
+			ModifiedOn: fmt.Sprintf("2026-04-22T10:%02d:30Z", index),
+			Contact:    rapidpro.Contact{UUID: "contact-existing", Name: "Alice Reporter"},
+		})
+	}
+	client := &reporterRapidProClient{
+		lookupByUUIDFound: true,
+		uuidContact: rapidpro.Contact{
+			UUID: "contact-existing",
+			Name: "Alice Reporter",
+			URNs: []string{"tel:+256700000001"},
+		},
+		messagePages: map[string]rapidProMessagePage{
+			"":       {messages: append([]rapidpro.Message(nil), pageMessages...), next: "https://rapidpro.example.com/api/v2/messages.json?cursor=page-2"},
+			"page-2": {messages: append([]rapidpro.Message(nil), pageMessages...), next: "https://rapidpro.example.com/api/v2/messages.json?cursor=page-3"},
+			"page-3": {messages: append([]rapidpro.Message(nil), pageMessages...), next: "https://rapidpro.example.com/api/v2/messages.json?cursor=page-4"},
+			"page-4": {messages: append([]rapidpro.Message(nil), pageMessages...), next: "https://rapidpro.example.com/api/v2/messages.json?cursor=page-5"},
+			"page-5": {messages: append([]rapidpro.Message(nil), pageMessages...), next: "https://rapidpro.example.com/api/v2/messages.json?cursor=page-6"},
+			"page-6": {messages: append([]rapidpro.Message(nil), pageMessages...), next: ""},
+		},
+	}
+	service := NewService(repo).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client)
+
+	history, err := service.GetRapidProMessageHistory(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("get rapidpro message history: %v", err)
+	}
+	if len(history.Items) != maxRapidProHistoryItems {
+		t.Fatalf("expected history to be capped at %d items, got %d", maxRapidProHistoryItems, len(history.Items))
+	}
+	if client.messageCalls != maxRapidProHistoryPages {
+		t.Fatalf("expected %d rapidpro page calls, got %d", maxRapidProHistoryPages, client.messageCalls)
+	}
+	if history.Next != "https://rapidpro.example.com/api/v2/messages.json?cursor=page-6" {
 		t.Fatalf("expected next cursor to be preserved")
 	}
 }

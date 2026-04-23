@@ -1,5 +1,6 @@
 import React from 'react'
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, Typography } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 
 interface ReporterLike {
   id: number
@@ -115,6 +116,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <Typography variant="subtitle2">{title}</Typography>
       {children}
     </Stack>
+  )
+}
+
+function renderHistoryBadge(label: string) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        px: 1.1,
+        py: 0.4,
+        borderRadius: 999,
+        bgcolor: 'rgba(15, 23, 42, 0.08)',
+        color: '#334155',
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        lineHeight: 1.2,
+      }}
+    >
+      {label}
+    </Box>
   )
 }
 
@@ -290,10 +313,31 @@ interface ChatHistoryDialogProps {
 export function ChatHistoryDialog({ open, reporter, loading, error, history, onClose }: ChatHistoryDialogProps) {
   const items = history?.items ?? []
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="lg"
+      PaperProps={{
+        sx: {
+          width: { xs: 'calc(100vw - 16px)', sm: 'min(1100px, calc(100vw - 40px))' },
+          maxWidth: 'none',
+          height: { xs: 'calc(100vh - 16px)', sm: 'min(88vh, 940px)' },
+        },
+      }}
+    >
       <DialogTitle>Reporter Chat History</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
+      <DialogContent
+        dividers
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          px: { xs: 2, sm: 3 },
+          py: 2,
+        }}
+      >
+        <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
           {reporter ? (
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', md: 'center' }}>
               <Typography variant="h6">{reporter.name}</Typography>
@@ -310,7 +354,16 @@ export function ChatHistoryDialog({ open, reporter, loading, error, history, onC
             <Alert severity="info">No SMS history was returned for this reporter.</Alert>
           ) : null}
           {!loading && !error && items.length > 0 ? (
-            <Stack spacing={1.5}>
+            <Stack
+              spacing={1.75}
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                pr: { xs: 0.5, sm: 1 },
+                pb: 0.5,
+              }}
+            >
               {items.map((item) => {
                 const outgoing = item.direction.toLowerCase().startsWith('out')
                 return (
@@ -323,37 +376,33 @@ export function ChatHistoryDialog({ open, reporter, loading, error, history, onC
                   >
                     <Box
                       sx={{
-                        maxWidth: '82%',
-                        minWidth: { xs: '100%', sm: '55%' },
-                        px: 2,
-                        py: 1.5,
+                        width: { xs: '100%', sm: 'min(78%, 760px)' },
+                        px: { xs: 1.75, sm: 2.25 },
+                        py: 1.75,
                         borderRadius: 3,
-                        bgcolor: outgoing ? 'primary.main' : 'background.default',
-                        color: outgoing ? 'primary.contrastText' : 'text.primary',
-                        boxShadow: 1,
+                        bgcolor: outgoing ? '#e8f1ff' : '#f8fafc',
+                        color: '#122033',
+                        border: '1px solid',
+                        borderColor: outgoing ? '#c7dafc' : '#dbe2ea',
+                        boxShadow: outgoing ? `0 10px 24px ${alpha('#8fb4f6', 0.18)}` : `0 8px 22px ${alpha('#0f172a', 0.08)}`,
                       }}
                     >
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Chip
-                            label={outgoing ? 'Outgoing' : 'Incoming'}
-                            size="small"
-                            color={outgoing ? 'primary' : 'default'}
-                            variant={outgoing ? 'filled' : 'outlined'}
-                          />
-                          <Chip label={item.status || 'unknown'} size="small" color={chipColor(item.status || '')} variant="outlined" />
+                        <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap">
+                          {renderHistoryBadge(outgoing ? 'Outgoing' : 'Incoming')}
+                          {renderHistoryBadge(item.status || 'unknown')}
                         </Stack>
-                        <Typography variant="caption" color={outgoing ? 'inherit' : 'text.secondary'}>
+                        <Typography variant="caption" sx={{ color: '#475569' }}>
                           {formatDateTime(item.sentOn || item.createdOn || item.modifiedOn)}
                         </Typography>
                       </Stack>
-                      <Typography sx={{ mt: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      <Typography sx={{ mt: 1.25, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.98rem', lineHeight: 1.6 }}>
                         {item.text || 'No message text'}
                       </Typography>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.5 }}>
-                        {item.urn ? <Chip label={item.urn} size="small" variant="outlined" /> : null}
-                        {item.channel?.name ? <Chip label={item.channel.name} size="small" variant="outlined" /> : null}
-                        {item.flow?.name ? <Chip label={item.flow.name} size="small" variant="outlined" /> : null}
+                      <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 1.5 }}>
+                        {item.urn ? renderHistoryBadge(item.urn) : null}
+                        {item.channel?.name ? renderHistoryBadge(item.channel.name) : null}
+                        {item.flow?.name ? renderHistoryBadge(item.flow.name) : null}
                       </Stack>
                     </Box>
                   </Box>

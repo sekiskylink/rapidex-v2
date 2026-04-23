@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,7 +19,11 @@ import (
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
 
-const defaultRapidProServerCode = "rapidpro"
+const (
+	defaultRapidProServerCode = "rapidpro"
+	maxRapidProHistoryItems   = 50
+	maxRapidProHistoryPages   = 5
+)
 
 type rapidProServerLookup interface {
 	GetServerByCode(context.Context, string) (sukumadserver.Record, error)
@@ -217,10 +223,6 @@ func (s *Service) GetRapidProMessageHistory(ctx context.Context, id int64) (Rapi
 	if !found {
 		return result, nil
 	}
-	messages, next, err := s.rapidProClient.ListMessages(ctx, conn, nil)
-	if err != nil {
-		return RapidProMessageHistoryResult{}, mapRapidProRequestError(err)
-	}
 	targetURNs := make(map[string]struct{}, len(contact.URNs))
 	for _, urn := range contact.URNs {
 		normalized := strings.ToLower(strings.TrimSpace(urn))
@@ -229,12 +231,44 @@ func (s *Service) GetRapidProMessageHistory(ctx context.Context, id int64) (Rapi
 		}
 		targetURNs[normalized] = struct{}{}
 	}
-	for _, message := range messages {
-		if !messageMatchesReporter(message, contact.UUID, targetURNs) {
-			continue
+	var (
+		query        map[string]string
+		next         string
+		pagesScanned int
+	)
+	for pagesScanned < maxRapidProHistoryPages && len(result.Items) < maxRapidProHistoryItems {
+		messages, pageNext, err := s.rapidProClient.ListMessages(ctx, conn, query)
+		if err != nil {
+			return RapidProMessageHistoryResult{}, mapRapidProRequestError(err)
 		}
-		result.Items = append(result.Items, toRapidProMessageRecord(message))
+		pagesScanned++
+		next = pageNext
+		for _, message := range messages {
+			if !messageMatchesReporter(message, contact.UUID, targetURNs) {
+				continue
+			}
+			result.Items = append(result.Items, toRapidProMessageRecord(message))
+			if len(result.Items) >= maxRapidProHistoryItems {
+				break
+			}
+		}
+		if next == "" {
+			break
+		}
+		nextQuery, ok := rapidProNextQuery(next)
+		if !ok {
+			break
+		}
+		query = nextQuery
 	}
+	sort.SliceStable(result.Items, func(i, j int) bool {
+		left := messageRecordSortTime(result.Items[i])
+		right := messageRecordSortTime(result.Items[j])
+		if left.Equal(right) {
+			return result.Items[i].ID < result.Items[j].ID
+		}
+		return left.Before(right)
+	})
 	result.Next = next
 	return result, nil
 }
@@ -1003,6 +1037,46 @@ func messageMatchesReporter(message rapidpro.Message, contactUUID string, urns m
 	}
 	_, ok := urns[strings.ToLower(strings.TrimSpace(message.URN))]
 	return ok
+}
+
+func rapidProNextQuery(next string) (map[string]string, bool) {
+	trimmed := strings.TrimSpace(next)
+	if trimmed == "" {
+		return nil, false
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, false
+	}
+	values := parsed.Query()
+	if len(values) == 0 {
+		return nil, false
+	}
+	query := make(map[string]string, len(values))
+	for key, items := range values {
+		if len(items) == 0 {
+			continue
+		}
+		query[key] = items[0]
+	}
+	if len(query) == 0 {
+		return nil, false
+	}
+	return query, true
+}
+
+func messageRecordSortTime(item RapidProMessageRecord) time.Time {
+	for _, value := range []string{item.SentOn, item.CreatedOn, item.ModifiedOn} {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339, trimmed)
+		if err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
 }
 
 func (s *Service) logAudit(ctx context.Context, event audit.Event) {

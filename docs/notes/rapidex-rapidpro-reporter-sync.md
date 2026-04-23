@@ -82,8 +82,11 @@
   - channel
   - flow
   - created/sent/modified timestamps
-- The current implementation filters the recent RapidPro message page to the reporter conversation and does not yet provide message pagination.
+- Reporter chat history now follows recent RapidPro pagination cursors and collects up to 50 matching messages while scanning at most 5 RapidPro pages.
+- The current implementation still does not expose an interactive “load more” action in the chat-history dialog.
 - Web and desktop Reporters pages now:
   - use an informational detail dialog for `View details`
   - expose a dedicated `View RapidPro Details` action
   - open a conversation-style chat history dialog from the `Telephone` column
+  - support page-level bulk selection from the reporters grid header checkbox
+  - render chat history with incoming messages left, outgoing messages right, and lighter neutral message surfaces

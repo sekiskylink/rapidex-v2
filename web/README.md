@@ -18,6 +18,9 @@ cp .env.example .env
 - `VITE_APP_NAME` (optional): App display name
 - `VITE_ENABLE_DEVTOOLS` (optional): Enables query devtools integration when implemented
 
+If the web login screen warns that `VITE_API_BASE_URL` is not configured, set it in `web/.env` before starting the dev server or build. After a successful sign-in, you can also override the API URL for the current browser profile under `Settings > General > API Base URL Override`.
+
+
 ## Backend API Docs
 - Raw OpenAPI document: `http://127.0.0.1:8080/openapi.yaml`
 - Scalar UI: `http://127.0.0.1:8080/docs`

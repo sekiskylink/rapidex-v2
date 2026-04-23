@@ -34,7 +34,7 @@ vi.mock('@mui/x-data-grid', () => ({
       <div>
         <div>
           {columns.map((column: Record<string, any>) => (
-            <span key={column.field}>{column.headerName}</span>
+            <span key={column.field}>{typeof column.renderHeader === 'function' ? column.renderHeader({ colDef: column }) : column.headerName}</span>
           ))}
         </div>
         {rows.map((row: Record<string, any>) => (
@@ -324,7 +324,7 @@ describe('reporters page', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Sync to RapidPro' }))
     await waitFor(() => expect(syncPayload).toEqual({}))
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select reporter Alice Reporter' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
     fireEvent.click(screen.getByRole('button', { name: 'Broadcast to Selected' }))
     const dialog = await screen.findByRole('dialog', { name: 'Broadcast to Selected Reporters' })
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Message' }), { target: { value: 'Test broadcast' } })
@@ -335,6 +335,42 @@ describe('reporters page', () => {
       reporterIds: [11],
       text: 'Test broadcast',
     })
+  })
+
+  it('selects all reporters on the current page from the header checkbox', async () => {
+    authenticate(['reporters.read', 'reporters.write'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/reporters?')) {
+        return {
+          items: [
+            buildReporter(),
+            {
+              ...buildReporter(),
+              id: 12,
+              uid: 'rep-12',
+              name: 'Bob Reporter',
+              telephone: '+256700000002',
+              rapidProUuid: 'rapidpro-12',
+            },
+          ],
+          totalCount: 2,
+          page: 1,
+          pageSize: 25,
+        }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all rows' }))
+    expect(await screen.findByText('2 reporters selected.')).toBeInTheDocument()
   })
 
   it('shows informational reporter details, RapidPro details, and chat history dialogs', async () => {

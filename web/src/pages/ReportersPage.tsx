@@ -16,7 +16,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { handleAppError } from '../errors/handleAppError'
@@ -146,6 +146,7 @@ export function ReportersPage() {
   const [chatHistory, setChatHistory] = React.useState<RapidProMessageHistoryResponse | null>(null)
   const [chatHistoryLoading, setChatHistoryLoading] = React.useState(false)
   const [chatHistoryError, setChatHistoryError] = React.useState('')
+  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({ page: 0, pageSize: 25 })
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -173,6 +174,12 @@ export function ReportersPage() {
 
   const selectedCount = selectedIds.length
   const selectedReporters = reporters.filter((reporter) => selectedIds.includes(reporter.id))
+  const visibleReporterIds = React.useMemo(() => {
+    const start = paginationModel.page * paginationModel.pageSize
+    return reporters.slice(start, start + paginationModel.pageSize).map((reporter) => reporter.id)
+  }, [paginationModel.page, paginationModel.pageSize, reporters])
+  const allVisibleSelected = visibleReporterIds.length > 0 && visibleReporterIds.every((id) => selectedIds.includes(id))
+  const someVisibleSelected = visibleReporterIds.some((id) => selectedIds.includes(id))
   const reporterGroupNames = React.useMemo(
     () => Array.from(new Set([...reporterGroupOptions.map((item) => item.name), ...form.groups])).sort((left, right) => left.localeCompare(right)),
     [form.groups, reporterGroupOptions],
@@ -220,17 +227,43 @@ export function ReportersPage() {
       {
         field: 'selected',
         headerName: '',
-        width: 64,
+        width: 72,
         sortable: false,
         filterable: false,
+        disableColumnMenu: true,
+        renderHeader: () => (
+          <Checkbox
+            checked={allVisibleSelected}
+            indeterminate={!allVisibleSelected && someVisibleSelected}
+            inputProps={{ 'aria-label': 'Select all rows' }}
+            onChange={(event) => {
+              const checked = event.target.checked
+              setSelectedIds((current) => {
+                const next = new Set(current)
+                for (const id of visibleReporterIds) {
+                  if (checked) {
+                    next.add(id)
+                  } else {
+                    next.delete(id)
+                  }
+                }
+                return Array.from(next)
+              })
+            }}
+          />
+        ),
         renderCell: ({ row }) => (
           <Checkbox
             checked={selectedIds.includes(row.id)}
             inputProps={{ 'aria-label': `Select reporter ${row.name}` }}
-            onChange={() => {
-              setSelectedIds((current) =>
-                current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id],
-              )
+            onChange={(event) => {
+              const checked = event.target.checked
+              setSelectedIds((current) => {
+                if (checked) {
+                  return current.includes(row.id) ? current : [...current, row.id]
+                }
+                return current.filter((id) => id !== row.id)
+              })
             }}
           />
         ),
@@ -306,7 +339,7 @@ export function ReportersPage() {
         ),
       },
     ],
-    [getOrgUnitName, openChatHistoryDialog, openRapidProDetails, selectedIds],
+    [allVisibleSelected, getOrgUnitName, openChatHistoryDialog, openRapidProDetails, selectedIds, someVisibleSelected, visibleReporterIds],
   )
 
   function openDialog(reporter?: Reporter) {
@@ -473,7 +506,9 @@ export function ReportersPage() {
         columns={columns}
         loading={loading}
         disableRowSelectionOnClick
-        initialState={{ pagination: { paginationModel: { page: 0, pageSize: 25 } } }}
+        pagination
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
         pageSizeOptions={[25, 50, 100]}
         showToolbar
         slotProps={{

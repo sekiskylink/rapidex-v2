@@ -1,5 +1,47 @@
 # Status
 
+## Milestone — Reporter Bulk Selection, Wider Chat History, and Desktop Window Startup (Complete)
+
+### What changed
+- Updated both web and desktop Reporters pages so the grid now supports selecting all reporters on the current page from the header checkbox, while keeping the existing bulk sync and bulk broadcast flows.
+- Changed desktop app startup to launch maximized, so the window uses the available work area instead of opening at the old fixed `1024x768` size.
+- Extended RapidPro reporter chat-history reads so the backend now follows recent RapidPro pagination cursors and collects a larger recent conversation window before returning the dialog payload.
+- Redesigned the reporter chat-history dialog in both web and desktop to use more of the available dialog space, with:
+  - incoming messages on the left
+  - outgoing messages on the right
+  - lighter neutral message surfaces instead of heavy theme-color bubbles
+  - a scrollable conversation area sized to the viewport
+- Clarified the web client API setup path:
+  - login now tells operators exactly how to set `VITE_API_BASE_URL`
+  - the browser-local override path remains under `Settings > General > API Base URL Override`
+- Updated RapidPro sync notes and web setup guidance, and saved a prompt traceability copy in `docs/prompts/2026-04-23-reporter-selection-window-chat-history-and-web-api-guidance.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter service coverage for multi-page RapidPro history collection
+  - reporter service coverage for oldest-to-newest chat ordering
+  - reporter service coverage for the configured history cap and retained `next` cursor
+- Web:
+  - reporters page coverage for header-checkbox bulk selection
+  - existing reporter detail/chat-history coverage remains green with the wider dialog layout
+- Desktop:
+  - matching reporters page coverage for header-checkbox bulk selection
+  - existing reporter detail/chat-history coverage remains green with the revised layout
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/reporters-page.test.tsx src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Reporter chat history now reads a reasonable recent window, but still does not provide an interactive “load more” action in the dialog.
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in some frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — Reporter Informational Detail, RapidPro Snapshot, and Chat History (Complete)
 
 ### What changed
