@@ -11,9 +11,11 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material'
+import ChatBubbleOutlineRoundedIcon from '@mui/icons-material/ChatBubbleOutlineRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
+import SyncRoundedIcon from '@mui/icons-material/SyncRounded'
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
 
 export interface AdminRowAction {
@@ -25,7 +27,7 @@ export interface AdminRowAction {
   destructive?: boolean
   confirmTitle?: string
   confirmMessage?: string
-  icon?: 'view' | 'edit' | 'delete' | React.ReactNode
+  icon?: 'view' | 'edit' | 'delete' | 'sync' | 'message' | 'rapidpro' | React.ReactNode
 }
 
 interface AdminRowActionsProps {
@@ -42,6 +44,15 @@ function resolveIcon(icon: AdminRowAction['icon']) {
   }
   if (icon === 'delete') {
     return <DeleteOutlineRoundedIcon fontSize="small" />
+  }
+  if (icon === 'sync') {
+    return <SyncRoundedIcon fontSize="small" />
+  }
+  if (icon === 'message') {
+    return <ChatBubbleOutlineRoundedIcon fontSize="small" />
+  }
+  if (icon === 'rapidpro') {
+    return <ChatBubbleOutlineRoundedIcon fontSize="small" />
   }
   return icon ?? null
 }

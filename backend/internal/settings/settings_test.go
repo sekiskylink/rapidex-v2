@@ -73,8 +73,8 @@ func TestGetLoginBrandingDefaultsWhenMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get branding: %v", err)
 	}
-	if got.ApplicationDisplayName != "BasePro" {
-		t.Fatalf("expected BasePro default, got %q", got.ApplicationDisplayName)
+	if got.ApplicationDisplayName != "RapidEx" {
+		t.Fatalf("expected RapidEx default, got %q", got.ApplicationDisplayName)
 	}
 	if got.ImageConfigured {
 		t.Fatal("expected imageConfigured false")
@@ -90,14 +90,14 @@ func TestUpdateAndGetLoginBranding(t *testing.T) {
 	url := "https://cdn.example.com/brand.png"
 	asset := "assets/login/custom.png"
 	updated, err := service.UpdateLoginBranding(context.Background(), LoginBrandingUpdateInput{
-		ApplicationDisplayName: "BasePro Ops",
+		ApplicationDisplayName: "RapidEx Ops",
 		LoginImageURL:          &url,
 		LoginImageAssetPath:    &asset,
 	}, &actor)
 	if err != nil {
 		t.Fatalf("update branding: %v", err)
 	}
-	if updated.ApplicationDisplayName != "BasePro Ops" {
+	if updated.ApplicationDisplayName != "RapidEx Ops" {
 		t.Fatalf("unexpected display name: %q", updated.ApplicationDisplayName)
 	}
 	if !updated.ImageConfigured {
@@ -108,7 +108,7 @@ func TestUpdateAndGetLoginBranding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get branding: %v", err)
 	}
-	if got.ApplicationDisplayName != "BasePro Ops" {
+	if got.ApplicationDisplayName != "RapidEx Ops" {
 		t.Fatalf("expected persisted display name, got %q", got.ApplicationDisplayName)
 	}
 	if got.LoginImageURL == nil || *got.LoginImageURL != url {
@@ -124,7 +124,7 @@ func TestUpdateLoginBrandingRejectsBadURL(t *testing.T) {
 	service := NewService(newFakeRepo(), nil)
 	bad := "javascript:alert(1)"
 	_, err := service.UpdateLoginBranding(context.Background(), LoginBrandingUpdateInput{
-		ApplicationDisplayName: "BasePro",
+		ApplicationDisplayName: "RapidEx",
 		LoginImageURL:          &bad,
 	}, nil)
 	if err == nil {

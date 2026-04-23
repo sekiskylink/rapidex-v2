@@ -85,6 +85,12 @@ export const ScheduleRoundedIcon = makeIcon(
 export const WorkOutlineRoundedIcon = makeIcon(
   'M14 6V4h-4v2zM4 8h16v10H4zm16-2h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2',
 )
+export const ChatBubbleOutlineRoundedIcon = makeIcon(
+  'M4 4h16c1.1 0 2 .9 2 2v9c0 1.1-.9 2-2 2H7l-5 5V6c0-1.1.9-2 2-2m0 2v11.17L6.17 15H20V6zm2 3h12v2H6zm0 3h8v2H6z',
+)
+export const SyncRoundedIcon = makeIcon(
+  'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8m-6.76.74L3.78 6.2A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8z',
+)
 
 export const AccountBalanceWalletRoundedIcon = makeIcon(
   'M10 16V8c0-1.1.89-2 2-2h9V5c0-1.1-.9-2-2-2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-1h-9c-1.11 0-2-.9-2-2m3-8c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h9V8zm3 5.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5',

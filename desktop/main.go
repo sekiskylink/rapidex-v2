@@ -17,7 +17,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:            "desktop",
+		Title:            "RapidEx",
 		Width:            1280,
 		Height:           900,
 		WindowStartState: options.Maximised,

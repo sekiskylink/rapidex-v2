@@ -226,7 +226,7 @@ func normalizeOptionalString(in *string) *string {
 
 func defaultLoginBranding() LoginBranding {
 	return LoginBranding{
-		ApplicationDisplayName: "BasePro",
+		ApplicationDisplayName: "RapidEx",
 		ImageConfigured:        false,
 	}
 }

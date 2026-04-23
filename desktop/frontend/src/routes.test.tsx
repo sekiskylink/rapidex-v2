@@ -824,7 +824,7 @@ describe('app shell routes', () => {
               version: 1,
               generatedAt: '2026-03-08T00:00:00Z',
               app: { version: '1.0.0', commit: 'abc123', buildDate: '2026-03-08T00:00:00Z' },
-              branding: { applicationDisplayName: 'BasePro Desktop', loginImageUrl: null },
+              branding: { applicationDisplayName: 'RapidEx', loginImageUrl: null },
               modules: [
                 { moduleId: 'dashboard', flagKey: 'modules.dashboard.enabled', enabled: true, enabledByDefault: true, source: 'default' },
                 { moduleId: 'administration', flagKey: 'modules.administration.enabled', enabled: false, enabledByDefault: true, source: 'config' },
@@ -1728,7 +1728,7 @@ describe('app shell routes', () => {
           )
         }
         if (url.includes('/api/v1/settings/login-branding')) {
-          return new Response(JSON.stringify({ applicationDisplayName: 'BasePro', loginImageUrl: '' }), {
+          return new Response(JSON.stringify({ applicationDisplayName: 'RapidEx', loginImageUrl: '' }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           })
@@ -1770,7 +1770,7 @@ describe('app shell routes', () => {
         if (url.includes('/api/v1/settings/public/login-branding')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -1813,7 +1813,7 @@ describe('app shell routes', () => {
         if (url.includes('/api/v1/settings/public/login-branding')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -1873,7 +1873,7 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: 'https://cdn.example.com/old.png',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -1955,7 +1955,7 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -2111,7 +2111,7 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: 'https://cdn.example.com/old.png',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -2214,7 +2214,7 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -2279,7 +2279,7 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },

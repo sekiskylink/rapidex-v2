@@ -4,7 +4,7 @@ import type { SettingsStore } from '../../settings/types'
 import type { AuthBranding } from './AuthSplitLayout'
 
 const defaultBranding: AuthBranding = {
-  appDisplayName: 'BasePro',
+  appDisplayName: 'RapidEx',
   loginImageUrl: null,
 }
 

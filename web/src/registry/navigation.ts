@@ -287,7 +287,7 @@ export function getRouteLabel(pathname: string) {
   for (const item of authenticatedNavigationRegistry) {
     collectPathMatches(item, pathname, matches)
   }
-  return matches[0] ?? 'BasePro'
+  return matches[0] ?? 'RapidEx'
 }
 
 export function canAccessNavigationPath(pathname: string, user: AuthUser | null | undefined) {

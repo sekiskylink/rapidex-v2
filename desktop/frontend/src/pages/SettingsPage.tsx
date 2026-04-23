@@ -186,7 +186,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   )
   const [backendVersionLoading, setBackendVersionLoading] = React.useState(true)
   const [connectionErrorMessage, setConnectionErrorMessage] = React.useState('')
-  const [brandingDisplayName, setBrandingDisplayName] = React.useState('BasePro')
+  const [brandingDisplayName, setBrandingDisplayName] = React.useState('RapidEx')
   const [brandingImageUrl, setBrandingImageUrl] = React.useState('')
   const [brandingLoading, setBrandingLoading] = React.useState(true)
   const [brandingSaving, setBrandingSaving] = React.useState(false)
@@ -339,7 +339,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         if (!active) {
           return
         }
-        const displayName = (payload.appDisplayName ?? payload.applicationDisplayName ?? '').trim() || 'BasePro'
+        const displayName = (payload.appDisplayName ?? payload.applicationDisplayName ?? '').trim() || 'RapidEx'
         const loginImageUrl = typeof payload.loginImageUrl === 'string' ? payload.loginImageUrl.trim() : ''
         setBrandingDisplayName(displayName)
         setBrandingImageUrl(loginImageUrl)
@@ -349,7 +349,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         if (!active) {
           return
         }
-        setBrandingDisplayName('BasePro')
+        setBrandingDisplayName('RapidEx')
         setBrandingImageUrl('')
         void handleAppError(error, { fallbackMessage: 'Unable to load login branding settings.' })
       })
@@ -557,7 +557,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         applicationDisplayName: brandingDisplayName.trim(),
         loginImageUrl: brandingImageUrl.trim() || null,
       })
-      setBrandingDisplayName((saved.appDisplayName ?? saved.applicationDisplayName ?? '').trim() || 'BasePro')
+      setBrandingDisplayName((saved.appDisplayName ?? saved.applicationDisplayName ?? '').trim() || 'RapidEx')
       setBrandingImageUrl(typeof saved.loginImageUrl === 'string' ? saved.loginImageUrl : '')
       setBrandingPreviewBroken(false)
       notify.success('Login branding saved.')
@@ -1552,7 +1552,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                 ) : (
                   <Stack spacing={1} alignItems="center">
                     <Avatar sx={{ bgcolor: 'primary.main' }}>{brandingDisplayName.slice(0, 1).toUpperCase()}</Avatar>
-                    <Typography>{brandingDisplayName || 'BasePro'}</Typography>
+                    <Typography>{brandingDisplayName || 'RapidEx'}</Typography>
                   </Stack>
                 )}
               </Box>
@@ -1584,7 +1584,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
             <Stack spacing={1}>
               <Typography variant="h6">About</Typography>
               <Divider />
-              <Typography>App: BasePro Desktop</Typography>
+              <Typography>App: RapidEx</Typography>
               <Typography color="text.secondary">Desktop version: {import.meta.env.VITE_APP_VERSION ?? '0.0.0-dev'}</Typography>
               <Typography color="text.secondary">
                 Backend version:{' '}

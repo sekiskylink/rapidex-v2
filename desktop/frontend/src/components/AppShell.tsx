@@ -143,7 +143,7 @@ export function AppShell() {
     showSukumad: prefs.showSukumadMenu,
   })
   const canAccessSettings = canAccessRoute(principal, '/settings/general')
-  const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || 'BasePro'
+  const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || 'RapidEx'
 
   React.useEffect(() => {
     if (

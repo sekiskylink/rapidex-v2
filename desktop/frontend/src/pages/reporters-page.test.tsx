@@ -517,7 +517,7 @@ describe('desktop reporters page', () => {
     fireEvent.click(within(detailsDialog).getByRole('button', { name: 'Close' }))
 
     fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'View RapidPro Details' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'RapidPro Details' }))
     const rapidProDialog = await screen.findByRole('dialog', { name: 'RapidPro Contact Details' })
     expect(within(rapidProDialog).getByText('Language: eng')).toBeInTheDocument()
     expect(within(rapidProDialog).getByText(/Registration/)).toBeInTheDocument()

@@ -1,5 +1,43 @@
 # Status
 
+## Milestone — RapidEx Branding Defaults and Reporter Action Labels (Complete)
+
+### What changed
+- Updated the reporter row actions in both web and desktop so every menu action now has an icon.
+- Renamed the RapidPro and messaging actions on both reporters pages:
+  - `View RapidPro Details` -> `RapidPro Details`
+  - `Send SMS` -> `Send Message`
+- Extended the shared row-action menu icon mapping so RapidPro, sync, and message actions render consistently across both clients.
+- Changed user-facing default branding from `BasePro` to `RapidEx` across:
+  - backend login-branding defaults
+  - web app-name/title fallbacks
+  - desktop auth, shell, and settings/about fallbacks
+  - Wails desktop title and app metadata
+- Saved a prompt traceability copy in `docs/prompts/2026-04-23-rapidex-branding-and-reporter-actions.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - settings branding default tests
+  - settings router branding update tests
+- Web:
+  - reporter action label coverage
+  - auth/route branding fallback expectations
+- Desktop:
+  - matching reporter action label coverage
+  - route/bootstrap branding fallback expectations
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web tests: PASS (`cd web && npm test -- --run`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend tests: PASS (`cd desktop/frontend && npm test -- --run`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in some frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — Reporter Bulk Selection, Wider Chat History, and Desktop Window Startup (Complete)
 
 ### What changed

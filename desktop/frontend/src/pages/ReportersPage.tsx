@@ -322,10 +322,10 @@ export function ReportersPage() {
             rowLabel={row.name}
             actions={[
               { id: 'view', label: 'View details', icon: 'view', onClick: () => setViewing(row) },
-              { id: 'rapidpro', label: 'View RapidPro Details', onClick: () => void openRapidProDetails(row) },
+              { id: 'rapidpro', label: 'RapidPro Details', icon: 'rapidpro', onClick: () => void openRapidProDetails(row) },
               { id: 'edit', label: 'Edit', icon: 'edit', onClick: () => openDialog(row) },
-              { id: 'sync', label: 'Sync to RapidPro', onClick: () => void syncReporter(row.id) },
-              { id: 'send', label: 'Send SMS', onClick: () => openMessageDialog('single', row) },
+              { id: 'sync', label: 'Sync to RapidPro', icon: 'sync', onClick: () => void syncReporter(row.id) },
+              { id: 'send', label: 'Send Message', icon: 'message', onClick: () => openMessageDialog('single', row) },
               {
                 id: 'delete',
                 label: 'Delete',
@@ -622,7 +622,7 @@ export function ReportersPage() {
       </Dialog>
 
       <Dialog open={Boolean(messageDialog)} onClose={closeMessageDialog} fullWidth maxWidth="sm">
-        <DialogTitle>{messageDialog?.mode === 'single' ? 'Send SMS' : 'Broadcast to Selected Reporters'}</DialogTitle>
+        <DialogTitle>{messageDialog?.mode === 'single' ? 'Send Message' : 'Broadcast to Selected Reporters'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography color="text.secondary">
@@ -642,7 +642,7 @@ export function ReportersPage() {
         <DialogActions>
           <Button onClick={closeMessageDialog} disabled={messageSending}>Cancel</Button>
           <Button onClick={() => void submitMessage()} disabled={messageSending || !messageText.trim()} variant="contained">
-            {messageDialog?.mode === 'single' ? 'Send SMS' : 'Send Broadcast'}
+            {messageDialog?.mode === 'single' ? 'Send Message' : 'Send Broadcast'}
           </Button>
         </DialogActions>
       </Dialog>

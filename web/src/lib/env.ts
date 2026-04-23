@@ -5,4 +5,4 @@ export function getApiBaseUrl() {
 }
 
 export const apiBaseUrl = getApiBaseUrl()
-export const appName = import.meta.env.VITE_APP_NAME || 'BasePro Web'
+export const appName = import.meta.env.VITE_APP_NAME || 'RapidEx'

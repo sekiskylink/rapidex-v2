@@ -75,7 +75,7 @@ describe('web auth routes', () => {
         if (url.includes('/settings/public/login-branding')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -122,7 +122,7 @@ describe('web auth routes', () => {
         if (url.includes('/settings/public/login-branding')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -203,14 +203,14 @@ describe('web auth routes', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'BasePro Web', level: 1 })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'RapidEx', level: 1 })).toBeInTheDocument()
     })
     expect(screen.getByText('Session expired. Please log in again.')).toBeInTheDocument()
   })
 
   it('protected route is blocked when logged out', async () => {
     renderWithRouter('/dashboard')
-    expect(await screen.findByRole('heading', { name: 'BasePro Web', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'RapidEx', level: 1 })).toBeInTheDocument()
   })
 
   it('renders Rapidex facility and reporter routes when permissions are granted', async () => {
@@ -638,7 +638,7 @@ describe('web auth routes', () => {
         if (url.includes('/settings/public/login-branding')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -676,7 +676,7 @@ describe('web auth routes', () => {
         if (url.includes('/settings/public/login-branding')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -777,7 +777,7 @@ describe('web RBAC navigation', () => {
         if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -1048,7 +1048,7 @@ describe('web settings page', () => {
         if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: 'https://cdn.example.com/old.png',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -1100,7 +1100,7 @@ describe('web settings page', () => {
         if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -1255,7 +1255,7 @@ describe('web settings page', () => {
         if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              applicationDisplayName: 'BasePro Web',
+              applicationDisplayName: 'RapidEx',
               loginImageUrl: '',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },

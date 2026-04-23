@@ -84,7 +84,7 @@ func TestLoginBrandingUpdateRouteRequiresAuth(t *testing.T) {
 		SettingsHandler: handler,
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/login-branding", strings.NewReader(`{"applicationDisplayName":"BasePro"}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/login-branding", strings.NewReader(`{"applicationDisplayName":"RapidEx"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -107,7 +107,7 @@ func TestLoginBrandingUpdateRouteAcceptsAuthorizedWriter(t *testing.T) {
 		SettingsHandler: handler,
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/login-branding", strings.NewReader(`{"applicationDisplayName":"BasePro Custom","loginImageUrl":"https://cdn.example.com/logo.png"}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/login-branding", strings.NewReader(`{"applicationDisplayName":"RapidEx Custom","loginImageUrl":"https://cdn.example.com/logo.png"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -136,7 +136,7 @@ func TestLoginBrandingUpdateRouteAcceptsAdminWithoutExplicitSettingsWrite(t *tes
 		SettingsHandler: handler,
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/login-branding", strings.NewReader(`{"applicationDisplayName":"BasePro Admin"}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/login-branding", strings.NewReader(`{"applicationDisplayName":"RapidEx Admin"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
