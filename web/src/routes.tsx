@@ -185,13 +185,82 @@ const auditRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/settings',
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/general' })
+  },
+  component: () => null,
+})
+
+const settingsGeneralRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/general',
   component: () => {
-    const state = getRouteAccessState('/settings', getAuthSnapshot().user)
+    const state = getRouteAccessState('/settings/general', getAuthSnapshot().user)
     if (state === 'allowed') {
-      return <SettingsPage />
+      return <SettingsPage section="general" />
     }
     if (state === 'module-disabled') {
-      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings') ?? undefined} />
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/general') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const settingsBrandingRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/branding',
+  component: () => {
+    const state = getRouteAccessState('/settings/branding', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SettingsPage section="branding" />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/branding') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const settingsModulesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/modules',
+  component: () => {
+    const state = getRouteAccessState('/settings/modules', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SettingsPage section="modules" />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/modules') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const settingsIntegrationsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/integrations',
+  component: () => {
+    const state = getRouteAccessState('/settings/integrations', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SettingsPage section="integrations" />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/integrations') ?? undefined} />
+    }
+    return <NotAuthorizedPage />
+  },
+})
+
+const settingsAboutRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/about',
+  component: () => {
+    const state = getRouteAccessState('/settings/about', getAuthSnapshot().user)
+    if (state === 'allowed') {
+      return <SettingsPage section="about" />
+    }
+    if (state === 'module-disabled') {
+      return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/about') ?? undefined} />
     }
     return <NotAuthorizedPage />
   },
@@ -411,6 +480,11 @@ const routeTree = rootRoute.addChildren([
     orgUnitsRoute,
     reportersRoute,
     settingsRoute,
+    settingsGeneralRoute,
+    settingsBrandingRoute,
+    settingsModulesRoute,
+    settingsIntegrationsRoute,
+    settingsAboutRoute,
   ]),
 ])
 

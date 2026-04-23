@@ -709,7 +709,7 @@ describe('web RBAC navigation', () => {
       },
     })
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/modules')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Administration')).toBeInTheDocument()
@@ -744,7 +744,7 @@ describe('web RBAC navigation', () => {
       },
     })
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/general')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
@@ -807,7 +807,7 @@ describe('web RBAC navigation', () => {
       }),
     )
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/modules')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Runtime Config', level: 2 })).toBeInTheDocument()
@@ -832,7 +832,7 @@ describe('web RBAC navigation', () => {
       },
     })
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/general')
 
     expect(await screen.findByRole('heading', { name: 'Not Authorized', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('You do not have permission to access this page.')).toBeInTheDocument()
@@ -921,7 +921,7 @@ describe('web settings page', () => {
 
   it('/settings renders and controls update persisted preferences', async () => {
     authenticateForSettings()
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/general')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
 
@@ -964,7 +964,7 @@ describe('web settings page', () => {
       }),
     )
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/integrations')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Token Name'), { target: { value: 'Web API token' } })
@@ -976,28 +976,28 @@ describe('web settings page', () => {
 
   it('changing mode persists after reload', async () => {
     authenticateForSettings()
-    const firstRender = renderWithRouter('/settings')
+    const firstRender = renderWithRouter('/settings/general')
 
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Theme mode' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Light' }))
 
     firstRender.unmount()
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/general')
 
     expect(window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY)).toContain('"mode":"light"')
   })
 
   it('changing preset persists after reload', async () => {
     authenticateForSettings()
-    const firstRender = renderWithRouter('/settings')
+    const firstRender = renderWithRouter('/settings/general')
 
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
     fireEvent.click(screen.getByRole('button', { name: 'Browse all presets' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Select Graphite preset' }))
 
     firstRender.unmount()
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/general')
 
     expect(await screen.findByText('Active preset: Graphite')).toBeInTheDocument()
 
@@ -1012,7 +1012,7 @@ describe('web settings page', () => {
 
   it('api base URL override persists after save', async () => {
     authenticateForSettings()
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/general')
 
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
 
@@ -1071,7 +1071,7 @@ describe('web settings page', () => {
       }),
     )
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/branding')
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
 
     fireEvent.change(await screen.findByLabelText('Application Display Name'), { target: { value: 'Platform Pro' } })
@@ -1145,7 +1145,7 @@ describe('web settings page', () => {
       }),
     )
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/integrations')
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
 
     fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
@@ -1226,7 +1226,7 @@ describe('web settings page', () => {
       }),
     )
 
-    renderWithRouter('/settings')
+    renderWithRouter('/settings/modules')
     expect(await screen.findByText('Administration')).toBeInTheDocument()
     expect(screen.getByText('Administration surfaces')).toBeInTheDocument()
     expect(screen.queryByText('Settings surfaces')).not.toBeInTheDocument()

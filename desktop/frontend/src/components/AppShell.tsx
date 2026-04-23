@@ -46,7 +46,7 @@ import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
 import { useBootstrapSnapshot } from '../bootstrap/state'
-import { buildNavigation, canAccessRoute } from '../navigation'
+import { buildNavigation, canAccessRoute, type NavigationNode } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
@@ -108,6 +108,7 @@ export function AppShell() {
       pathname.startsWith('/observability') ||
       pathname.startsWith('/documentation'),
   )
+  const [settingsExpanded, setSettingsExpanded] = React.useState(pathname.startsWith('/settings'))
 
   const navCollapsed = !isMobile && prefs.navCollapsed
   const drawerWidth = navCollapsed ? MINI_DRAWER_WIDTH : DRAWER_WIDTH
@@ -117,7 +118,7 @@ export function AppShell() {
     showAdministration: prefs.showAdministrationMenu,
     showSukumad: prefs.showSukumadMenu,
   })
-  const canAccessSettings = canAccessRoute(principal, '/settings')
+  const canAccessSettings = canAccessRoute(principal, '/settings/general')
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || 'BasePro'
 
   React.useEffect(() => {
@@ -143,11 +144,19 @@ export function AppShell() {
     ) {
       setSukumadExpanded(true)
     }
+    if (pathname.startsWith('/settings')) {
+      setSettingsExpanded(true)
+    }
   }, [pathname])
 
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
+    'settings-general': <SettingsRoundedIcon fontSize="small" />,
+    'settings-branding': <SettingsRoundedIcon fontSize="small" />,
+    'settings-modules': <SettingsRoundedIcon fontSize="small" />,
+    'settings-integrations': <SettingsRoundedIcon fontSize="small" />,
+    'settings-about': <SettingsRoundedIcon fontSize="small" />,
     sukumad: <AccountBalanceWalletRoundedIcon fontSize="small" />,
     users: <GroupRoundedIcon fontSize="small" />,
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
@@ -166,6 +175,107 @@ export function AppShell() {
 
   const closeMenus = () => {
     setMenuAnchor(null)
+  }
+
+  function renderAdministrationItem(item: NavigationNode) {
+    const icon = navIcons[item.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />
+
+    if ('children' in item) {
+      const selected = pathname.startsWith('/settings')
+      const button = (
+        <ListItemButton
+          key={item.key}
+          selected={selected}
+          aria-label={item.label}
+          aria-expanded={settingsExpanded}
+          onClick={() => setSettingsExpanded((current) => !current)}
+          sx={{
+            ...navItemStyles(selected),
+            justifyContent: navCollapsed ? 'center' : 'flex-start',
+            px: navCollapsed ? 1 : 2.75,
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>{icon}</ListItemIcon>
+          {!navCollapsed ? <ListItemText primary={item.label} /> : null}
+          {!navCollapsed ? (settingsExpanded ? <ExpandLessRoundedIcon fontSize="small" /> : <ExpandMoreRoundedIcon fontSize="small" />) : null}
+        </ListItemButton>
+      )
+
+      const children = item.children.map((child) => {
+        if ('children' in child) {
+          return null
+        }
+        const childSelected = pathname.startsWith(child.path)
+        if (navCollapsed) {
+          return (
+            <ListItemButton
+              key={child.key}
+              selected={childSelected}
+              onClick={() => {
+                void navigate({ to: child.path })
+                setMobileOpen(false)
+              }}
+              sx={{
+                ...navItemStyles(childSelected),
+                justifyContent: 'center',
+                px: 1,
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                {navIcons[child.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />}
+              </ListItemIcon>
+            </ListItemButton>
+          )
+        }
+        return (
+          <ListItemButton
+            key={child.key}
+            selected={childSelected}
+            onClick={() => {
+              void navigate({ to: child.path })
+              setMobileOpen(false)
+            }}
+            sx={{
+              ...navItemStyles(childSelected),
+              justifyContent: 'flex-start',
+              px: 3.75,
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 34, justifyContent: 'center' }}>
+              {navIcons[child.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />}
+            </ListItemIcon>
+            <ListItemText primary={child.label} />
+          </ListItemButton>
+        )
+      })
+
+      return (
+        <React.Fragment key={item.key}>
+          {button}
+          {navCollapsed ? (settingsExpanded ? children : null) : <Collapse in={settingsExpanded} unmountOnExit>{children}</Collapse>}
+        </React.Fragment>
+      )
+    }
+
+    const selected = pathname.startsWith(item.path)
+    return (
+      <ListItemButton
+        key={item.key}
+        selected={selected}
+        onClick={() => {
+          void navigate({ to: item.path })
+          setMobileOpen(false)
+        }}
+        sx={{
+          ...navItemStyles(selected),
+          justifyContent: navCollapsed ? 'center' : 'flex-start',
+          px: navCollapsed ? 1 : 2.75,
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: navCollapsed ? 0 : 34, justifyContent: 'center' }}>{icon}</ListItemIcon>
+        {!navCollapsed ? <ListItemText primary={item.label} /> : null}
+      </ListItemButton>
+    )
   }
 
   const handleLogout = async () => {
@@ -258,7 +368,38 @@ export function AppShell() {
             </ListItemButton>
             {navCollapsed ? (
               sukumadExpanded
-                ? navigation.sukumad.children.map((item) => (
+                ? navigation.sukumad.children.map((item) => {
+                    if ('children' in item) {
+                      return null
+                    }
+                    return (
+                      <ListItemButton
+                        key={item.key}
+                        selected={pathname.startsWith(item.path)}
+                        onClick={() => {
+                          void navigate({ to: item.path })
+                          setMobileOpen(false)
+                        }}
+                        sx={{
+                          ...navItemStyles(pathname.startsWith(item.path)),
+                          justifyContent: 'center',
+                          px: 1,
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                          {navIcons[item.key as keyof typeof navIcons]}
+                        </ListItemIcon>
+                      </ListItemButton>
+                    )
+                  })
+                : null
+            ) : (
+              <Collapse in={sukumadExpanded} unmountOnExit>
+                {navigation.sukumad.children.map((item) => {
+                  if ('children' in item) {
+                    return null
+                  }
+                  return (
                     <ListItemButton
                       key={item.key}
                       selected={pathname.startsWith(item.path)}
@@ -268,38 +409,17 @@ export function AppShell() {
                       }}
                       sx={{
                         ...navItemStyles(pathname.startsWith(item.path)),
-                        justifyContent: 'center',
-                        px: 1,
+                        justifyContent: 'flex-start',
+                        px: 2.75,
                       }}
                     >
-                      <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                      <ListItemIcon sx={{ minWidth: 34, justifyContent: 'center' }}>
                         {navIcons[item.key as keyof typeof navIcons]}
                       </ListItemIcon>
+                      <ListItemText primary={item.label} />
                     </ListItemButton>
-                  ))
-                : null
-            ) : (
-              <Collapse in={sukumadExpanded} unmountOnExit>
-                {navigation.sukumad.children.map((item) => (
-                  <ListItemButton
-                    key={item.key}
-                    selected={pathname.startsWith(item.path)}
-                    onClick={() => {
-                      void navigate({ to: item.path })
-                      setMobileOpen(false)
-                    }}
-                    sx={{
-                      ...navItemStyles(pathname.startsWith(item.path)),
-                      justifyContent: 'flex-start',
-                      px: 2.75,
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 34, justifyContent: 'center' }}>
-                      {navIcons[item.key as keyof typeof navIcons]}
-                    </ListItemIcon>
-                    <ListItemText primary={item.label} />
-                  </ListItemButton>
-                ))}
+                  )
+                })}
               </Collapse>
             )}
           </>
@@ -324,48 +444,11 @@ export function AppShell() {
             </ListItemButton>
             {navCollapsed ? (
               adminExpanded
-                ? navigation.administration.children.map((item) => (
-                    <ListItemButton
-                      key={item.key}
-                      selected={pathname.startsWith(item.path)}
-                      onClick={() => {
-                        void navigate({ to: item.path })
-                        setMobileOpen(false)
-                      }}
-                      sx={{
-                        ...navItemStyles(pathname.startsWith(item.path)),
-                        justifyContent: 'center',
-                        px: 1,
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
-                        {navIcons[item.key as keyof typeof navIcons]}
-                      </ListItemIcon>
-                    </ListItemButton>
-                  ))
+                ? navigation.administration.children.map((item) => renderAdministrationItem(item))
                 : null
             ) : (
               <Collapse in={adminExpanded} unmountOnExit>
-                {navigation.administration.children.map((item) => (
-                  <ListItemButton
-                    key={item.key}
-                    selected={pathname.startsWith(item.path)}
-                    onClick={() => {
-                      void navigate({ to: item.path })
-                      setMobileOpen(false)
-                    }}
-                    sx={{
-                      ...navItemStyles(pathname.startsWith(item.path)),
-                      justifyContent: 'flex-start',
-                      px: 2.75,
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 34, justifyContent: 'center' }}>
-                      {navIcons[item.key as keyof typeof navIcons]}
-                    </ListItemIcon>
-                    <ListItemText primary={item.label} />
-                  </ListItemButton>
-                ))}
+                {navigation.administration.children.map((item) => renderAdministrationItem(item))}
               </Collapse>
             )}
           </>
@@ -437,7 +520,7 @@ export function AppShell() {
               <MenuItem
                 onClick={() => {
                   closeMenus()
-                  void navigate({ to: '/settings' })
+                  void navigate({ to: '/settings/general' })
                 }}
               >
                 <ListItemIcon>

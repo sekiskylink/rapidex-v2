@@ -1,6 +1,27 @@
 import { getAuthSnapshot, type AuthUser } from './auth/state'
 import { isNavigationItemEnabled } from './registry/moduleEnablement'
-import { authenticatedNavigationRegistry, canAccessNavigationPath } from './registry/navigation'
+import {
+  authenticatedNavigationRegistry,
+  canAccessNavigationPath,
+  type NavigationDefinition,
+} from './registry/navigation'
+
+export interface NavigationLeaf {
+  key: string
+  label: string
+  path: string
+  visible: boolean
+}
+
+export interface NavigationBranch {
+  key: string
+  label: string
+  visible: boolean
+  path?: string
+  children: NavigationNode[]
+}
+
+export type NavigationNode = NavigationLeaf | NavigationBranch
 
 interface NavigationOptions {
   labels?: Record<string, string>
@@ -17,44 +38,60 @@ export function buildNavigation(
   user: AuthUser | null | undefined = getAuthSnapshot().user,
   options: NavigationOptions = {},
 ) {
-  const topLevel: Array<{ key: string; label: string; path: string; visible: boolean }> = []
-  const administrationChildren: Array<{ key: string; label: string; path: string; visible: boolean }> = []
-  const sukumadChildren: Array<{ key: string; label: string; path: string; visible: boolean }> = []
+  const topLevel: NavigationLeaf[] = []
+  const administrationChildren: NavigationNode[] = []
+  const sukumadChildren: NavigationNode[] = []
+
+  const mapDefinition = (item: NavigationDefinition): NavigationNode | null => {
+    if (item.children && item.children.length > 0) {
+      const children = item.children
+        .map((child) => mapDefinition(child))
+        .filter((child): child is NavigationNode => child !== null)
+
+      if (children.length === 0) {
+        return null
+      }
+
+      return {
+        key: item.id,
+        label: resolveLabel(item.id, item.label, options.labels),
+        path: item.path,
+        visible: true,
+        children,
+      }
+    }
+
+    if (!item.path) {
+      return null
+    }
+    if (!canAccessNavigationPath(item.path, user)) {
+      return null
+    }
+
+    return {
+      key: item.id,
+      label: resolveLabel(item.id, item.label, options.labels),
+      path: item.path,
+      visible: true,
+    }
+  }
 
   for (const item of authenticatedNavigationRegistry) {
     if (item.id === 'administration') {
       for (const child of item.children ?? []) {
-        if (!child.path) {
-          continue
+        const next = mapDefinition(child)
+        if (next) {
+          administrationChildren.push(next)
         }
-        const visible = canAccessNavigationPath(child.path, user)
-        if (!visible) {
-          continue
-        }
-        administrationChildren.push({
-          key: child.id,
-          label: resolveLabel(child.id, child.label, options.labels),
-          path: child.path,
-          visible: true,
-        })
       }
       continue
     }
     if (item.id === 'sukumad') {
       for (const child of item.children ?? []) {
-        if (!child.path) {
-          continue
+        const next = mapDefinition(child)
+        if (next) {
+          sukumadChildren.push(next)
         }
-        const visible = canAccessNavigationPath(child.path, user)
-        if (!visible) {
-          continue
-        }
-        sukumadChildren.push({
-          key: child.id,
-          label: resolveLabel(child.id, child.label, options.labels),
-          path: child.path,
-          visible: true,
-        })
       }
       continue
     }

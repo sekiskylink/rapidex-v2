@@ -18,6 +18,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
@@ -107,7 +108,48 @@ const rapidProReporterSourceOptions = [
   { key: 'facilityUID', label: 'Facility UID' },
 ] as const
 
-export function SettingsPage() {
+export type SettingsSection = 'general' | 'branding' | 'modules' | 'integrations' | 'about'
+
+const settingsSections: Array<{ key: SettingsSection; label: string; description: string; path: string; anchorId: string }> = [
+  {
+    key: 'general',
+    label: 'General',
+    description: 'Manage local appearance and connection preferences for this browser profile.',
+    path: '/settings/general',
+    anchorId: 'settings-appearance',
+  },
+  {
+    key: 'branding',
+    label: 'Branding',
+    description: 'Configure login branding used across the authenticated experience.',
+    path: '/settings/branding',
+    anchorId: 'settings-branding',
+  },
+  {
+    key: 'modules',
+    label: 'Modules',
+    description: 'Review runtime-manageable modules and feature visibility.',
+    path: '/settings/modules',
+    anchorId: 'settings-modules',
+  },
+  {
+    key: 'integrations',
+    label: 'Integrations',
+    description: 'Manage API token access and RapidPro sync settings.',
+    path: '/settings/integrations',
+    anchorId: 'settings-api-access',
+  },
+  {
+    key: 'about',
+    label: 'About',
+    description: 'Application build details and static metadata.',
+    path: '/settings/about',
+    anchorId: 'settings-about',
+  },
+]
+
+export function SettingsPage({ section = 'general' }: { section?: SettingsSection }) {
+  const navigate = useNavigate()
   const auth = useAuth()
   const notify = useAppNotify()
   const {
@@ -209,8 +251,19 @@ export function SettingsPage() {
     [runtimeConfig],
   )
   const runtimeConfigText = runtimeConfigFormat === 'yaml' ? runtimeConfigYaml : runtimeConfigJson
+  const currentSection = settingsSections.find((item) => item.key === section) ?? settingsSections[0]
+  const isGeneralSection = currentSection.key === 'general'
+  const isBrandingSection = currentSection.key === 'branding'
+  const isModulesSection = currentSection.key === 'modules'
+  const isIntegrationsSection = currentSection.key === 'integrations'
+  const isAboutSection = currentSection.key === 'about'
 
   React.useEffect(() => {
+    if (!isBrandingSection) {
+      setBrandingLoading(false)
+      return
+    }
+
     let active = true
     setBrandingLoading(true)
     apiRequest<{ appDisplayName?: string; applicationDisplayName?: string; loginImageUrl?: string | null }>(
@@ -245,9 +298,14 @@ export function SettingsPage() {
     return () => {
       active = false
     }
-  }, [notify])
+  }, [isBrandingSection, notify])
 
   React.useEffect(() => {
+    if (!isModulesSection) {
+      setModuleEnablement([])
+      setModuleEnablementLoading(false)
+      return
+    }
     if (!canReadModuleEnablement) {
       setModuleEnablement([])
       setModuleEnablementLoading(false)
@@ -278,9 +336,16 @@ export function SettingsPage() {
     return () => {
       active = false
     }
-  }, [canReadModuleEnablement, notify])
+  }, [canReadModuleEnablement, isModulesSection, notify])
 
   React.useEffect(() => {
+    if (!isIntegrationsSection) {
+      setRapidProSyncLoading(false)
+      setRapidProFields([])
+      setRapidProMappings([])
+      setRapidProValidation({ isValid: true })
+      return
+    }
     if (!canReadModuleEnablement) {
       setRapidProSyncLoading(false)
       setRapidProFields([])
@@ -313,7 +378,7 @@ export function SettingsPage() {
     return () => {
       active = false
     }
-  }, [canReadModuleEnablement, notify])
+  }, [canReadModuleEnablement, isIntegrationsSection, notify])
 
   const brandingUrlValidationError = React.useMemo(() => {
     if (!brandingImageUrl.trim()) {
@@ -583,13 +648,13 @@ export function SettingsPage() {
   }, [canReadModuleEnablement])
 
   React.useEffect(() => {
-    if (!canReadModuleEnablement) {
+    if (!isModulesSection || !canReadModuleEnablement) {
       setRuntimeConfig(null)
       setRuntimeConfigLoading(false)
       return
     }
     void loadRuntimeConfig()
-  }, [canReadModuleEnablement, loadRuntimeConfig])
+  }, [canReadModuleEnablement, isModulesSection, loadRuntimeConfig])
 
   const handleCopyRuntimeConfig = async () => {
     if (!runtimeConfigText) {
@@ -609,548 +674,573 @@ export function SettingsPage() {
         <Typography variant="h4" component="h1" gutterBottom>
           Settings
         </Typography>
-        <Typography color="text.secondary">Manage local appearance and connection preferences for this browser profile.</Typography>
+        <Typography color="text.secondary">{currentSection.description}</Typography>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
+          {settingsSections.map((item) => (
+            <Button
+              key={item.key}
+              variant={item.key === currentSection.key ? 'contained' : 'outlined'}
+              onClick={() => void navigate({ to: item.path })}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </Stack>
       </Paper>
 
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2.5}>
-          <Typography variant="h6" component="h2">
-            Appearance
-          </Typography>
-          <Divider />
+      {isGeneralSection ? (
+        <>
+          <Paper id="settings-appearance" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2.5}>
+              <Typography variant="h6" component="h2">
+                Appearance
+              </Typography>
+              <Divider />
 
-          <FormControl size="small" sx={{ maxWidth: 220 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Theme mode
-            </Typography>
-            <Select
-              inputProps={{ 'aria-label': 'Theme mode' }}
-              value={prefs.mode}
-              onChange={(event) => setMode(event.target.value as UiThemeMode)}
-            >
-              <MenuItem value="light">Light</MenuItem>
-              <MenuItem value="dark">Dark</MenuItem>
-              <MenuItem value="system">System</MenuItem>
-            </Select>
-            <Typography variant="body2" color="text.secondary">
-              Active mode: {resolvedMode}
-            </Typography>
-          </FormControl>
-
-          <Box>
-            <Typography variant="subtitle2">Palette preset</Typography>
-            <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-              Active preset: {palettePresets.find((preset) => preset.id === prefs.preset)?.name ?? 'Custom'}
-            </Typography>
-            <Stack direction="row" spacing={1.25} alignItems="center" useFlexGap flexWrap="wrap">
-              {palettePresets.slice(0, 4).map((preset) => (
-                <Button
-                  key={preset.id}
-                  size="small"
-                  variant={preset.id === prefs.preset ? 'contained' : 'outlined'}
-                  onClick={() => setPreset(preset.id)}
+              <FormControl size="small" sx={{ maxWidth: 220 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Theme mode
+                </Typography>
+                <Select
+                  inputProps={{ 'aria-label': 'Theme mode' }}
+                  value={prefs.mode}
+                  onChange={(event) => setMode(event.target.value as UiThemeMode)}
                 >
-                  {preset.name}
-                </Button>
-              ))}
-              <Button variant="text" startIcon={<PaletteRoundedIcon />} onClick={() => setAppearanceOpen(true)}>
-                Browse all presets
-              </Button>
-            </Stack>
-          </Box>
+                  <MenuItem value="light">Light</MenuItem>
+                  <MenuItem value="dark">Dark</MenuItem>
+                  <MenuItem value="system">System</MenuItem>
+                </Select>
+                <Typography variant="body2" color="text.secondary">
+                  Active mode: {resolvedMode}
+                </Typography>
+              </FormControl>
 
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Preview
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Current palette and mode preview using common components.
-            </Typography>
-            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-              <Button variant="contained" size="small">
-                Primary Action
-              </Button>
-              <Button variant="outlined" size="small" color="secondary">
-                Secondary
-              </Button>
-              <Chip label="Theme Chip" color="primary" />
+              <Box>
+                <Typography variant="subtitle2">Palette preset</Typography>
+                <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+                  Active preset: {palettePresets.find((preset) => preset.id === prefs.preset)?.name ?? 'Custom'}
+                </Typography>
+                <Stack direction="row" spacing={1.25} alignItems="center" useFlexGap flexWrap="wrap">
+                  {palettePresets.slice(0, 4).map((preset) => (
+                    <Button
+                      key={preset.id}
+                      size="small"
+                      variant={preset.id === prefs.preset ? 'contained' : 'outlined'}
+                      onClick={() => setPreset(preset.id)}
+                    >
+                      {preset.name}
+                    </Button>
+                  ))}
+                  <Button variant="text" startIcon={<PaletteRoundedIcon />} onClick={() => setAppearanceOpen(true)}>
+                    Browse all presets
+                  </Button>
+                </Stack>
+              </Box>
+
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Preview
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Current palette and mode preview using common components.
+                </Typography>
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  <Button variant="contained" size="small">
+                    Primary Action
+                  </Button>
+                  <Button variant="outlined" size="small" color="secondary">
+                    Secondary
+                  </Button>
+                  <Chip label="Theme Chip" color="primary" />
+                </Stack>
+              </Paper>
             </Stack>
           </Paper>
-        </Stack>
-      </Paper>
 
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            Module Enablement
-          </Typography>
-          <Divider />
-          <Typography color="text.secondary">
-            Turn runtime-manageable application modules on or off. Static modules are not listed here.
-          </Typography>
-          {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view module flags.</Alert> : null}
-          {moduleEnablementError ? <Alert severity="error">{moduleEnablementError}</Alert> : null}
-          {canReadModuleEnablement ? (
-            moduleEnablementLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                <Typography color="text.secondary">Loading module flags...</Typography>
-              </Box>
-            ) : (
-              runtimeToggleModules.length === 0 ? (
-                <Alert severity="info">No runtime-manageable modules are available for toggle control.</Alert>
-              ) : (
-                <Stack spacing={1.5}>
-                  {runtimeToggleModules.map((module) => {
-                    const isEditable = canWriteBranding
-                    return (
-                      <Box
-                        key={module.moduleId}
-                        data-testid={`module-flag-${module.moduleId}`}
-                        sx={{
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 2,
-                          p: 1.5,
-                        }}
-                      >
-                        <Stack spacing={1}>
-                          <Stack direction="row" alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
-                            <Typography variant="subtitle1">{module.label}</Typography>
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  checked={module.enabled}
-                                  disabled={!isEditable || moduleEnablementSaving}
-                                  inputProps={{ 'aria-label': `Toggle ${module.label} module` }}
-                                  onChange={(event) => void handleToggleModuleEnablement(module.moduleId, event.target.checked)}
-                                />
-                              }
-                              label={module.enabled ? 'Enabled' : 'Disabled'}
-                            />
-                          </Stack>
-                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                            <Chip size="small" label={module.enabled ? 'Enabled' : 'Disabled'} color={module.enabled ? 'success' : 'default'} />
-                            <Chip size="small" label={`Source: ${module.source}`} variant="outlined" />
-                            {module.experimental ? <Chip size="small" label="Experimental" color="warning" /> : null}
-                          </Stack>
-                          <Typography color="text.secondary">{module.description}</Typography>
-                        </Stack>
-                      </Box>
-                    )
-                  })}
-                </Stack>
-              )
-            )
-          ) : null}
-          {canReadModuleEnablement && !canWriteBranding ? (
-            <Alert severity="info">You need settings.write permission to change runtime-manageable module flags.</Alert>
-          ) : null}
-        </Stack>
-      </Paper>
+          <Paper id="settings-navigation" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                Navigation
+              </Typography>
+              <Divider />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={prefs.collapseNavByDefault}
+                    onChange={(event) => setCollapseNavByDefault(event.target.checked)}
+                  />
+                }
+                label="Start with side navigation collapsed"
+              />
+              <FormControlLabel
+                control={<Switch checked={prefs.showFooter} onChange={(event) => setShowFooter(event.target.checked)} />}
+                label="Show footer on authenticated pages"
+              />
+              <FormControlLabel
+                control={<Switch checked={prefs.showSukumadMenu} onChange={(event) => setShowSukumadMenu(event.target.checked)} />}
+                label="Show Sukumad menu group"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={prefs.showAdministrationMenu}
+                    onChange={(event) => setShowAdministrationMenu(event.target.checked)}
+                  />
+                }
+                label="Show Administration menu group"
+              />
+              <Divider />
+              <Typography variant="subtitle2">Navigation labels</Typography>
+              <Typography color="text.secondary">
+                Rename drawer links for this browser profile. Leaving a field blank restores the default label.
+              </Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
+                {navigationLabelFields.map((field) => (
+                  <TextField
+                    key={field.id}
+                    label={field.label}
+                    value={prefs.navLabels[field.id] ?? ''}
+                    onChange={(event) => setNavLabel(field.id, event.target.value)}
+                    placeholder="Use default label"
+                    size="small"
+                    sx={{ minWidth: { xs: '100%', md: 240 } }}
+                  />
+                ))}
+              </Stack>
+            </Stack>
+          </Paper>
 
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            RapidPro Reporter Sync
-          </Typography>
-          <Divider />
-          <Typography color="text.secondary">
-            Fetch RapidPro contact fields once, review the suggested reporter mappings, and reuse them for manual and scheduled syncs.
-          </Typography>
-          {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view RapidPro sync settings.</Alert> : null}
-          {rapidProSyncError ? <Alert severity="error">{rapidProSyncError}</Alert> : null}
-          {canReadModuleEnablement ? (
-            rapidProSyncLoading ? (
-              <Typography color="text.secondary">Loading RapidPro sync settings...</Typography>
-            ) : (
-              <>
-                <TextField
-                  label="RapidPro Server Code"
-                  value={rapidProServerCode}
-                  onChange={(event) => setRapidProServerCode(event.target.value)}
-                  disabled={!canWriteBranding || rapidProSyncSaving || rapidProSyncRefreshing}
-                  helperText="Defaults to the existing RapidPro integration server code."
-                  sx={{ maxWidth: 280 }}
-                />
-                <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-                  <Button variant="outlined" onClick={() => void handleRefreshRapidProFields()} disabled={!canWriteBranding || rapidProSyncRefreshing}>
-                    {rapidProSyncRefreshing ? 'Refreshing...' : 'Refresh RapidPro Fields'}
-                  </Button>
-                  <Typography color="text.secondary">
-                    {rapidProLastFetchedAt ? `Last fetched: ${new Date(rapidProLastFetchedAt).toLocaleString()}` : 'Fields have not been fetched yet.'}
-                  </Typography>
-                </Stack>
-                {rapidProFields.length === 0 ? (
-                  <Alert severity="info">Refresh RapidPro fields to populate the available mapping targets.</Alert>
+          <Paper id="settings-data-grid" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                Data Grid Defaults
+              </Typography>
+              <Divider />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={prefs.pinActionsColumnRight}
+                    onChange={(event) => setPinActionsColumnRight(event.target.checked)}
+                  />
+                }
+                label="Pin actions column to the right"
+              />
+              <TextField
+                label="DataGrid border radius"
+                type="number"
+                value={prefs.dataGridBorderRadius}
+                onChange={(event) => setDataGridBorderRadius(Number(event.target.value))}
+                inputProps={{ min: 4, max: 32 }}
+                sx={{ maxWidth: 220 }}
+              />
+            </Stack>
+          </Paper>
+
+          <Paper id="settings-connection" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                Connection
+              </Typography>
+              <Divider />
+              <Alert severity="info">Local override applies only in this browser profile.</Alert>
+              <TextField
+                label="API Base URL Override"
+                placeholder="http://127.0.0.1:8080/api/v1"
+                value={apiBaseUrlOverride}
+                onChange={(event) => setApiBaseUrlOverrideValue(event.target.value)}
+                fullWidth
+              />
+              <Stack direction="row" spacing={1}>
+                <Button variant="contained" onClick={handleBaseUrlSave}>
+                  Save Override
+                </Button>
+                <Button variant="outlined" onClick={handleTestConnection} disabled={testingConnection}>
+                  {testingConnection ? 'Testing...' : 'Test Connection'}
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
+        </>
+      ) : null}
+
+      {isModulesSection ? (
+        <>
+          <Paper id="settings-modules" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                Module Enablement
+              </Typography>
+              <Divider />
+              <Typography color="text.secondary">
+                Turn runtime-manageable application modules on or off. Static modules are not listed here.
+              </Typography>
+              {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view module flags.</Alert> : null}
+              {moduleEnablementError ? <Alert severity="error">{moduleEnablementError}</Alert> : null}
+              {canReadModuleEnablement ? (
+                moduleEnablementLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                    <Typography color="text.secondary">Loading module flags...</Typography>
+                  </Box>
+                ) : runtimeToggleModules.length === 0 ? (
+                  <Alert severity="info">No runtime-manageable modules are available for toggle control.</Alert>
                 ) : (
                   <Stack spacing={1.5}>
-                    {rapidProReporterSourceOptions.map((option) => {
-                      const selected = rapidProMappings.find((item) => item.sourceKey === option.key)?.rapidProFieldKey ?? ''
+                    {runtimeToggleModules.map((module) => {
+                      const isEditable = canWriteBranding
                       return (
-                        <FormControl key={option.key} fullWidth>
-                          <Select
-                            displayEmpty
-                            value={selected}
-                            inputProps={{ 'aria-label': option.label }}
-                            disabled={!canWriteBranding || rapidProSyncSaving}
-                            onChange={(event) => handleRapidProFieldMappingChange(option.key, event.target.value)}
-                          >
-                            <MenuItem value="">
-                              <em>Do not sync</em>
-                            </MenuItem>
-                            {rapidProFields.map((field) => (
-                              <MenuItem key={field.key} value={field.key}>
-                                {field.label}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                          <Typography variant="body2" color="text.secondary">
-                            {option.label}
-                          </Typography>
-                        </FormControl>
+                        <Box
+                          key={module.moduleId}
+                          data-testid={`module-flag-${module.moduleId}`}
+                          sx={{
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 2,
+                            p: 1.5,
+                          }}
+                        >
+                          <Stack spacing={1}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
+                              <Typography variant="subtitle1">{module.label}</Typography>
+                              <FormControlLabel
+                                control={
+                                  <Switch
+                                    checked={module.enabled}
+                                    disabled={!isEditable || moduleEnablementSaving}
+                                    inputProps={{ 'aria-label': `Toggle ${module.label} module` }}
+                                    onChange={(event) => void handleToggleModuleEnablement(module.moduleId, event.target.checked)}
+                                  />
+                                }
+                                label={module.enabled ? 'Enabled' : 'Disabled'}
+                              />
+                            </Stack>
+                            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                              <Chip size="small" label={module.enabled ? 'Enabled' : 'Disabled'} color={module.enabled ? 'success' : 'default'} />
+                              <Chip size="small" label={`Source: ${module.source}`} variant="outlined" />
+                              {module.experimental ? <Chip size="small" label="Experimental" color="warning" /> : null}
+                            </Stack>
+                            <Typography color="text.secondary">{module.description}</Typography>
+                          </Stack>
+                        </Box>
                       )
                     })}
                   </Stack>
-                )}
-                {!rapidProValidation.isValid ? (
-                  <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
-                ) : (
-                  <Alert severity="success">Saved RapidPro mappings are valid and ready for sync.</Alert>
-                )}
-                {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidPro sync settings.</Alert> : null}
-                <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" onClick={() => void handleSaveRapidProSync()} disabled={!canWriteBranding || rapidProSyncSaving}>
-                    {rapidProSyncSaving ? 'Saving...' : 'Save RapidPro Sync Settings'}
-                  </Button>
-                </Stack>
-              </>
-            )
-          ) : null}
-        </Stack>
-      </Paper>
+                )
+              ) : null}
+              {canReadModuleEnablement && !canWriteBranding ? (
+                <Alert severity="info">You need settings.write permission to change runtime-manageable module flags.</Alert>
+              ) : null}
+            </Stack>
+          </Paper>
 
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            Login Branding
-          </Typography>
-          <Divider />
-          <Typography color="text.secondary">
-            Configure authentication screen branding for both desktop and web clients.
-          </Typography>
-          <TextField
-            label="Application Display Name"
-            value={brandingDisplayName}
-            onChange={(event) => setBrandingDisplayName(event.target.value)}
-            disabled={brandingLoading || brandingSaving || !canWriteBranding}
-            fullWidth
-          />
-          <TextField
-            label="Login Image URL"
-            value={brandingImageUrl}
-            onChange={(event) => {
-              setBrandingImageUrl(event.target.value)
-              setBrandingPreviewBroken(false)
-            }}
-            error={Boolean(brandingUrlValidationError)}
-            helperText={brandingUrlValidationError || 'Optional absolute http(s) URL.'}
-            disabled={brandingLoading || brandingSaving || !canWriteBranding}
-            fullWidth
-          />
-          <Box
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              p: 2,
-              minHeight: 140,
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            {brandingImageUrl.trim() && !brandingPreviewBroken && !brandingUrlValidationError ? (
-              <Box
-                component="img"
-                src={brandingImageUrl}
-                alt="Login branding preview"
-                onError={() => setBrandingPreviewBroken(true)}
-                sx={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain' }}
-              />
-            ) : (
-              <Stack spacing={1} alignItems="center">
-                <Avatar sx={{ bgcolor: 'primary.main' }}>{brandingDisplayName.slice(0, 1).toUpperCase()}</Avatar>
-                <Typography>{brandingDisplayName || appName}</Typography>
-              </Stack>
-            )}
-          </Box>
-          {!canWriteBranding ? <Alert severity="info">You need settings.write permission to update branding.</Alert> : null}
-          {brandingErrorMessage ? <Alert severity="error">{brandingErrorMessage}</Alert> : null}
-          <Stack direction="row" justifyContent="flex-end">
-            <Button
-              variant="contained"
-              onClick={handleSaveBranding}
-              disabled={
-                brandingLoading ||
-                brandingSaving ||
-                !canWriteBranding ||
-                !brandingDisplayName.trim() ||
-                Boolean(brandingUrlValidationError)
-              }
-            >
-              {brandingSaving ? 'Saving...' : 'Save Branding'}
-            </Button>
-          </Stack>
-        </Stack>
-      </Paper>
-
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            Navigation
-          </Typography>
-          <Divider />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={prefs.collapseNavByDefault}
-                onChange={(event) => setCollapseNavByDefault(event.target.checked)}
-              />
-            }
-            label="Start with side navigation collapsed"
-          />
-          <FormControlLabel
-            control={<Switch checked={prefs.showFooter} onChange={(event) => setShowFooter(event.target.checked)} />}
-            label="Show footer on authenticated pages"
-          />
-          <FormControlLabel
-            control={<Switch checked={prefs.showSukumadMenu} onChange={(event) => setShowSukumadMenu(event.target.checked)} />}
-            label="Show Sukumad menu group"
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={prefs.showAdministrationMenu}
-                onChange={(event) => setShowAdministrationMenu(event.target.checked)}
-              />
-            }
-            label="Show Administration menu group"
-          />
-          <Divider />
-          <Typography variant="subtitle2">Navigation labels</Typography>
-          <Typography color="text.secondary">
-            Rename drawer links for this browser profile. Leaving a field blank restores the default label.
-          </Typography>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
-            {navigationLabelFields.map((field) => (
-              <TextField
-                key={field.id}
-                label={field.label}
-                value={prefs.navLabels[field.id] ?? ''}
-                onChange={(event) => setNavLabel(field.id, event.target.value)}
-                placeholder="Use default label"
-                size="small"
-                sx={{ minWidth: { xs: '100%', md: 240 } }}
-              />
-            ))}
-          </Stack>
-        </Stack>
-      </Paper>
-
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            Data Grid Defaults
-          </Typography>
-          <Divider />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={prefs.pinActionsColumnRight}
-                onChange={(event) => setPinActionsColumnRight(event.target.checked)}
-              />
-            }
-            label="Pin actions column to the right"
-          />
-          <TextField
-            label="DataGrid border radius"
-            type="number"
-            value={prefs.dataGridBorderRadius}
-            onChange={(event) => setDataGridBorderRadius(Number(event.target.value))}
-            inputProps={{ min: 4, max: 32 }}
-            sx={{ maxWidth: 220 }}
-          />
-        </Stack>
-      </Paper>
-
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            Connection
-          </Typography>
-          <Divider />
-          <Alert severity="info">Local override applies only in this browser profile.</Alert>
-          <TextField
-            label="API Base URL Override"
-            placeholder="http://127.0.0.1:8080/api/v1"
-            value={apiBaseUrlOverride}
-            onChange={(event) => setApiBaseUrlOverrideValue(event.target.value)}
-            fullWidth
-          />
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" onClick={handleBaseUrlSave}>
-              Save Override
-            </Button>
-            <Button variant="outlined" onClick={handleTestConnection} disabled={testingConnection}>
-              {testingConnection ? 'Testing...' : 'Test Connection'}
-            </Button>
-          </Stack>
-        </Stack>
-      </Paper>
-
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            API Access
-          </Typography>
-          <Divider />
-          <Typography color="text.secondary">
-            Choose whether this browser profile uses the current session or a saved API token for backend requests.
-          </Typography>
-          <FormControl>
-            <RadioGroup
-              value={authMode}
-              onChange={(event) => setAuthMode(event.target.value as AuthMode)}
-            >
-              <FormControlLabel value="password" control={<Radio />} label="Username / Password" />
-              <FormControlLabel value="api_token" control={<Radio />} label="API Token" />
-            </RadioGroup>
-          </FormControl>
-          <TextField
-            label="API Token"
-            type="password"
-            value={apiToken}
-            onChange={(event) => setApiToken(event.target.value)}
-            helperText="Stored locally and used for backend API requests when API token mode is selected."
-            fullWidth
-          />
-          <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Button variant="contained" onClick={handleSaveApiAccess} disabled={apiAccessSaving}>
-              {apiAccessSaving ? 'Saving...' : 'Save API Access'}
-            </Button>
-          </Stack>
-          {canManageApiTokens ? (
-            <>
-              <Divider />
-              <Typography variant="subtitle2">Create API Token</Typography>
-              <Typography color="text.secondary">
-                Tokens inherit the current permissions and are shown once after creation.
+          <Paper id="settings-runtime-config" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                Runtime Config
               </Typography>
+              <Divider />
+              <Typography color="text.secondary">
+                Read the active backend configuration snapshot with sensitive fields masked before display.
+              </Typography>
+              {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view runtime configuration.</Alert> : null}
+              {runtimeConfigError ? <Alert severity="error">{runtimeConfigError}</Alert> : null}
+              {canReadModuleEnablement ? (
+                <>
+                  <Stack direction="row" spacing={1}>
+                    <Button variant="outlined" onClick={() => void loadRuntimeConfig()} disabled={runtimeConfigLoading}>
+                      {runtimeConfigLoading ? 'Refreshing...' : runtimeConfig ? 'Refresh' : 'View Running Config'}
+                    </Button>
+                    <Button
+                      variant={runtimeConfigFormat === 'json' ? 'contained' : 'outlined'}
+                      onClick={() => setRuntimeConfigFormat('json')}
+                      disabled={!runtimeConfig}
+                    >
+                      JSON
+                    </Button>
+                    <Button
+                      variant={runtimeConfigFormat === 'yaml' ? 'contained' : 'outlined'}
+                      onClick={() => setRuntimeConfigFormat('yaml')}
+                      disabled={!runtimeConfig}
+                    >
+                      YAML
+                    </Button>
+                    <Button variant="text" onClick={() => void handleCopyRuntimeConfig()} disabled={!runtimeConfigText}>
+                      {runtimeConfigFormat === 'yaml' ? 'Copy YAML' : 'Copy JSON'}
+                    </Button>
+                  </Stack>
+                  <TextField
+                    label={`Sanitized runtime config (${runtimeConfigFormat.toUpperCase()})`}
+                    value={runtimeConfigText}
+                    multiline
+                    minRows={14}
+                    InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                    placeholder={runtimeConfigLoading ? 'Loading runtime configuration...' : 'No runtime configuration loaded.'}
+                    fullWidth
+                  />
+                </>
+              ) : null}
+            </Stack>
+          </Paper>
+        </>
+      ) : null}
+
+      {isIntegrationsSection ? (
+        <>
+          <Paper id="settings-api-access" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                API Access
+              </Typography>
+              <Divider />
+              <Typography color="text.secondary">
+                Choose whether this browser profile uses the current session or a saved API token for backend requests.
+              </Typography>
+              <FormControl>
+                <RadioGroup
+                  value={authMode}
+                  onChange={(event) => setAuthMode(event.target.value as AuthMode)}
+                >
+                  <FormControlLabel value="password" control={<Radio />} label="Username / Password" />
+                  <FormControlLabel value="api_token" control={<Radio />} label="API Token" />
+                </RadioGroup>
+              </FormControl>
               <TextField
-                label="Token Name"
-                value={tokenName}
-                onChange={(event) => setTokenName(event.target.value)}
+                label="API Token"
+                type="password"
+                value={apiToken}
+                onChange={(event) => setApiToken(event.target.value)}
+                helperText="Stored locally and used for backend API requests when API token mode is selected."
                 fullWidth
               />
               <Stack direction="row" spacing={1} justifyContent="flex-end">
-                <Button variant="contained" onClick={() => void handleCreateApiToken()} disabled={apiTokenCreating || !tokenName.trim()}>
-                  {apiTokenCreating ? 'Creating...' : 'Create Token'}
+                <Button variant="contained" onClick={handleSaveApiAccess} disabled={apiAccessSaving}>
+                  {apiAccessSaving ? 'Saving...' : 'Save API Access'}
                 </Button>
               </Stack>
-            </>
-          ) : (
-            <Alert severity="info">You need api_tokens.write permission to create API tokens here.</Alert>
-          )}
-          {apiAccessError ? <Alert severity="error">{apiAccessError}</Alert> : null}
-          {createdApiToken ? (
+              {canManageApiTokens ? (
+                <>
+                  <Divider />
+                  <Typography variant="subtitle2">Create API Token</Typography>
+                  <Typography color="text.secondary">
+                    Tokens inherit the current permissions and are shown once after creation.
+                  </Typography>
+                  <TextField
+                    label="Token Name"
+                    value={tokenName}
+                    onChange={(event) => setTokenName(event.target.value)}
+                    fullWidth
+                  />
+                  <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <Button variant="contained" onClick={() => void handleCreateApiToken()} disabled={apiTokenCreating || !tokenName.trim()}>
+                      {apiTokenCreating ? 'Creating...' : 'Create Token'}
+                    </Button>
+                  </Stack>
+                </>
+              ) : (
+                <Alert severity="info">You need api_tokens.write permission to create API tokens here.</Alert>
+              )}
+              {apiAccessError ? <Alert severity="error">{apiAccessError}</Alert> : null}
+              {createdApiToken ? (
+                <Box
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    p: 2,
+                  }}
+                >
+                  <Stack spacing={1.25}>
+                    <Typography variant="subtitle2">Plaintext token</Typography>
+                    <TextField
+                      value={createdApiToken}
+                      multiline
+                      minRows={2}
+                      InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
+                      fullWidth
+                    />
+                    <Stack direction="row" justifyContent="flex-end">
+                      <Button variant="outlined" onClick={() => void handleCopyCreatedToken()}>
+                        Copy Token
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Box>
+              ) : null}
+            </Stack>
+          </Paper>
+
+          <Paper id="settings-rapidpro" elevation={1} sx={{ p: 3 }}>
+            <Stack spacing={2}>
+              <Typography variant="h6" component="h2">
+                RapidPro Reporter Sync
+              </Typography>
+              <Divider />
+              <Typography color="text.secondary">
+                Fetch RapidPro contact fields once, review the suggested reporter mappings, and reuse them for manual and scheduled syncs.
+              </Typography>
+              {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view RapidPro sync settings.</Alert> : null}
+              {rapidProSyncError ? <Alert severity="error">{rapidProSyncError}</Alert> : null}
+              {canReadModuleEnablement ? (
+                rapidProSyncLoading ? (
+                  <Typography color="text.secondary">Loading RapidPro sync settings...</Typography>
+                ) : (
+                  <>
+                    <TextField
+                      label="RapidPro Server Code"
+                      value={rapidProServerCode}
+                      onChange={(event) => setRapidProServerCode(event.target.value)}
+                      disabled={!canWriteBranding || rapidProSyncSaving || rapidProSyncRefreshing}
+                      helperText="Defaults to the existing RapidPro integration server code."
+                      sx={{ maxWidth: 280 }}
+                    />
+                    <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                      <Button variant="outlined" onClick={() => void handleRefreshRapidProFields()} disabled={!canWriteBranding || rapidProSyncRefreshing}>
+                        {rapidProSyncRefreshing ? 'Refreshing...' : 'Refresh RapidPro Fields'}
+                      </Button>
+                      <Typography color="text.secondary">
+                        {rapidProLastFetchedAt ? `Last fetched: ${new Date(rapidProLastFetchedAt).toLocaleString()}` : 'Fields have not been fetched yet.'}
+                      </Typography>
+                    </Stack>
+                    {rapidProFields.length === 0 ? (
+                      <Alert severity="info">Refresh RapidPro fields to populate the available mapping targets.</Alert>
+                    ) : (
+                      <Stack spacing={1.5}>
+                        {rapidProReporterSourceOptions.map((option) => {
+                          const selected = rapidProMappings.find((item) => item.sourceKey === option.key)?.rapidProFieldKey ?? ''
+                          return (
+                            <FormControl key={option.key} fullWidth>
+                              <Select
+                                displayEmpty
+                                value={selected}
+                                inputProps={{ 'aria-label': option.label }}
+                                disabled={!canWriteBranding || rapidProSyncSaving}
+                                onChange={(event) => handleRapidProFieldMappingChange(option.key, event.target.value)}
+                              >
+                                <MenuItem value="">
+                                  <em>Do not sync</em>
+                                </MenuItem>
+                                {rapidProFields.map((field) => (
+                                  <MenuItem key={field.key} value={field.key}>
+                                    {field.label}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                              <Typography variant="body2" color="text.secondary">
+                                {option.label}
+                              </Typography>
+                            </FormControl>
+                          )
+                        })}
+                      </Stack>
+                    )}
+                    {!rapidProValidation.isValid ? (
+                      <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
+                    ) : (
+                      <Alert severity="success">Saved RapidPro mappings are valid and ready for sync.</Alert>
+                    )}
+                    {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidPro sync settings.</Alert> : null}
+                    <Stack direction="row" justifyContent="flex-end">
+                      <Button variant="contained" onClick={() => void handleSaveRapidProSync()} disabled={!canWriteBranding || rapidProSyncSaving}>
+                        {rapidProSyncSaving ? 'Saving...' : 'Save RapidPro Sync Settings'}
+                      </Button>
+                    </Stack>
+                  </>
+                )
+              ) : null}
+            </Stack>
+          </Paper>
+        </>
+      ) : null}
+
+      {isBrandingSection ? (
+        <Paper id="settings-branding" elevation={1} sx={{ p: 3 }}>
+          <Stack spacing={2}>
+            <Typography variant="h6" component="h2">
+              Login Branding
+            </Typography>
+            <Divider />
+            <Typography color="text.secondary">
+              Configure authentication screen branding for both desktop and web clients.
+            </Typography>
+            <TextField
+              label="Application Display Name"
+              value={brandingDisplayName}
+              onChange={(event) => setBrandingDisplayName(event.target.value)}
+              disabled={brandingLoading || brandingSaving || !canWriteBranding}
+              fullWidth
+            />
+            <TextField
+              label="Login Image URL"
+              value={brandingImageUrl}
+              onChange={(event) => {
+                setBrandingImageUrl(event.target.value)
+                setBrandingPreviewBroken(false)
+              }}
+              error={Boolean(brandingUrlValidationError)}
+              helperText={brandingUrlValidationError || 'Optional absolute http(s) URL.'}
+              disabled={brandingLoading || brandingSaving || !canWriteBranding}
+              fullWidth
+            />
             <Box
               sx={{
                 border: '1px solid',
                 borderColor: 'divider',
                 borderRadius: 2,
                 p: 2,
+                minHeight: 140,
+                display: 'grid',
+                placeItems: 'center',
               }}
             >
-              <Stack spacing={1.25}>
-                <Typography variant="subtitle2">Plaintext token</Typography>
-                <TextField
-                  value={createdApiToken}
-                  multiline
-                  minRows={2}
-                  InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
-                  fullWidth
+              {brandingImageUrl.trim() && !brandingPreviewBroken && !brandingUrlValidationError ? (
+                <Box
+                  component="img"
+                  src={brandingImageUrl}
+                  alt="Login branding preview"
+                  onError={() => setBrandingPreviewBroken(true)}
+                  sx={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain' }}
                 />
-                <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="outlined" onClick={() => void handleCopyCreatedToken()}>
-                    Copy Token
-                  </Button>
+              ) : (
+                <Stack spacing={1} alignItems="center">
+                  <Avatar sx={{ bgcolor: 'primary.main' }}>{brandingDisplayName.slice(0, 1).toUpperCase()}</Avatar>
+                  <Typography>{brandingDisplayName || appName}</Typography>
                 </Stack>
-              </Stack>
+              )}
             </Box>
-          ) : null}
-        </Stack>
-      </Paper>
+            {!canWriteBranding ? <Alert severity="info">You need settings.write permission to update branding.</Alert> : null}
+            {brandingErrorMessage ? <Alert severity="error">{brandingErrorMessage}</Alert> : null}
+            <Stack direction="row" justifyContent="flex-end">
+              <Button
+                variant="contained"
+                onClick={handleSaveBranding}
+                disabled={
+                  brandingLoading ||
+                  brandingSaving ||
+                  !canWriteBranding ||
+                  !brandingDisplayName.trim() ||
+                  Boolean(brandingUrlValidationError)
+                }
+              >
+                {brandingSaving ? 'Saving...' : 'Save Branding'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+      ) : null}
 
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="h6" component="h2">
-            Runtime Config
-          </Typography>
-          <Divider />
-          <Typography color="text.secondary">
-            Read the active backend configuration snapshot with sensitive fields masked before display.
-          </Typography>
-          {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view runtime configuration.</Alert> : null}
-          {runtimeConfigError ? <Alert severity="error">{runtimeConfigError}</Alert> : null}
-          {canReadModuleEnablement ? (
-            <>
-              <Stack direction="row" spacing={1}>
-                <Button variant="outlined" onClick={() => void loadRuntimeConfig()} disabled={runtimeConfigLoading}>
-                  {runtimeConfigLoading ? 'Refreshing...' : runtimeConfig ? 'Refresh' : 'View Running Config'}
-                </Button>
-                <Button
-                  variant={runtimeConfigFormat === 'json' ? 'contained' : 'outlined'}
-                  onClick={() => setRuntimeConfigFormat('json')}
-                  disabled={!runtimeConfig}
-                >
-                  JSON
-                </Button>
-                <Button
-                  variant={runtimeConfigFormat === 'yaml' ? 'contained' : 'outlined'}
-                  onClick={() => setRuntimeConfigFormat('yaml')}
-                  disabled={!runtimeConfig}
-                >
-                  YAML
-                </Button>
-                <Button variant="text" onClick={() => void handleCopyRuntimeConfig()} disabled={!runtimeConfigText}>
-                  {runtimeConfigFormat === 'yaml' ? 'Copy YAML' : 'Copy JSON'}
-                </Button>
-              </Stack>
-              <TextField
-                label={`Sanitized runtime config (${runtimeConfigFormat.toUpperCase()})`}
-                value={runtimeConfigText}
-                multiline
-                minRows={14}
-                InputProps={{ readOnly: true, sx: { fontFamily: 'monospace' } }}
-                placeholder={runtimeConfigLoading ? 'Loading runtime configuration...' : 'No runtime configuration loaded.'}
-                fullWidth
-              />
-            </>
-          ) : null}
-        </Stack>
-      </Paper>
-
-      <Paper elevation={1} sx={{ p: 3 }}>
-        <Stack spacing={1}>
-          <Typography variant="h6" component="h2">
-            About
-          </Typography>
-          <Divider />
-          <Typography>
-            {appName} <Typography component="span" color="text.secondary">v0.1.0 (web)</Typography>
-          </Typography>
-          <Typography color="text.secondary">Build: local-dev</Typography>
-        </Stack>
-      </Paper>
+      {isAboutSection ? (
+        <Paper id="settings-about" elevation={1} sx={{ p: 3 }}>
+          <Stack spacing={1}>
+            <Typography variant="h6" component="h2">
+              About
+            </Typography>
+            <Divider />
+            <Typography>
+              {appName} <Typography component="span" color="text.secondary">v0.1.0 (web)</Typography>
+            </Typography>
+            <Typography color="text.secondary">Build: local-dev</Typography>
+          </Stack>
+        </Paper>
+      ) : null}
       <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
     </Stack>
   )

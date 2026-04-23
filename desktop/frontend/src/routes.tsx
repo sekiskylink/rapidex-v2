@@ -4,6 +4,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  redirect,
   useNavigate,
   useRouter,
 } from '@tanstack/react-router'
@@ -531,7 +532,100 @@ const dashboardRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/settings',
-  component: SettingsRoutePage,
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/general' })
+  },
+  component: () => null,
+})
+
+function SettingsGeneralRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/settings/general')
+  if (accessState === 'allowed') {
+    return <SettingsPage section="general" />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/general') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function SettingsBrandingRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/settings/branding')
+  if (accessState === 'allowed') {
+    return <SettingsPage section="branding" />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/branding') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function SettingsModulesRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/settings/modules')
+  if (accessState === 'allowed') {
+    return <SettingsPage section="modules" />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/modules') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function SettingsIntegrationsRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/settings/integrations')
+  if (accessState === 'allowed') {
+    return <SettingsPage section="integrations" />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/integrations') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+function SettingsAboutRoutePage() {
+  const principal = useSessionPrincipal()
+  const accessState = getRouteAccessState(principal, '/settings/about')
+  if (accessState === 'allowed') {
+    return <SettingsPage section="about" />
+  }
+  if (accessState === 'module-disabled') {
+    return <ModuleDisabledPage moduleLabel={getModuleLabelForPath('/settings/about') ?? undefined} />
+  }
+  return <ForbiddenPage />
+}
+
+const settingsGeneralRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/general',
+  component: SettingsGeneralRoutePage,
+})
+
+const settingsBrandingRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/branding',
+  component: SettingsBrandingRoutePage,
+})
+
+const settingsModulesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/modules',
+  component: SettingsModulesRoutePage,
+})
+
+const settingsIntegrationsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/integrations',
+  component: SettingsIntegrationsRoutePage,
+})
+
+const settingsAboutRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/settings/about',
+  component: SettingsAboutRoutePage,
 })
 
 const usersRoute = createRoute({
@@ -649,6 +743,11 @@ const routeTree = rootRoute.addChildren([
   authenticatedRoute.addChildren([
     dashboardRoute,
     settingsRoute,
+    settingsGeneralRoute,
+    settingsBrandingRoute,
+    settingsModulesRoute,
+    settingsIntegrationsRoute,
+    settingsAboutRoute,
     usersRoute,
     rolesRoute,
     permissionsRoute,

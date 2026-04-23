@@ -23,7 +23,7 @@ import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { useBootstrapSnapshot } from '../bootstrap/state'
 import { appName } from '../lib/env'
-import { buildNavigation, canAccessRoute } from '../navigation'
+import { buildNavigation, canAccessRoute, type NavigationNode } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import {
   AdminPanelSettingsRoundedIcon,
@@ -106,6 +106,7 @@ export function AppShell() {
       pathname.startsWith('/orgunits') ||
       pathname.startsWith('/reporters'),
   )
+  const [settingsExpanded, setSettingsExpanded] = React.useState(pathname.startsWith('/settings'))
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
   const firstNavItemRef = React.useRef<HTMLDivElement | null>(null)
@@ -149,6 +150,9 @@ export function AppShell() {
     ) {
       setSukumadExpanded(true)
     }
+    if (pathname.startsWith('/settings')) {
+      setSettingsExpanded(true)
+    }
   }, [pathname])
 
   const navigation = buildNavigation(user, {
@@ -156,11 +160,16 @@ export function AppShell() {
     showAdministration: prefs.showAdministrationMenu,
     showSukumad: prefs.showSukumadMenu,
   })
-  const canAccessSettings = canAccessRoute('/settings', user)
+  const canAccessSettings = canAccessRoute('/settings/general', user)
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || appName
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
+    'settings-general': <SettingsRoundedIcon fontSize="small" />,
+    'settings-branding': <SettingsRoundedIcon fontSize="small" />,
+    'settings-modules': <SettingsRoundedIcon fontSize="small" />,
+    'settings-integrations': <SettingsRoundedIcon fontSize="small" />,
+    'settings-about': <SettingsRoundedIcon fontSize="small" />,
     sukumad: <AccountBalanceWalletRoundedIcon fontSize="small" />,
     users: <GroupRoundedIcon fontSize="small" />,
     roles: <AdminPanelSettingsRoundedIcon fontSize="small" />,
@@ -201,6 +210,156 @@ export function AppShell() {
 
   const closeMenus = () => {
     setMenuAnchor(null)
+  }
+
+  function renderAdministrationItem(item: NavigationNode) {
+    const icon = navIcons[item.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />
+
+    if ('children' in item) {
+      const selected = pathname.startsWith('/settings')
+      const button = (
+        <ListItemButton
+          key={item.key}
+          selected={selected}
+          aria-label={item.label}
+          aria-expanded={settingsExpanded}
+          onClick={() => {
+            if (isMobile) {
+              handleNavItemClick('/settings/general')
+              return
+            }
+            setSettingsExpanded((current) => !current)
+          }}
+          sx={{
+            ...navItemStyles(selected),
+            justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+            pl: collapsed && !isMobile ? 1.5 : 3.25,
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: collapsed && !isMobile ? 'auto' : 36 }}>{icon}</ListItemIcon>
+          <ListItemText
+            primary={item.label}
+            primaryTypographyProps={{
+              noWrap: true,
+              fontWeight: selected ? 600 : 500,
+            }}
+            sx={{
+              opacity: collapsed && !isMobile ? 0 : 1,
+              transition: theme.transitions.create('opacity', {
+                duration: theme.transitions.duration.shortest,
+              }),
+            }}
+          />
+          {!collapsed || isMobile ? (settingsExpanded ? <ExpandLessRoundedIcon fontSize="small" /> : <ExpandMoreRoundedIcon fontSize="small" />) : null}
+        </ListItemButton>
+      )
+
+      const children = item.children.map((child) => {
+        if ('children' in child) {
+          return null
+        }
+        const childSelected = pathname.startsWith(child.path)
+        if (collapsed && !isMobile) {
+          return (
+            <Tooltip key={child.key} title={child.label} placement="right">
+              <ListItemButton
+                selected={childSelected}
+                onClick={() => handleNavItemClick(child.path)}
+                aria-label={child.label}
+                sx={{
+                  ...navItemStyles(childSelected),
+                  justifyContent: 'center',
+                  pl: 1.5,
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 'auto' }}>
+                  {navIcons[child.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />}
+                </ListItemIcon>
+              </ListItemButton>
+            </Tooltip>
+          )
+        }
+        return (
+          <ListItemButton
+            key={child.key}
+            selected={childSelected}
+            onClick={() => handleNavItemClick(child.path)}
+            aria-label={child.label}
+            sx={{
+              ...navItemStyles(childSelected),
+              justifyContent: 'flex-start',
+              pl: 5,
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              {navIcons[child.key as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />}
+            </ListItemIcon>
+            <ListItemText
+              primary={child.label}
+              primaryTypographyProps={{
+                noWrap: true,
+                fontWeight: childSelected ? 600 : 500,
+              }}
+            />
+          </ListItemButton>
+        )
+      })
+
+      return (
+        <React.Fragment key={item.key}>
+          {collapsed && !isMobile ? (
+            <Tooltip title={item.label} placement="right">
+              {button}
+            </Tooltip>
+          ) : (
+            button
+          )}
+          {collapsed && !isMobile ? (settingsExpanded ? children : null) : <Collapse in={settingsExpanded} unmountOnExit>{children}</Collapse>}
+        </React.Fragment>
+      )
+    }
+
+    const selected = pathname.startsWith(item.path)
+    if (collapsed && !isMobile) {
+      return (
+        <Tooltip key={item.key} title={item.label} placement="right">
+          <ListItemButton
+            selected={selected}
+            onClick={() => handleNavItemClick(item.path)}
+            aria-label={item.label}
+            sx={{
+              ...navItemStyles(selected),
+              justifyContent: 'center',
+              pl: 1.5,
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 'auto' }}>{icon}</ListItemIcon>
+          </ListItemButton>
+        </Tooltip>
+      )
+    }
+    return (
+      <ListItemButton
+        key={item.key}
+        selected={selected}
+        onClick={() => handleNavItemClick(item.path)}
+        aria-label={item.label}
+        sx={{
+          ...navItemStyles(selected),
+          justifyContent: 'flex-start',
+          pl: 3.25,
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 36 }}>{icon}</ListItemIcon>
+        <ListItemText
+          primary={item.label}
+          primaryTypographyProps={{
+            noWrap: true,
+            fontWeight: selected ? 600 : 500,
+          }}
+        />
+      </ListItemButton>
+    )
   }
 
   const drawer = (
@@ -300,6 +459,9 @@ export function AppShell() {
             {collapsed && !isMobile ? (
               sukumadExpanded
                 ? navigation.sukumad.children.map((item) => {
+                    if ('children' in item) {
+                      return null
+                    }
                     const selected = pathname.startsWith(item.path)
                     return (
                       <Tooltip key={item.key} title={item.label} placement="right">
@@ -322,6 +484,9 @@ export function AppShell() {
             ) : (
               <Collapse in={sukumadExpanded} unmountOnExit>
                 {navigation.sukumad.children.map((item) => {
+                  if ('children' in item) {
+                    return null
+                  }
                   const selected = pathname.startsWith(item.path)
                   return (
                     <ListItemButton
@@ -382,53 +547,11 @@ export function AppShell() {
             </ListItemButton>
             {collapsed && !isMobile ? (
               adminExpanded
-                ? navigation.administration.children.map((item) => {
-                    const selected = pathname.startsWith(item.path)
-                    return (
-                      <Tooltip key={item.key} title={item.label} placement="right">
-                        <ListItemButton
-                          selected={selected}
-                          onClick={() => handleNavItemClick(item.path)}
-                          aria-label={item.label}
-                          sx={{
-                            ...navItemStyles(selected),
-                            justifyContent: 'center',
-                            pl: 1.5,
-                          }}
-                        >
-                          <ListItemIcon sx={{ minWidth: 'auto' }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
-                        </ListItemButton>
-                      </Tooltip>
-                    )
-                  })
+                ? navigation.administration.children.map((item) => renderAdministrationItem(item))
                 : null
             ) : (
               <Collapse in={adminExpanded} unmountOnExit>
-                {navigation.administration.children.map((item) => {
-                  const selected = pathname.startsWith(item.path)
-                  return (
-                    <ListItemButton
-                      key={item.key}
-                      selected={selected}
-                      onClick={() => handleNavItemClick(item.path)}
-                      aria-label={item.label}
-                      sx={{
-                        ...navItemStyles(selected),
-                        justifyContent: 'flex-start',
-                        pl: 3.25,
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 36 }}>{navIcons[item.key as keyof typeof navIcons]}</ListItemIcon>
-                      <ListItemText
-                        primary={item.label}
-                        primaryTypographyProps={{
-                          noWrap: true,
-                          fontWeight: selected ? 600 : 500,
-                        }}
-                      />
-                    </ListItemButton>
-                  )
-                })}
+                {navigation.administration.children.map((item) => renderAdministrationItem(item))}
               </Collapse>
             )}
           </>
@@ -487,7 +610,7 @@ export function AppShell() {
               <MenuItem
                 onClick={() => {
                   closeMenus()
-                  void navigate({ to: '/settings' })
+                  void navigate({ to: '/settings/general' })
                 }}
               >
                 <ListItemIcon>

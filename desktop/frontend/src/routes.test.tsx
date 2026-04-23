@@ -777,7 +777,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/about', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
@@ -878,7 +878,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/about', store)
 
     expect(await screen.findByRole('heading', { name: '403', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Forbidden')).toBeInTheDocument()
@@ -1363,7 +1363,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/about', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText(/Backend version:\s*1\.2\.3/i)).toBeInTheDocument()
@@ -1736,7 +1736,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/general', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Scheduler link'), { target: { value: 'Timed Calls' } })
@@ -1897,7 +1897,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/branding', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('Application Display Name'), { target: { value: 'Platform Pro' } })
@@ -1999,7 +1999,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/integrations', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
@@ -2094,7 +2094,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/integrations', store)
 
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
     fireEvent.change(await screen.findByLabelText('Token Name'), { target: { value: 'Desktop API token' } })
@@ -2181,7 +2181,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/modules', store)
     expect(await screen.findByTestId('module-flag-administration')).toHaveTextContent('Administration')
     expect(await screen.findByText('Admin module')).toBeInTheDocument()
     expect(screen.queryByText('Settings module')).not.toBeInTheDocument()
@@ -2264,7 +2264,7 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/settings', store)
+    renderWithRouter('/settings/modules', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Runtime Config', level: 6 })).toBeInTheDocument()

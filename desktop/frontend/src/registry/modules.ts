@@ -45,7 +45,7 @@ export const moduleRegistry = [
     navGroup: 'administration',
     basePath: '/settings',
     permissions: ['settings.read', 'settings.write'],
-    navItems: ['settings'],
+    navItems: ['settings', 'settings-general', 'settings-branding', 'settings-modules', 'settings-integrations', 'settings-about'],
     metadata: {
       description: 'System and branding configuration.',
     },

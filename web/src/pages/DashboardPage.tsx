@@ -698,7 +698,7 @@ export function DashboardPage() {
         {
           label: 'Settings',
           path: '/settings',
-          enabled: (hasRole('admin') || hasPermission('settings.write')) && canAccessRoute('/settings'),
+          enabled: (hasRole('admin') || hasPermission('settings.write')) && canAccessRoute('/settings/general'),
         },
       ].filter((action) => action.enabled),
     [],

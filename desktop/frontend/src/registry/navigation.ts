@@ -88,9 +88,50 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
         id: 'settings',
         label: 'Settings',
         icon: 'settings',
-        path: '/settings',
         group: 'administration',
         visibleWhen: ({ principal }) => hasAdminRole(principal) || hasPermission(principal, 'settings.write'),
+        children: [
+          {
+            id: 'settings-general',
+            label: 'General',
+            icon: 'settings',
+            path: '/settings/general',
+            group: 'administration',
+            requiredPermissions: ['settings.read', 'settings.write'],
+          },
+          {
+            id: 'settings-branding',
+            label: 'Branding',
+            icon: 'settings',
+            path: '/settings/branding',
+            group: 'administration',
+            requiredPermissions: ['settings.read', 'settings.write'],
+          },
+          {
+            id: 'settings-modules',
+            label: 'Modules',
+            icon: 'settings',
+            path: '/settings/modules',
+            group: 'administration',
+            requiredPermissions: ['settings.read', 'settings.write'],
+          },
+          {
+            id: 'settings-integrations',
+            label: 'Integrations',
+            icon: 'settings',
+            path: '/settings/integrations',
+            group: 'administration',
+            requiredPermissions: ['settings.read', 'settings.write'],
+          },
+          {
+            id: 'settings-about',
+            label: 'About',
+            icon: 'settings',
+            path: '/settings/about',
+            group: 'administration',
+            requiredPermissions: ['settings.read', 'settings.write'],
+          },
+        ],
       },
     ],
   },
@@ -193,19 +234,58 @@ function isVisible(definition: NavigationDefinition, ctx: NavigationVisibilityCo
   return true
 }
 
+function collectPathMatches(definition: NavigationDefinition, pathname: string, matches: string[]) {
+  if (definition.path && pathname.startsWith(definition.path)) {
+    matches.push(definition.label)
+  }
+  for (const child of definition.children ?? []) {
+    collectPathMatches(child, pathname, matches)
+  }
+}
+
+function findMatchingDefinition(
+  definitions: readonly NavigationDefinition[],
+  pathname: string,
+): NavigationDefinition | null {
+  for (const definition of definitions) {
+    if (definition.path && pathname.startsWith(definition.path)) {
+      return definition
+    }
+    if (definition.children) {
+      const match = findMatchingDefinition(definition.children, pathname)
+      if (match) {
+        return match
+      }
+    }
+  }
+  return null
+}
+
+function canAccessDefinitionPath(
+  definitions: readonly NavigationDefinition[],
+  pathname: string,
+  ctx: NavigationVisibilityContext,
+  ancestorsVisible = true,
+): boolean | null {
+  for (const definition of definitions) {
+    const currentVisible = ancestorsVisible && isVisible(definition, ctx)
+    if (definition.path && pathname.startsWith(definition.path)) {
+      return currentVisible
+    }
+    if (definition.children) {
+      const childMatch = canAccessDefinitionPath(definition.children, pathname, ctx, currentVisible)
+      if (childMatch !== null) {
+        return childMatch
+      }
+    }
+  }
+  return null
+}
+
 export function getRouteLabel(pathname: string) {
   const matches: string[] = []
   for (const item of authenticatedNavigationRegistry) {
-    if (item.path && pathname.startsWith(item.path)) {
-      matches.push(item.label)
-    }
-    if (item.children) {
-      for (const child of item.children) {
-        if (child.path && pathname.startsWith(child.path)) {
-          matches.push(child.label)
-        }
-      }
-    }
+    collectPathMatches(item, pathname, matches)
   }
   return matches[0] ?? 'BasePro'
 }
@@ -215,19 +295,11 @@ export function canAccessNavigationPath(principal: SessionPrincipal | null | und
     return false
   }
   const ctx: NavigationVisibilityContext = { principal }
-  for (const item of authenticatedNavigationRegistry) {
-    if (item.path && pathname.startsWith(item.path)) {
-      return isVisible(item, ctx)
-    }
-    if (item.children) {
-      for (const child of item.children) {
-        if (child.path && pathname.startsWith(child.path)) {
-          return isVisible(child, ctx)
-        }
-      }
-    }
+  const match = canAccessDefinitionPath(authenticatedNavigationRegistry, pathname, ctx)
+  if (match === null) {
+    return true
   }
-  return true
+  return match
 }
 
 export type RouteAccessState = 'allowed' | 'forbidden' | 'module-disabled'

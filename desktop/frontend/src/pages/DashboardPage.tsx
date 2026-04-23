@@ -627,7 +627,7 @@ export function DashboardPage() {
           enabled:
             (hasRole(principal, 'admin') ||
               hasPermission(principal, 'settings.write')) &&
-            canAccessRoute(principal, '/settings'),
+            canAccessRoute(principal, '/settings/general'),
         },
       ].filter((action) => action.enabled),
     [principal],
