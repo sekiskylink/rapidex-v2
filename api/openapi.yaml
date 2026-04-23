@@ -1223,6 +1223,7 @@ components:
     RapidProContactField:
       type: object
       required: [key, label]
+      description: Built-in RapidPro contact targets and custom contact fields returned by RapidPro.
       properties:
         key:
           type: string
@@ -1257,6 +1258,7 @@ components:
         rapidProServerCode:
           type: string
         availableFields:
+          description: Includes built-in RapidPro targets such as contact name and URNs, plus fetched custom contact fields.
           type: array
           items:
             $ref: '#/components/schemas/RapidProContactField'

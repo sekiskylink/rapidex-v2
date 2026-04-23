@@ -211,8 +211,17 @@ func TestRefreshRapidProReporterSyncFieldsAppliesFacilitySuggestions(t *testing.
 	if got.RapidProServerCode != "rapidpro" {
 		t.Fatalf("expected default server code, got %q", got.RapidProServerCode)
 	}
-	if len(got.AvailableFields) != 3 {
-		t.Fatalf("expected 3 fields, got %d", len(got.AvailableFields))
+	if len(got.AvailableFields) != 6 {
+		t.Fatalf("expected 6 fields including built-ins, got %d", len(got.AvailableFields))
+	}
+	if got.AvailableFields[0].Key != "name" || got.AvailableFields[0].ValueType != "builtin" {
+		t.Fatalf("expected built-in name field first, got %#v", got.AvailableFields[0])
+	}
+	if got.AvailableFields[1].Key != "urn.tel" || got.AvailableFields[1].ValueType != "builtin" {
+		t.Fatalf("expected built-in tel field second, got %#v", got.AvailableFields[1])
+	}
+	if got.AvailableFields[2].Key != "urn.whatsapp" || got.AvailableFields[2].ValueType != "builtin" {
+		t.Fatalf("expected built-in whatsapp field third, got %#v", got.AvailableFields[2])
 	}
 	if len(got.Mappings) != 2 {
 		t.Fatalf("expected 2 suggested mappings, got %#v", got.Mappings)
@@ -247,5 +256,23 @@ func TestUpdateRapidProReporterSyncRejectsUnknownField(t *testing.T) {
 	}, nil)
 	if err == nil {
 		t.Fatal("expected validation error for unavailable field")
+	}
+}
+
+func TestUpdateRapidProReporterSyncAcceptsBuiltInTarget(t *testing.T) {
+	repo := newFakeRepo()
+	service := NewService(repo, nil)
+
+	got, err := service.UpdateRapidProReporterSync(context.Background(), RapidProReporterSyncUpdateInput{
+		RapidProServerCode: "rapidpro",
+		Mappings: []RapidProReporterFieldMapping{
+			{SourceKey: "telephone", RapidProFieldKey: "urn.tel"},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("expected built-in target to validate, got %v", err)
+	}
+	if len(got.Mappings) != 1 || got.Mappings[0].RapidProFieldKey != "urn.tel" {
+		t.Fatalf("expected built-in mapping to persist, got %#v", got.Mappings)
 	}
 }

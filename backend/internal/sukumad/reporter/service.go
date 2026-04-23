@@ -306,16 +306,22 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 	operation := "updated"
 	resolvedUUID := reporter.RapidProUUID
 	upsertInput := rapidpro.UpsertContactInput{
-		Name:   reporter.Name,
+		Name:   strings.TrimSpace(reporter.Name),
 		URN:    urn,
 		URNs:   []string{urn},
 		Groups: groupUUIDs,
 	}
-	fields, err := s.rapidProContactFields(ctx, reporter)
+	mapped, err := s.rapidProContactData(ctx, reporter)
 	if err != nil {
 		return SyncResult{}, err
 	}
-	upsertInput.Fields = fields
+	if mapped.Name != "" {
+		upsertInput.Name = mapped.Name
+	}
+	if len(mapped.URNs) > 0 {
+		upsertInput.URNs = mapped.URNs
+	}
+	upsertInput.Fields = mapped.Fields
 	if resolvedUUID != "" {
 		contact, found, lookupErr := s.rapidProClient.LookupContactByUUID(ctx, conn, resolvedUUID)
 		if lookupErr != nil {
@@ -361,21 +367,33 @@ func (s *Service) syncReporter(ctx context.Context, reporter Reporter) (SyncResu
 	return SyncResult{Reporter: updatedReporter, Operation: operation, GroupCount: len(groupUUIDs)}, nil
 }
 
-func (s *Service) rapidProContactFields(ctx context.Context, reporter Reporter) (map[string]string, error) {
+type rapidProContactData struct {
+	Name   string
+	URNs   []string
+	Fields map[string]string
+}
+
+func (s *Service) rapidProContactData(ctx context.Context, reporter Reporter) (rapidProContactData, error) {
+	result := rapidProContactData{
+		Name: strings.TrimSpace(reporter.Name),
+	}
+	if urn := phoneURN(reporter.Telephone); urn != "" {
+		result.URNs = []string{urn}
+	}
 	if s.rapidProSettings == nil {
-		return nil, nil
+		return result, nil
 	}
 	config, err := s.rapidProSettings.GetRapidProReporterSync(ctx)
 	if err != nil {
-		return nil, err
+		return rapidProContactData{}, err
 	}
 	if !config.Validation.IsValid {
-		return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+		return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
 			"rapidproMapping": config.Validation.Errors,
 		})
 	}
 	if len(config.Mappings) == 0 {
-		return nil, nil
+		return result, nil
 	}
 
 	needsFacility := false
@@ -389,13 +407,13 @@ func (s *Service) rapidProContactFields(ctx context.Context, reporter Reporter) 
 	var unit orgunit.OrgUnit
 	if needsFacility {
 		if s.orgUnitLookup == nil {
-			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+			return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
 				"rapidproMapping": []string{"Facility mapping is configured, but org unit lookup is not available"},
 			})
 		}
 		loaded, getErr := s.orgUnitLookup.Get(ctx, reporter.OrgUnitID)
 		if getErr != nil {
-			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+			return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
 				"rapidproMapping": []string{"Reporter facility could not be loaded for RapidPro field mapping"},
 			})
 		}
@@ -406,13 +424,38 @@ func (s *Service) rapidProContactFields(ctx context.Context, reporter Reporter) 
 	for _, mapping := range config.Mappings {
 		resolved := strings.TrimSpace(resolveRapidProSourceValue(mapping.SourceKey, reporter, unit))
 		if resolved == "" {
-			return nil, apperror.ValidationWithDetails("validation failed", map[string]any{
+			return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
 				"rapidproMapping": []string{fmt.Sprintf("%s is required for RapidPro field %q", mapping.SourceLabel, mapping.RapidProFieldKey)},
 			})
 		}
-		values[mapping.RapidProFieldKey] = resolved
+		switch strings.ToLower(strings.TrimSpace(mapping.RapidProFieldKey)) {
+		case settingsTargetName():
+			result.Name = resolved
+		case settingsTargetURNTel():
+			urn := phoneURN(resolved)
+			if urn == "" {
+				return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+					"rapidproMapping": []string{fmt.Sprintf("%s must resolve to a RapidPro tel: URN", mapping.SourceLabel)},
+				})
+			}
+			result.URNs = append(result.URNs, urn)
+		case settingsTargetURNWhats():
+			urn := whatsappURN(resolved)
+			if urn == "" {
+				return rapidProContactData{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+					"rapidproMapping": []string{fmt.Sprintf("%s must resolve to a RapidPro whatsapp: URN", mapping.SourceLabel)},
+				})
+			}
+			result.URNs = append(result.URNs, urn)
+		default:
+			values[mapping.RapidProFieldKey] = resolved
+		}
 	}
-	return values, nil
+	result.URNs = normalizeURNs(result.URNs)
+	if len(values) > 0 {
+		result.Fields = values
+	}
+	return result, nil
 }
 
 func resolveRapidProSourceValue(sourceKey string, reporter Reporter, unit orgunit.OrgUnit) string {
@@ -534,6 +577,53 @@ func phoneURN(phone string) string {
 		return value
 	}
 	return "tel:" + value
+}
+
+func whatsappURN(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(trimmed), "whatsapp:") {
+		return trimmed
+	}
+	return "whatsapp:" + trimmed
+}
+
+func normalizeURNs(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(input))
+	output := make([]string, 0, len(input))
+	for _, item := range input {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		output = append(output, value)
+	}
+	if len(output) == 0 {
+		return nil
+	}
+	return output
+}
+
+func settingsTargetName() string {
+	return "name"
+}
+
+func settingsTargetURNTel() string {
+	return "urn.tel"
+}
+
+func settingsTargetURNWhats() string {
+	return "urn.whatsapp"
 }
 
 func normalizeGroups(groups []string) []string {

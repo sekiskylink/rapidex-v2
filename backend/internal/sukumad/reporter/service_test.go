@@ -212,6 +212,64 @@ func TestSyncReporterIncludesConfiguredRapidProContactFields(t *testing.T) {
 	}
 }
 
+func TestSyncReporterMapsBuiltInRapidProTargets(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:                1,
+				Name:              "Alice Reporter",
+				Telephone:         "+256700000001",
+				WhatsApp:          "+256700000099",
+				ReportingLocation: "Kampala",
+				OrgUnitID:         2,
+				IsActive:          true,
+			},
+		},
+	}
+	client := &reporterRapidProClient{}
+	service := NewService(repo).
+		WithRapidProIntegration(reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, client).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Mappings: []settings.RapidProReporterFieldMapping{
+					{SourceKey: "facilityName", SourceLabel: "Facility Name", RapidProFieldKey: "name"},
+					{SourceKey: "telephone", SourceLabel: "Telephone", RapidProFieldKey: "urn.tel"},
+					{SourceKey: "whatsapp", SourceLabel: "WhatsApp", RapidProFieldKey: "urn.whatsapp"},
+					{SourceKey: "facilityUID", SourceLabel: "Facility UID", RapidProFieldKey: "FacilityCode"},
+				},
+				Validation: settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		}).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			item: orgunit.OrgUnit{ID: 2, UID: "ou-2", Name: "Kampala Health Centre"},
+		})
+
+	_, err := service.SyncReporter(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("sync reporter: %v", err)
+	}
+	if client.lastUpsertInput.Name != "Kampala Health Centre" {
+		t.Fatalf("expected built-in name mapping, got %q", client.lastUpsertInput.Name)
+	}
+	if len(client.lastUpsertInput.URNs) != 2 {
+		t.Fatalf("expected both tel and whatsapp URNs, got %#v", client.lastUpsertInput.URNs)
+	}
+	if client.lastUpsertInput.URNs[0] != "tel:+256700000001" {
+		t.Fatalf("expected tel urn first, got %#v", client.lastUpsertInput.URNs)
+	}
+	if client.lastUpsertInput.URNs[1] != "whatsapp:+256700000099" {
+		t.Fatalf("expected whatsapp urn second, got %#v", client.lastUpsertInput.URNs)
+	}
+	if got := client.lastUpsertInput.Fields["FacilityCode"]; got != "ou-2" {
+		t.Fatalf("expected custom field to remain in Fields, got %q", got)
+	}
+}
+
 func TestSyncReporterFailsWhenRapidProFieldMappingIsInvalid(t *testing.T) {
 	repo := &reporterServiceRepo{
 		byID: map[int64]Reporter{

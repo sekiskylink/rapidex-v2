@@ -1150,7 +1150,7 @@ describe('web settings page', () => {
 
     fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Facility UID' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode (Custom field)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save RapidPro Sync Settings' }))
 
     await waitFor(() => {

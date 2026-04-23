@@ -2005,7 +2005,7 @@ describe('app shell routes', () => {
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Facility UID' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode (Custom field)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save RapidPro Sync Settings' }))
 
     await waitFor(() => {

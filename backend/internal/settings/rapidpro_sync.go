@@ -18,6 +18,10 @@ const (
 	rapidProSyncCategory   = "rapidpro"
 	rapidProSyncKey        = "reporter_sync"
 	defaultRapidProSrvCode = "rapidpro"
+	rapidProTargetName     = "name"
+	rapidProTargetURNTel   = "urn.tel"
+	rapidProTargetURNWhats = "urn.whatsapp"
+	rapidProBuiltInType    = "builtin"
 )
 
 var rapidProReporterSourceLabels = map[string]string{
@@ -28,6 +32,12 @@ var rapidProReporterSourceLabels = map[string]string{
 	"reportingLocation": "Reporting Location",
 	"facilityName":      "Facility Name",
 	"facilityUID":       "Facility UID",
+}
+
+var rapidProBuiltInFields = []rapidpro.ContactField{
+	{Key: rapidProTargetName, Label: "Contact Name", ValueType: rapidProBuiltInType},
+	{Key: rapidProTargetURNTel, Label: "Telephone URN", ValueType: rapidProBuiltInType},
+	{Key: rapidProTargetURNWhats, Label: "WhatsApp URN", ValueType: rapidProBuiltInType},
 }
 
 type rapidProServerLookup interface {
@@ -306,9 +316,7 @@ func normalizeRapidProMappings(input []RapidProReporterFieldMapping) []RapidProR
 }
 
 func normalizeRapidProFields(input []rapidpro.ContactField) []rapidpro.ContactField {
-	if len(input) == 0 {
-		return nil
-	}
+	input = append(append([]rapidpro.ContactField(nil), rapidProBuiltInFields...), input...)
 	seen := map[string]struct{}{}
 	output := make([]rapidpro.ContactField, 0, len(input))
 	for _, field := range input {
@@ -331,8 +339,20 @@ func normalizeRapidProFields(input []rapidpro.ContactField) []rapidpro.ContactFi
 			ValueType: strings.TrimSpace(field.ValueType),
 		})
 	}
+	if len(output) == 0 {
+		return nil
+	}
 	slices.SortFunc(output, func(left, right rapidpro.ContactField) int {
-		return strings.Compare(strings.ToLower(left.Label), strings.ToLower(right.Label))
+		leftBuiltIn := strings.EqualFold(left.ValueType, rapidProBuiltInType)
+		rightBuiltIn := strings.EqualFold(right.ValueType, rapidProBuiltInType)
+		switch {
+		case leftBuiltIn && !rightBuiltIn:
+			return -1
+		case !leftBuiltIn && rightBuiltIn:
+			return 1
+		default:
+			return strings.Compare(strings.ToLower(left.Label), strings.ToLower(right.Label))
+		}
 	})
 	return output
 }

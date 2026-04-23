@@ -73,6 +73,14 @@ const rapidProReporterSourceOptions = [
   { key: 'facilityUID', label: 'Facility UID' },
 ] as const
 
+function isRapidProBuiltInField(field: RapidProContactField) {
+  return (field.valueType ?? '').trim().toLowerCase() === 'builtin'
+}
+
+function getRapidProFieldOptionLabel(field: RapidProContactField) {
+  return isRapidProBuiltInField(field) ? `${field.label} (Built-in)` : `${field.label} (Custom field)`
+}
+
 export type SettingsSection = 'general' | 'branding' | 'modules' | 'integrations' | 'about'
 
 const settingsSections: Array<{ key: SettingsSection; label: string; description: string; path: string; anchorId: string }> = [
@@ -1118,7 +1126,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
               <Stack spacing={2}>
                 <Typography variant="h6">RapidPro Reporter Sync</Typography>
                 <Typography color="text.secondary">
-                  Fetch RapidPro contact fields once, review suggested reporter mappings, and reuse them across manual and scheduled syncs.
+                  Fetch RapidPro custom contact fields once, then map reporter values to RapidPro built-in targets like Contact Name and URNs or to custom fields.
                 </Typography>
                 {!canReadModuleEnablement ? <Alert severity="info">You need settings.read permission to view RapidPro sync settings.</Alert> : null}
                 {rapidProSyncError ? <Alert severity="error">{rapidProSyncError}</Alert> : null}
@@ -1149,6 +1157,9 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                         <Alert severity="info">Refresh RapidPro fields to populate the available mapping targets.</Alert>
                       ) : (
                         <Stack spacing={1.5}>
+                          <Alert severity="info">
+                            Built-in targets are always available. Custom field targets are fetched from RapidPro <code>/fields.json</code>.
+                          </Alert>
                           {rapidProReporterSourceOptions.map((option) => {
                             const selected = rapidProMappings.find((item) => item.sourceKey === option.key)?.rapidProFieldKey ?? ''
                             return (
@@ -1165,7 +1176,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                   </MenuItem>
                                   {rapidProFields.map((field) => (
                                     <MenuItem key={field.key} value={field.key}>
-                                      {field.label}
+                                      {getRapidProFieldOptionLabel(field)}
                                     </MenuItem>
                                   ))}
                                 </Select>
