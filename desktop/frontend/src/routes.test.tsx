@@ -960,7 +960,7 @@ describe('app shell routes', () => {
     expect(screen.getByRole('switch')).toBeChecked()
   })
 
-  it('creates a user with metadata payload and refreshes the users grid', async () => {
+  it('creates a user with metadata payload, org-unit assignments, and refreshes the users grid', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
       apiBaseUrl: 'http://127.0.0.1:8080',
@@ -977,6 +977,7 @@ describe('app shell routes', () => {
     let getUsersCalls = 0
     let createCalls = 0
     let createPayload: Record<string, unknown> | null = null
+    const assignmentPayloads: Array<Record<string, unknown>> = []
 
     vi.stubGlobal(
       'fetch',
@@ -989,6 +990,20 @@ describe('app shell routes', () => {
               username: 'admin',
               roles: ['Admin'],
               permissions: ['users.read', 'users.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/orgunits')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: 11, name: 'Kampala', displayPath: 'Uganda / Kampala' },
+                { id: 12, name: 'Wakiso', displayPath: 'Uganda / Wakiso' },
+              ],
+              totalCount: 2,
+              page: 0,
+              pageSize: 50,
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -1012,6 +1027,10 @@ describe('app shell routes', () => {
             JSON.stringify({ id: 8, username: 'new-user', isActive: true, roles: ['Viewer'] }),
             { status: 201, headers: { 'Content-Type': 'application/json' } },
           )
+        }
+        if (url.endsWith('/api/v1/user-org-units') && init?.method === 'POST') {
+          assignmentPayloads.push(JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>)
+          return new Response('{}', { status: 201, headers: { 'Content-Type': 'application/json' } })
         }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
       }),
@@ -1039,10 +1058,20 @@ describe('app shell routes', () => {
     fireEvent.change(within(createDialog).getByRole('textbox', { name: 'Phone Number' }), { target: { value: '+15550000001' } })
     fireEvent.change(within(createDialog).getByRole('textbox', { name: 'WhatsApp Number' }), { target: { value: '+15550000002' } })
     fireEvent.change(within(createDialog).getByRole('textbox', { name: 'Telegram Handle' }), { target: { value: '@new_user' } })
+    const orgUnitsInput = within(createDialog).getByRole('combobox', { name: 'Assigned Org Units' })
+    fireEvent.mouseDown(orgUnitsInput)
+    fireEvent.change(orgUnitsInput, { target: { value: 'Kam' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'Kampala' }))
+    fireEvent.mouseDown(orgUnitsInput)
+    fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
     fireEvent.click(within(createDialog).getByRole('button', { name: 'Create' }))
 
     await waitFor(() => {
       expect(createCalls).toBe(1)
+    })
+    await waitFor(() => {
+      expect(assignmentPayloads).toHaveLength(2)
     })
     expect(await screen.findByText('User created.')).toBeInTheDocument()
     expect(createPayload).toMatchObject({
@@ -1058,6 +1087,10 @@ describe('app shell routes', () => {
       telegramHandle: '@new_user',
       isActive: true,
     })
+    expect(assignmentPayloads).toEqual([
+      { userId: 8, orgUnitId: 11 },
+      { userId: 8, orgUnitId: 12 },
+    ])
     await waitFor(() => {
       expect(getUsersCalls).toBeGreaterThanOrEqual(2)
     }, { timeout: 10_000 })

@@ -185,6 +185,10 @@ export function UsersPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [createForm, setCreateForm] = React.useState<UserFormState>(defaultCreateForm)
   const [createRoles, setCreateRoles] = React.useState<string[]>([])
+  const [createAssignmentOptions, setCreateAssignmentOptions] = React.useState<OrgUnitOption[]>([])
+  const [createAssignmentSelection, setCreateAssignmentSelection] = React.useState<OrgUnitOption[]>([])
+  const [createAssignmentSearch, setCreateAssignmentSearch] = React.useState('')
+  const [createAssignmentLoading, setCreateAssignmentLoading] = React.useState(false)
   const [createErrors, setCreateErrors] = React.useState<UserFormErrors>({})
 
   const [editOpen, setEditOpen] = React.useState(false)
@@ -254,11 +258,60 @@ export function UsersPage() {
     [apiClient, search],
   )
 
+  const saveOrgUnitAssignments = React.useCallback(async (userID: number, initialIDs: number[], selection: OrgUnitOption[]) => {
+    const nextIDs = selection.map((item) => item.id)
+    const toRemove = initialIDs.filter((id) => !nextIDs.includes(id))
+    const toAdd = nextIDs.filter((id) => !initialIDs.includes(id))
+    for (const orgUnitID of toRemove) {
+      await apiClient.request(`/api/v1/user-org-units/${userID}/${orgUnitID}`, { method: 'DELETE' })
+    }
+    for (const orgUnitID of toAdd) {
+      await apiClient.request('/api/v1/user-org-units', {
+        method: 'POST',
+        body: JSON.stringify({ userId: userID, orgUnitId: orgUnitID }),
+      })
+    }
+    return nextIDs
+  }, [apiClient])
+
+  const onCreateAssignmentSearchChange = React.useCallback(async (value: string) => {
+    setCreateAssignmentSearch(value)
+    try {
+      const options = await loadOrgUnitOptions(value)
+      setCreateAssignmentOptions((current) => mergeOrgUnitOptions(current, options, createAssignmentSelection))
+    } catch {
+    }
+  }, [createAssignmentSelection, loadOrgUnitOptions])
+
+  const resetCreateDialog = React.useCallback(() => {
+    setCreateForm(defaultCreateForm)
+    setCreateRoles([])
+    setCreateAssignmentOptions([])
+    setCreateAssignmentSelection([])
+    setCreateAssignmentSearch('')
+    setCreateAssignmentLoading(false)
+    setCreateErrors({})
+  }, [])
+
+  const openCreateDialog = React.useCallback(async () => {
+    resetCreateDialog()
+    setCreateOpen(true)
+    setCreateAssignmentLoading(true)
+    try {
+      const options = await loadOrgUnitOptions('')
+      setCreateAssignmentOptions(options)
+    } catch {
+      setCreateAssignmentOptions([])
+    } finally {
+      setCreateAssignmentLoading(false)
+    }
+  }, [loadOrgUnitOptions, resetCreateDialog])
+
   const onCreateUser = async () => {
     setSubmitting(true)
     setCreateErrors({})
     try {
-      await apiClient.request('/api/v1/users', {
+      const created = await apiClient.request<UserRow>('/api/v1/users', {
         method: 'POST',
         body: JSON.stringify({
           username: createForm.username.trim(),
@@ -275,10 +328,17 @@ export function UsersPage() {
           roles: createRoles,
         }),
       })
+      if (createAssignmentSelection.length) {
+        try {
+          await saveOrgUnitAssignments(created.id, [], createAssignmentSelection)
+        } catch (error) {
+          await handleAppError(error, { fallbackMessage: 'User created, but org unit assignments could not be saved.' })
+          notify.error('User created, but org unit assignments could not be saved. Update Org Unit Scope from the user actions menu.')
+        }
+      }
       notify.success('User created.')
       setCreateOpen(false)
-      setCreateForm(defaultCreateForm)
-      setCreateRoles([])
+      resetCreateDialog()
       refreshGrid()
     } catch (error) {
       await handleAppError(error, {
@@ -442,19 +502,8 @@ export function UsersPage() {
     }
     setAssignmentSaving(true)
     setAssignmentError('')
-    const nextIDs = assignmentSelection.map((item) => item.id)
-    const toRemove = assignmentInitialIDs.filter((id) => !nextIDs.includes(id))
-    const toAdd = nextIDs.filter((id) => !assignmentInitialIDs.includes(id))
     try {
-      for (const orgUnitID of toRemove) {
-        await apiClient.request(`/api/v1/user-org-units/${assignmentsUser.id}/${orgUnitID}`, { method: 'DELETE' })
-      }
-      for (const orgUnitID of toAdd) {
-        await apiClient.request('/api/v1/user-org-units', {
-          method: 'POST',
-          body: JSON.stringify({ userId: assignmentsUser.id, orgUnitId: orgUnitID }),
-        })
-      }
+      const nextIDs = await saveOrgUnitAssignments(assignmentsUser.id, assignmentInitialIDs, assignmentSelection)
       notify.success('Org unit assignments updated.')
       setAssignmentsOpen(false)
       setAssignmentsUser(null)
@@ -465,7 +514,7 @@ export function UsersPage() {
     } finally {
       setAssignmentSaving(false)
     }
-  }, [apiClient, assignmentInitialIDs, assignmentSelection, assignmentsUser])
+  }, [assignmentInitialIDs, assignmentSelection, assignmentsUser, saveOrgUnitAssignments])
 
   const roleNames = React.useMemo(() => roleOptions.map((role) => role.name), [roleOptions])
 
@@ -606,12 +655,7 @@ export function UsersPage() {
         </Box>
         <Button
           variant="contained"
-          onClick={() => {
-            setCreateForm(defaultCreateForm)
-            setCreateRoles([])
-            setCreateErrors({})
-            setCreateOpen(true)
-          }}
+          onClick={() => void openCreateDialog()}
           disabled={!canWrite}
         >
           Create User
@@ -747,6 +791,34 @@ export function UsersPage() {
                 value.map((option, index) => <Chip label={option} {...getTagProps({ index })} key={option} size="small" />)
               }
               renderInput={(params) => <TextField {...params} label="Roles" placeholder="Assign roles" />}
+            />
+            <Autocomplete
+              multiple
+              options={createAssignmentOptions}
+              loading={createAssignmentLoading}
+              value={createAssignmentSelection}
+              inputValue={createAssignmentSearch}
+              onInputChange={(_event, value) => void onCreateAssignmentSearchChange(value)}
+              onChange={(_event, value) => {
+                setCreateAssignmentSelection(value)
+                setCreateAssignmentOptions((current) => mergeOrgUnitOptions(current, value))
+              }}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              getOptionLabel={(option) => option.name}
+              sx={{ gridColumn: '1 / -1' }}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip label={option.displayPath ? `${option.name} (${option.displayPath})` : option.name} {...getTagProps({ index })} key={option.id} size="small" />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Assigned Org Units"
+                  placeholder="Search facilities or jurisdiction roots"
+                  helperText="Users can access any descendants of the selected org units."
+                />
+              )}
             />
             <FormControlLabel
               sx={{ gridColumn: '1 / -1' }}

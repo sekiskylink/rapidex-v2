@@ -147,9 +147,10 @@ describe('users and audit pages', () => {
     await waitFor(() => expect(apiRequestSpy).toHaveBeenCalledWith(expect.stringContaining('/users?')))
   })
 
-  it('create user supports role multi-select and submits selected roles', async () => {
+  it('create user supports role and org-unit multi-select and submits selected assignments', async () => {
     authenticate(['users.read', 'users.write', 'audit.read'])
     let createPayload: Record<string, unknown> | null = null
+    const assignmentPayloads: Array<Record<string, unknown>> = []
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/admin/roles?')) {
         return {
@@ -160,6 +161,17 @@ describe('users and audit pages', () => {
           totalCount: 2,
           page: 1,
           pageSize: 200,
+        }
+      }
+      if (path.includes('/orgunits?')) {
+        return {
+          items: [
+            { id: 11, name: 'Kampala', displayPath: 'Uganda / Kampala' },
+            { id: 12, name: 'Wakiso', displayPath: 'Uganda / Wakiso' },
+          ],
+          totalCount: 2,
+          page: 0,
+          pageSize: 50,
         }
       }
       if (path.includes('/users?') && (!init?.method || init.method === 'GET')) {
@@ -173,6 +185,10 @@ describe('users and audit pages', () => {
       if (path.includes('/users') && init?.method === 'POST') {
         createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
         return { id: 99, username: 'new-user' }
+      }
+      if (path.endsWith('/user-org-units') && init?.method === 'POST') {
+        assignmentPayloads.push(JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>)
+        return {}
       }
       return {}
     })
@@ -193,9 +209,18 @@ describe('users and audit pages', () => {
     fireEvent.change(rolesInput, { target: { value: 'Admin' } })
     fireEvent.click(await screen.findByRole('option', { name: 'Admin' }))
 
+    const orgUnitsInput = within(dialog).getByRole('combobox', { name: 'Assigned Org Units' })
+    fireEvent.mouseDown(orgUnitsInput)
+    fireEvent.change(orgUnitsInput, { target: { value: 'Kam' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'Kampala' }))
+    fireEvent.mouseDown(orgUnitsInput)
+    fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
+
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(createPayload).not.toBeNull())
+    await waitFor(() => expect(assignmentPayloads).toHaveLength(2))
     expect(await screen.findByText('User created.')).toBeInTheDocument()
     expect(createPayload).toMatchObject({
       username: 'new-user',
@@ -203,6 +228,10 @@ describe('users and audit pages', () => {
       roles: ['Admin'],
       isActive: true,
     })
+    expect(assignmentPayloads).toEqual([
+      { userId: 99, orgUnitId: 11 },
+      { userId: 99, orgUnitId: 12 },
+    ])
   })
 
   it('edit user supports role multi-select and updates selected roles', async () => {

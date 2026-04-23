@@ -1,5 +1,30 @@
 # Status
 
+## Milestone — User Creation Org-Unit Assignment Flow (Complete)
+
+### What changed
+- Improved the Users page create flow in both web and desktop so admins can assign organisation units while creating a user instead of having to open a second scope dialog afterward.
+- The create dialogs now support multiple org-unit selections, use the existing org-unit search endpoint for option loading, and keep the same descendant-based jurisdiction model already used elsewhere.
+- Reused the existing `/api/v1/user-org-units` assignment API after successful user creation rather than coupling the platform `users` module directly to Sukumad-specific org-unit storage.
+- Kept the existing post-create `Org Unit Scope` action intact for later adjustments.
+
+### Added or updated tests
+- Web:
+  - Users page create-flow coverage now verifies multiple org-unit assignments are posted after user creation
+- Desktop:
+  - matching route/page coverage now verifies the create flow posts multiple org-unit assignments
+
+### Verification summary
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/users-audit-pages.test.tsx`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- The create flow currently applies org-unit assignments immediately after the user record is created; if assignment calls fail, the user still exists and can be completed from the existing `Org Unit Scope` action.
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in frontend tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — RapidEx Org-Unit Jurisdiction Enforcement (Complete)
 
 ### What changed
