@@ -212,10 +212,10 @@ describe('users and audit pages', () => {
     const orgUnitsInput = within(dialog).getByRole('combobox', { name: 'Assigned Org Units' })
     fireEvent.mouseDown(orgUnitsInput)
     fireEvent.change(orgUnitsInput, { target: { value: 'Kam' } })
-    fireEvent.click(await screen.findByRole('option', { name: 'Kampala' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Kampala\s+Uganda \/ Kampala/ }))
     fireEvent.mouseDown(orgUnitsInput)
     fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
-    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Wakiso\s+Uganda \/ Wakiso/ }))
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
 
@@ -319,7 +319,7 @@ describe('users and audit pages', () => {
     const orgUnitsInput = within(dialog).getByRole('combobox', { name: 'Assigned Org Units' })
     fireEvent.mouseDown(orgUnitsInput)
     fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
-    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Wakiso\s+Uganda \/ Wakiso/ }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(patchPayload).not.toBeNull())

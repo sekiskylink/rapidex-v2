@@ -1,5 +1,32 @@
 # Status
 
+## Milestone — User Org-Unit Search Shows Ancestor Paths (Complete)
+
+### What changed
+- Updated the org-unit assignment autocompletes in both web and desktop user management flows so search results now show ancestor paths, matching the facility search experience already used on the Reporters page.
+- Applied the same presentation in all three user-scope entry points on both clients:
+  - create user
+  - edit user
+  - dedicated `Org Unit Scope` dialog
+- Kept selected chips readable by continuing to show the org-unit name with its full path.
+
+### Added or updated tests
+- Web:
+  - updated Users page create/edit tests to assert org-unit options expose ancestor-path labels in the autocomplete
+- Desktop:
+  - updated matching route tests to assert the same ancestor-path labels in the user org-unit autocomplete
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/users-audit-pages.test.tsx`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Existing non-blocking jsdom/MUI `anchorEl` warnings still appear in frontend route tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — Reporter List SQL Ambiguity Fix (Complete)
 
 ### What changed

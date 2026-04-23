@@ -1061,10 +1061,10 @@ describe('app shell routes', () => {
     const orgUnitsInput = within(createDialog).getByRole('combobox', { name: 'Assigned Org Units' })
     fireEvent.mouseDown(orgUnitsInput)
     fireEvent.change(orgUnitsInput, { target: { value: 'Kam' } })
-    fireEvent.click(await screen.findByRole('option', { name: 'Kampala' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Kampala\s+Uganda \/ Kampala/ }))
     fireEvent.mouseDown(orgUnitsInput)
     fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
-    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Wakiso\s+Uganda \/ Wakiso/ }))
     fireEvent.click(within(createDialog).getByRole('button', { name: 'Create' }))
 
     await waitFor(() => {
@@ -1304,7 +1304,7 @@ describe('app shell routes', () => {
     const orgUnitsInput = within(editDialog).getByRole('combobox', { name: 'Assigned Org Units' })
     fireEvent.mouseDown(orgUnitsInput)
     fireEvent.change(orgUnitsInput, { target: { value: 'Wak' } })
-    fireEvent.click(await screen.findByRole('option', { name: 'Wakiso' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Wakiso\s+Uganda \/ Wakiso/ }))
     fireEvent.click(within(editDialog).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {

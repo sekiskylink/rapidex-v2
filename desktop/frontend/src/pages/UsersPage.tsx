@@ -170,6 +170,34 @@ function mergeOrgUnitOptions(...collections: OrgUnitOption[][]) {
   return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name))
 }
 
+function formatOrgUnitPath(option: OrgUnitOption) {
+  return option.displayPath?.trim() ?? ''
+}
+
+function formatOrgUnitChipLabel(option: OrgUnitOption) {
+  const path = formatOrgUnitPath(option)
+  if (!path) {
+    return option.name
+  }
+  return `${option.name} (${path})`
+}
+
+function renderOrgUnitOption(props: React.HTMLAttributes<HTMLLIElement>, option: OrgUnitOption) {
+  const path = formatOrgUnitPath(option)
+  return (
+    <Box component="li" {...props}>
+      <Stack spacing={0.25}>
+        <Typography variant="body2">{option.name}</Typography>
+        {path ? (
+          <Typography variant="caption" color="text.secondary">
+            {path}
+          </Typography>
+        ) : null}
+      </Stack>
+    </Box>
+  )
+}
+
 export function UsersPage() {
   const apiClient = useApiClient()
   const principal = useSessionPrincipal()
@@ -857,10 +885,11 @@ export function UsersPage() {
               }}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               getOptionLabel={(option) => option.name}
+              renderOption={renderOrgUnitOption}
               sx={{ gridColumn: '1 / -1' }}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => (
-                  <Chip label={option.displayPath ? `${option.name} (${option.displayPath})` : option.name} {...getTagProps({ index })} key={option.id} size="small" />
+                  <Chip label={formatOrgUnitChipLabel(option)} {...getTagProps({ index })} key={option.id} size="small" />
                 ))
               }
               renderInput={(params) => (
@@ -1020,10 +1049,11 @@ export function UsersPage() {
               }}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               getOptionLabel={(option) => option.name}
+              renderOption={renderOrgUnitOption}
               sx={{ gridColumn: '1 / -1' }}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => (
-                  <Chip label={option.displayPath ? `${option.name} (${option.displayPath})` : option.name} {...getTagProps({ index })} key={option.id} size="small" />
+                  <Chip label={formatOrgUnitChipLabel(option)} {...getTagProps({ index })} key={option.id} size="small" />
                 ))
               }
               renderInput={(params) => (
@@ -1167,9 +1197,10 @@ export function UsersPage() {
               }}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               getOptionLabel={(option) => option.name}
+              renderOption={renderOrgUnitOption}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => (
-                  <Chip label={option.displayPath ? `${option.name} (${option.displayPath})` : option.name} {...getTagProps({ index })} key={option.id} size="small" />
+                  <Chip label={formatOrgUnitChipLabel(option)} {...getTagProps({ index })} key={option.id} size="small" />
                 ))
               }
               renderInput={(params) => (
