@@ -427,6 +427,16 @@ func registerReporterRoutes(
 		}
 		c.JSON(http.StatusOK, result)
 	})
+	group.GET("/reporters/broadcasts", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), func(c *gin.Context) {
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
+		pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+		result, err := service.ListBroadcasts(c.Request.Context(), reporter.BroadcastListQuery{Page: page, PageSize: pageSize})
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
 	group.POST("/reporters", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
 		userID, ok := currentUserID(c)
 		if !ok {

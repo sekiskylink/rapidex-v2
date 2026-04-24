@@ -168,6 +168,27 @@ function buildChatHistory() {
   }
 }
 
+function buildBroadcastHistoryItem(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 31,
+    uid: 'broadcast-31',
+    requestedByUserId: 7,
+    orgUnitIds: [9],
+    reporterGroup: 'Lead',
+    messageText: 'Background hello',
+    matchedCount: 4,
+    sentCount: 4,
+    failedCount: 0,
+    status: 'completed',
+    lastError: '',
+    requestedAt: '2026-04-24T10:00:00Z',
+    startedAt: '2026-04-24T10:01:00Z',
+    finishedAt: '2026-04-24T10:02:00Z',
+    claimedByWorkerRunId: 22,
+    ...overrides,
+  }
+}
+
 describe('desktop reporters page', () => {
   beforeEach(async () => {
     await clearSession()
@@ -236,6 +257,72 @@ describe('desktop reporters page', () => {
     expect(await screen.findByRole('heading', { name: 'Reporters', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('Alice Reporter')).toBeInTheDocument()
     expect(screen.getByText('Kampala Health Centre')).toBeInTheDocument()
+  })
+
+  it('renders broadcast history rows from mocked API', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Staff'],
+              permissions: ['reporters.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/reporters?')) {
+          return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.endsWith('/api/v1/reporters/broadcasts?page=0&pageSize=10')) {
+          return new Response(JSON.stringify({ items: [buildBroadcastHistoryItem()], totalCount: 1, page: 0, pageSize: 10 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.endsWith('/api/v1/reporter-groups/options')) {
+          return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/orgunits?')) {
+          return new Response(JSON.stringify({ items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/reporters', store)
+
+    expect(await screen.findByText('Broadcast History')).toBeInTheDocument()
+    expect(await screen.findByText('Background hello')).toBeInTheDocument()
+    expect(await screen.findByText('completed')).toBeInTheDocument()
   })
 
   it('create, edit, and messaging flows use the RapidPro actions workflow', async () => {
@@ -425,6 +512,7 @@ describe('desktop reporters page', () => {
     })
 
     let queuePayload: Record<string, unknown> | null = null
+    let historyRequests = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/api/v1/auth/me')) {
@@ -440,6 +528,24 @@ describe('desktop reporters page', () => {
       }
       if (url.includes('/api/v1/reporters?')) {
         return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporters/broadcasts?page=0&pageSize=10')) {
+        historyRequests += 1
+        if (historyRequests === 1) {
+          return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 10 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response(JSON.stringify({
+          items: [buildBroadcastHistoryItem({ status: 'running', sentCount: 0, finishedAt: null })],
+          totalCount: 1,
+          page: 0,
+          pageSize: 10,
+        }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -498,6 +604,70 @@ describe('desktop reporters page', () => {
       text: 'Background hello',
     })
     expect(await screen.findByText(/already being processed/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Background hello')).toBeInTheDocument())
+    expect(historyRequests).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows a panel error when broadcast history fails to load', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/v1/auth/me')) {
+        return new Response(
+          JSON.stringify({
+            id: 5,
+            username: 'alice',
+            roles: ['Staff'],
+            permissions: ['reporters.read'],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/v1/reporters?')) {
+        return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporters/broadcasts?page=0&pageSize=10')) {
+        return new Response(JSON.stringify({ error: { message: 'history unavailable' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporter-groups/options')) {
+        return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/orgunits?')) {
+        return new Response(JSON.stringify({ items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/bootstrap')) {
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderRoute('/reporters', store)
+
+    expect(await screen.findByText('history unavailable')).toBeInTheDocument()
   })
 
   it('selects all reporters on the current page from the header checkbox', async () => {

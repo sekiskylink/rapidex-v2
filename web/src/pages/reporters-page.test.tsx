@@ -156,6 +156,27 @@ function buildChatHistory() {
   }
 }
 
+function buildBroadcastHistoryItem(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 31,
+    uid: 'broadcast-31',
+    requestedByUserId: 7,
+    orgUnitIds: [9],
+    reporterGroup: 'Lead',
+    messageText: 'Background hello',
+    matchedCount: 4,
+    sentCount: 4,
+    failedCount: 0,
+    status: 'completed',
+    lastError: '',
+    requestedAt: '2026-04-24T10:00:00Z',
+    startedAt: '2026-04-24T10:01:00Z',
+    finishedAt: '2026-04-24T10:02:00Z',
+    claimedByWorkerRunId: 22,
+    ...overrides,
+  }
+}
+
 describe('reporters page', () => {
   let apiRequestSpy: MockInstance
 
@@ -194,6 +215,31 @@ describe('reporters page', () => {
     expect(await screen.findByRole('heading', { name: 'Reporters', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText('Alice Reporter')).toBeInTheDocument()
     expect(screen.getByText('Kampala Health Centre')).toBeInTheDocument()
+  })
+
+  it('renders broadcast history rows from mocked API', async () => {
+    authenticate(['reporters.read'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/broadcasts?page=0&pageSize=10') {
+        return { items: [buildBroadcastHistoryItem()], totalCount: 1, page: 0, pageSize: 10 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    expect(await screen.findByText('Broadcast History')).toBeInTheDocument()
+    expect(await screen.findByText('Background hello')).toBeInTheDocument()
+    expect(await screen.findByText('completed')).toBeInTheDocument()
   })
 
   it('create reporter omits backend-managed payload fields and hides backend-managed inputs', async () => {
@@ -371,9 +417,22 @@ describe('reporters page', () => {
   it('queues jurisdiction broadcasts from the top send message dialog', async () => {
     authenticate(['reporters.read', 'reporters.write'])
     let queuePayload: Record<string, unknown> | null = null
+    let historyRequests = 0
     apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/reporters?')) {
         return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/broadcasts?page=0&pageSize=10') {
+        historyRequests += 1
+        if (historyRequests === 1) {
+          return { items: [], totalCount: 0, page: 0, pageSize: 10 }
+        }
+        return {
+          items: [buildBroadcastHistoryItem({ status: 'queued', sentCount: 0, finishedAt: null })],
+          totalCount: 1,
+          page: 0,
+          pageSize: 10,
+        }
       }
       if (path === '/reporter-groups/options') {
         return { items: [{ id: 1, name: 'Lead' }] }
@@ -413,6 +472,31 @@ describe('reporters page', () => {
       text: 'Background hello',
     })
     expect(await screen.findByText(/Reporter broadcast queued/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Background hello')).toBeInTheDocument())
+    expect(historyRequests).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows a panel error when broadcast history fails to load', async () => {
+    authenticate(['reporters.read'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/broadcasts?page=0&pageSize=10') {
+        throw new Error('history unavailable')
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    expect(await screen.findByText('history unavailable')).toBeInTheDocument()
   })
 
   it('selects all reporters on the current page from the header checkbox', async () => {

@@ -132,6 +132,44 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	return result, nil
 }
 
+func (r *PgRepository) ListBroadcasts(ctx context.Context, query BroadcastListQuery) (BroadcastListResult, error) {
+	result := BroadcastListResult{Page: query.Page, PageSize: query.PageSize}
+
+	var total int
+	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM reporter_broadcasts`); err != nil {
+		return result, fmt.Errorf("count reporter broadcasts: %w", err)
+	}
+	result.Total = total
+
+	limit := query.PageSize
+	if limit <= 0 {
+		limit = 10
+	}
+	offset := query.Page * limit
+	rows := []jurisdictionBroadcastRow{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT id, uid, requested_by_user_id, org_unit_ids, reporter_group, message_text, dedupe_key,
+		       matched_count, sent_count, failed_count, status, last_error, requested_at, started_at,
+		       finished_at, claimed_at, claimed_by_worker_run_id, created_at, updated_at
+		FROM reporter_broadcasts
+		ORDER BY requested_at DESC, id DESC
+		LIMIT $1 OFFSET $2
+	`, limit, offset); err != nil {
+		return result, fmt.Errorf("list reporter broadcasts: %w", err)
+	}
+
+	items := make([]JurisdictionBroadcastRecord, 0, len(rows))
+	for _, row := range rows {
+		record, err := row.toRecord()
+		if err != nil {
+			return result, err
+		}
+		items = append(items, record)
+	}
+	result.Items = items
+	return result, nil
+}
+
 func (r *PgRepository) GetByID(ctx context.Context, id int64) (Reporter, error) {
 	return r.getByWhere(ctx, "id = $1", id)
 }

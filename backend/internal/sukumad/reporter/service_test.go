@@ -18,6 +18,7 @@ import (
 
 type reporterServiceRepo struct {
 	byID                     map[int64]Reporter
+	broadcastListResult      BroadcastListResult
 	updatedSinceItems        []Reporter
 	updateCalls              int
 	countBroadcastRecipients int
@@ -30,6 +31,9 @@ type reporterServiceRepo struct {
 
 func (r *reporterServiceRepo) List(context.Context, ListQuery) (ListResult, error) {
 	return ListResult{}, nil
+}
+func (r *reporterServiceRepo) ListBroadcasts(context.Context, BroadcastListQuery) (BroadcastListResult, error) {
+	return r.broadcastListResult, nil
 }
 func (r *reporterServiceRepo) GetByID(_ context.Context, id int64) (Reporter, error) {
 	return r.byID[id], nil
@@ -275,6 +279,31 @@ func TestQueueJurisdictionBroadcastForUserQueuesBackgroundBroadcast(t *testing.T
 	}
 	if len(groupCatalog.validatedGroups) != 1 || groupCatalog.validatedGroups[0] != "Lead" {
 		t.Fatalf("expected group validation for Lead, got %#v", groupCatalog.validatedGroups)
+	}
+}
+
+func TestListBroadcastsReturnsRepositoryResult(t *testing.T) {
+	repo := &reporterServiceRepo{
+		broadcastListResult: BroadcastListResult{
+			Items: []JurisdictionBroadcastRecord{
+				{ID: 31, Status: BroadcastStatusCompleted, ReporterGroup: "Lead", MatchedCount: 4, SentCount: 4},
+			},
+			Total:    1,
+			Page:     0,
+			PageSize: 10,
+		},
+	}
+	service := NewService(repo)
+
+	result, err := service.ListBroadcasts(context.Background(), BroadcastListQuery{Page: 0, PageSize: 10})
+	if err != nil {
+		t.Fatalf("list broadcasts: %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("expected total 1, got %d", result.Total)
+	}
+	if len(result.Items) != 1 || result.Items[0].ID != 31 {
+		t.Fatalf("unexpected broadcast items: %+v", result.Items)
 	}
 }
 

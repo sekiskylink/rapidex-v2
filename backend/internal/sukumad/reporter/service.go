@@ -144,6 +144,10 @@ func (s *Service) List(ctx context.Context, query ListQuery) (ListResult, error)
 	return s.repo.List(ctx, query)
 }
 
+func (s *Service) ListBroadcasts(ctx context.Context, query BroadcastListQuery) (BroadcastListResult, error) {
+	return s.repo.ListBroadcasts(ctx, query)
+}
+
 func (s *Service) ListForUser(ctx context.Context, userID int64, query ListQuery) (ListResult, error) {
 	scope, err := s.resolveScope(ctx, userID)
 	if err != nil {

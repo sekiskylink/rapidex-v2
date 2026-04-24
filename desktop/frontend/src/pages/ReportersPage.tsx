@@ -95,6 +95,24 @@ interface JurisdictionBroadcastQueueResponse {
   }
 }
 
+interface BroadcastHistoryItem {
+  id: number
+  uid: string
+  requestedByUserId: number
+  orgUnitIds: number[]
+  reporterGroup: string
+  messageText: string
+  matchedCount: number
+  sentCount: number
+  failedCount: number
+  status: string
+  lastError: string
+  requestedAt: string
+  startedAt?: string | null
+  finishedAt?: string | null
+  claimedByWorkerRunId?: number | null
+}
+
 type FacilityBrowserEntry = {
   unit?: OrgUnit
   label: string
@@ -192,12 +210,41 @@ function formatFacilityPath(unit: OrgUnit | null) {
     .join(' / ')
 }
 
+function formatTimestamp(value?: string | null) {
+  if (!value) {
+    return '-'
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.valueOf())) {
+    return value
+  }
+  return parsed.toLocaleString()
+}
+
+function broadcastStatusColor(status: string): 'default' | 'info' | 'warning' | 'success' | 'error' {
+  switch (status) {
+    case 'queued':
+      return 'warning'
+    case 'running':
+      return 'info'
+    case 'completed':
+      return 'success'
+    case 'failed':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
+
 export function ReportersPage() {
   const apiClient = useApiClient()
   const principal = useSessionPrincipal()
   const [reporters, setReporters] = React.useState<Reporter[]>([])
   const [orgUnits, setOrgUnits] = React.useState<OrgUnit[]>([])
   const [reporterGroupOptions, setReporterGroupOptions] = React.useState<ReporterGroupOption[]>([])
+  const [broadcastHistory, setBroadcastHistory] = React.useState<BroadcastHistoryItem[]>([])
+  const [broadcastHistoryLoading, setBroadcastHistoryLoading] = React.useState(true)
+  const [broadcastHistoryError, setBroadcastHistoryError] = React.useState('')
   const [selectedIds, setSelectedIds] = React.useState<number[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
@@ -256,6 +303,23 @@ export function ReportersPage() {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  const loadBroadcastHistory = React.useCallback(async () => {
+    setBroadcastHistoryLoading(true)
+    setBroadcastHistoryError('')
+    try {
+      const response = await apiClient.request<ListResponse<BroadcastHistoryItem>>('/api/v1/reporters/broadcasts?page=0&pageSize=10')
+      setBroadcastHistory(response.items ?? [])
+    } catch (historyError) {
+      setBroadcastHistoryError(historyError instanceof Error ? historyError.message : 'Unable to load broadcast history.')
+    } finally {
+      setBroadcastHistoryLoading(false)
+    }
+  }, [apiClient])
+
+  React.useEffect(() => {
+    void loadBroadcastHistory()
+  }, [loadBroadcastHistory])
 
   const selectedCount = selectedIds.length
   const selectedReporters = reporters.filter((reporter) => selectedIds.includes(reporter.id))
@@ -540,6 +604,51 @@ export function ReportersPage() {
     [allVisibleSelected, getOrgUnitName, openChatHistoryDialog, openRapidProDetails, selectedIds, someVisibleSelected, visibleReporterIds],
   )
 
+  const broadcastColumns = React.useMemo<GridColDef<BroadcastHistoryItem>[]>(
+    () => [
+      {
+        field: 'requestedAt',
+        headerName: 'Requested',
+        minWidth: 180,
+        flex: 1,
+        valueGetter: (value) => formatTimestamp(String(value ?? '')),
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        minWidth: 120,
+        renderCell: ({ value }) => <Chip size="small" label={String(value ?? 'unknown')} color={broadcastStatusColor(String(value ?? ''))} />,
+      },
+      { field: 'reporterGroup', headerName: 'Reporter Group', minWidth: 150, flex: 1 },
+      { field: 'matchedCount', headerName: 'Matched', minWidth: 90, type: 'number' },
+      { field: 'sentCount', headerName: 'Sent', minWidth: 90, type: 'number' },
+      { field: 'failedCount', headerName: 'Failed', minWidth: 90, type: 'number' },
+      {
+        field: 'startedAt',
+        headerName: 'Started',
+        minWidth: 180,
+        flex: 1,
+        valueGetter: (value) => formatTimestamp(String(value ?? '')),
+      },
+      {
+        field: 'finishedAt',
+        headerName: 'Finished',
+        minWidth: 180,
+        flex: 1,
+        valueGetter: (value) => formatTimestamp(String(value ?? '')),
+      },
+      { field: 'messageText', headerName: 'Message', minWidth: 260, flex: 1.5 },
+      {
+        field: 'lastError',
+        headerName: 'Last Error',
+        minWidth: 240,
+        flex: 1.25,
+        valueGetter: (value) => String(value ?? '').trim() || '-',
+      },
+    ],
+    [],
+  )
+
   function openDialog(reporter?: Reporter) {
     setEditing(reporter ?? null)
     setForm(toForm(reporter ?? null))
@@ -728,6 +837,7 @@ export function ReportersPage() {
         }),
       })
       closeJurisdictionDialog()
+      await loadBroadcastHistory()
       if (result.status === 'duplicate_pending') {
         notify.info(result.message)
         return
@@ -802,6 +912,30 @@ export function ReportersPage() {
         }}
         sx={dataGridSx}
       />
+
+      <Box sx={{ mt: 3 }}>
+        <Stack spacing={0.75} sx={{ mb: 1.5 }}>
+          <Typography variant="h5">Broadcast History</Typography>
+          <Typography color="text.secondary">Recent queued background broadcasts from the top-level Send Message action.</Typography>
+        </Stack>
+        {broadcastHistoryError ? <Alert severity="error" sx={{ mb: 2 }}>{broadcastHistoryError}</Alert> : null}
+        <DataGrid
+          autoHeight
+          rows={broadcastHistory}
+          columns={broadcastColumns}
+          loading={broadcastHistoryLoading}
+          disableRowSelectionOnClick
+          hideFooter
+          sx={dataGridSx}
+          slots={{
+            noRowsOverlay: () => (
+              <Stack alignItems="center" justifyContent="center" sx={{ p: 3, minHeight: 120 }}>
+                <Typography color="text.secondary">No queued broadcasts yet.</Typography>
+              </Stack>
+            ),
+          }}
+        />
+      </Box>
 
       <ReporterDetailsDialog
         open={Boolean(viewing)}

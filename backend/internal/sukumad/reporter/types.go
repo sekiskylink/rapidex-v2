@@ -81,6 +81,18 @@ type ListResult struct {
 	PageSize int        `json:"pageSize"`
 }
 
+type BroadcastListQuery struct {
+	Page     int
+	PageSize int
+}
+
+type BroadcastListResult struct {
+	Items    []JurisdictionBroadcastRecord `json:"items"`
+	Total    int                           `json:"totalCount"`
+	Page     int                           `json:"page"`
+	PageSize int                           `json:"pageSize"`
+}
+
 type SyncResult struct {
 	Reporter   Reporter `json:"reporter"`
 	Operation  string   `json:"operation"`

@@ -13,6 +13,9 @@ type Repository interface {
 	// provided, only reporters attached to that unit should be returned.
 	List(ctx context.Context, query ListQuery) (ListResult, error)
 
+	// ListBroadcasts returns a page of queued/running/completed/failed jurisdiction broadcasts.
+	ListBroadcasts(ctx context.Context, query BroadcastListQuery) (BroadcastListResult, error)
+
 	// GetByID fetches a reporter by its numeric ID.
 	GetByID(ctx context.Context, id int64) (Reporter, error)
 

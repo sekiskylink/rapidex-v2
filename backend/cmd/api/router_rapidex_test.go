@@ -45,6 +45,21 @@ func TestRapidexRoutesRequireAuthAndPermissions(t *testing.T) {
 		}
 	}
 
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/reporters/broadcasts", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected /api/v1/reporters/broadcasts without auth to return 401, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/reporters/broadcasts?page=0&pageSize=10", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected /api/v1/reporters/broadcasts with permission to return 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
 	for _, path := range []string{"/api/v1/reporters/1/rapidpro-contact", "/api/v1/reporters/1/chat-history"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
@@ -151,6 +166,14 @@ type rapidexReporterRepo struct{}
 
 func (r *rapidexReporterRepo) List(context.Context, reporter.ListQuery) (reporter.ListResult, error) {
 	return reporter.ListResult{Items: []reporter.Reporter{}, Total: 0, Page: 0, PageSize: 20}, nil
+}
+func (r *rapidexReporterRepo) ListBroadcasts(context.Context, reporter.BroadcastListQuery) (reporter.BroadcastListResult, error) {
+	return reporter.BroadcastListResult{
+		Items:    []reporter.JurisdictionBroadcastRecord{{ID: 31, Status: reporter.BroadcastStatusQueued, ReporterGroup: "Lead"}},
+		Total:    1,
+		Page:     0,
+		PageSize: 10,
+	}, nil
 }
 func (r *rapidexReporterRepo) GetByID(context.Context, int64) (reporter.Reporter, error) {
 	return reporter.Reporter{}, nil
