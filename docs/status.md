@@ -1,5 +1,35 @@
 # Status
 
+## Milestone — Scheduled RapidPro Reporter Sync Logging (Complete)
+
+### What changed
+- Added structured backend scheduler logs for queued, claimed, started, finished, failed, and cancelled scheduled-job runs.
+- Added dedicated RapidPro reporter sync batch logs so operators can now watch:
+  - batch start
+  - batch completion/failure
+  - per-reporter sync failures
+- Extended the worker startup logs to show the effective scheduler dispatcher and scheduler-worker intervals and batch sizes, making it clear that scheduled jobs are dispatched and executed by the worker process.
+- Kept the existing scheduler run-history persistence intact while preserving the structured RapidPro sync result summary counts.
+
+### Added or updated tests
+- Backend:
+  - scheduler lifecycle log coverage for queued, claimed, started, and finished runs
+  - scheduler integration log coverage for RapidPro reporter sync batch start/failure events
+  - reporter sync batch log coverage for failed reporters and failed batch summaries
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- This change adds backend observability only; it does not yet add richer scheduler run-detail UI rendering for the new logging events.
+- Existing jsdom/MUI `anchorEl` warnings still appear in web and desktop route smoke tests.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during web and desktop frontend builds.
+
 ## Milestone — Reporter Recent Reports Action (Complete)
 
 ### What changed

@@ -152,6 +152,14 @@ func run() error {
 			RunBatch:        nextCfg.Worker.BatchSize,
 		}
 	})
+	logging.L().Info("scheduler_runtime_configured",
+		slog.Bool("scheduler_enabled", config.Get().Sukumad.Scheduler.Enabled),
+		slog.Bool("dispatcher_enabled", config.Get().Sukumad.Scheduler.Enabled && config.Get().Sukumad.Scheduler.Dispatcher.Enabled),
+		slog.Int("dispatcher_interval_seconds", config.Get().Sukumad.Scheduler.Dispatcher.IntervalSeconds),
+		slog.Int("dispatcher_batch_size", config.Get().Sukumad.Scheduler.Dispatcher.BatchSize),
+		slog.Int("worker_interval_seconds", config.Get().Sukumad.Scheduler.Worker.IntervalSeconds),
+		slog.Int("worker_batch_size", config.Get().Sukumad.Scheduler.Worker.BatchSize),
+	)
 
 	executor := worker.NewDeliveryExecutor(
 		delivery.NewRepository(database),

@@ -1,6 +1,7 @@
 package reporter
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"basepro/backend/internal/apperror"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
@@ -1374,5 +1376,71 @@ func TestSyncUpdatedSinceDryRunSkipsRemoteMutation(t *testing.T) {
 	}
 	if result.WatermarkTo == nil || !result.WatermarkTo.Equal(now) {
 		t.Fatalf("expected watermark to equal clock time, got %+v", result.WatermarkTo)
+	}
+}
+
+func TestSyncUpdatedSinceEmitsBatchAndReporterFailureLogs(t *testing.T) {
+	now := time.Date(2026, time.April, 24, 12, 0, 0, 0, time.UTC)
+	logOutput := captureReporterLogs(t)
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {ID: 1, Name: "Alice", Telephone: "+256700000001", OrgUnitID: 2, IsActive: true},
+		},
+		updatedSinceItems: []Reporter{
+			{ID: 1, Name: "Alice", Telephone: "+256700000001", OrgUnitID: 2, IsActive: true},
+		},
+	}
+	service := NewService(repo).
+		WithClock(func() time.Time { return now }).
+		WithRapidProIntegration(&reporterServerLookup{
+			record: sukumadserver.Record{
+				Code:    "rapidpro",
+				BaseURL: "https://rapidpro.example.com",
+			},
+		}, &reporterRapidProClientWithUpsertError{
+			delegate: &reporterRapidProClient{},
+			err:      &rapidpro.RequestError{StatusCode: 400, Body: `{"fields":["Facility is invalid"]}`},
+		}).
+		WithRapidProSettings(reporterSettingsProvider{
+			config: settings.RapidProReporterSyncSettings{
+				Validation: settings.RapidProReporterSyncValidation{IsValid: true},
+			},
+		})
+
+	result, err := service.SyncUpdatedSince(context.Background(), nil, 50, true, false)
+	if err == nil {
+		t.Fatal("expected sync updated since to fail")
+	}
+	if result.Failed != 1 {
+		t.Fatalf("expected one failed reporter, got %+v", result)
+	}
+	assertReporterLogContains(t, logOutput.String(),
+		"rapidpro_reporter_sync_scan_started",
+		"\"requested_count\":1",
+		"rapidpro_reporter_sync_reporter_failed",
+		"\"reporter_name\":\"Alice\"",
+		"rapidpro_reporter_sync_scan_failed",
+		"\"failed_count\":1",
+	)
+}
+
+func captureReporterLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	t.Cleanup(func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	})
+	return &logOutput
+}
+
+func assertReporterLogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("expected logs to contain %q, got:\n%s", fragment, logs)
+		}
 	}
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
@@ -178,6 +180,16 @@ func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidPr
 	if deps.reporterSyncer == nil {
 		return JobResult{}, fmt.Errorf("rapidpro reporter sync service is not configured")
 	}
+	logging.ForContext(ctx).Info("rapidpro_reporter_sync_batch_started",
+		slog.Int64("job_id", exec.Job.ID),
+		slog.String("job_code", exec.Job.Code),
+		slog.Int64("run_id", exec.Run.ID),
+		slog.String("run_uid", exec.Run.UID),
+		slog.Any("watermark_from", exec.Job.LastSuccessAt),
+		slog.Int("batch_size", cfg.BatchSize),
+		slog.Bool("only_active", cfg.OnlyActive),
+		slog.Bool("dry_run", cfg.DryRun),
+	)
 	result, err := deps.reporterSyncer.SyncUpdatedSince(ctx, exec.Job.LastSuccessAt, cfg.BatchSize, cfg.OnlyActive, cfg.DryRun)
 	summary := map[string]any{
 		"jobType":       JobTypeRapidProReporterSync,
@@ -192,6 +204,28 @@ func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidPr
 		"dryRun":        cfg.DryRun,
 		"onlyActive":    cfg.OnlyActive,
 	}
+	level := logging.ForContext(ctx).Info
+	eventName := "rapidpro_reporter_sync_batch_completed"
+	if err != nil {
+		level = logging.ForContext(ctx).Error
+		eventName = "rapidpro_reporter_sync_batch_failed"
+	}
+	level(eventName,
+		slog.Int64("job_id", exec.Job.ID),
+		slog.String("job_code", exec.Job.Code),
+		slog.Int64("run_id", exec.Run.ID),
+		slog.String("run_uid", exec.Run.UID),
+		slog.Any("watermark_from", exec.Job.LastSuccessAt),
+		slog.Any("watermark_to", result.WatermarkTo),
+		slog.Int("scanned_count", result.Scanned),
+		slog.Int("synced_count", result.Synced),
+		slog.Int("created_count", result.Created),
+		slog.Int("updated_count", result.Updated),
+		slog.Int("failed_count", result.Failed),
+		slog.Bool("only_active", cfg.OnlyActive),
+		slog.Bool("dry_run", cfg.DryRun),
+		slog.String("error", errorString(err)),
+	)
 	if err != nil {
 		return JobResult{ResultSummary: summary}, err
 	}

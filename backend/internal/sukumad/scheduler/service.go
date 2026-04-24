@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
 	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
@@ -387,6 +389,12 @@ func (s *Service) DispatchDueJobs(ctx context.Context, limit int) (DispatchCycle
 			result.SkippedJobs = append(result.SkippedJobs, job.ID)
 			continue
 		}
+		logging.ForContext(ctx).Info("scheduler_run_queued",
+			s.schedulerLogAttrs(job, run, nil,
+				slog.String("message", "Scheduled run queued by dispatcher"),
+				slog.Time("next_run_at", valueOrZeroTime(nextRunAt)),
+			)...,
+		)
 		result.CreatedRuns = append(result.CreatedRuns, run)
 	}
 	return result, nil
@@ -411,10 +419,19 @@ func (s *Service) RunPendingSchedulerRuns(ctx context.Context, workerID int64, b
 		if err != nil {
 			return s.finishRun(ctx, run.ID, RunStatusFailed, map[string]any{"message": "failed to load scheduled job"}, err)
 		}
+		logging.ForContext(ctx).Info("scheduler_run_claimed",
+			s.schedulerLogAttrs(job, run, &workerID)...,
+		)
 
 		handler := s.registry.Lookup(job.JobType)
 		if handler == nil {
 			err := fmt.Errorf("unknown scheduler job type %q", job.JobType)
+			logging.ForContext(ctx).Error("scheduler_run_failed",
+				s.schedulerLogAttrs(job, run, &workerID,
+					slog.String("status", RunStatusFailed),
+					slog.String("error", err.Error()),
+				)...,
+			)
 			if finishErr := s.finishRun(ctx, run.ID, RunStatusFailed, map[string]any{"jobType": job.JobType}, err); finishErr != nil {
 				return finishErr
 			}
@@ -422,14 +439,30 @@ func (s *Service) RunPendingSchedulerRuns(ctx context.Context, workerID int64, b
 		}
 
 		exec := JobExecution{Job: job, Run: run, Now: s.clock()}
+		logging.ForContext(ctx).Info("scheduler_run_started",
+			s.schedulerLogAttrs(job, run, &workerID)...,
+		)
 		result, handlerErr := handler.Execute(ctx, exec)
 		if handlerErr != nil {
 			if errors.Is(handlerErr, context.Canceled) && ctx.Err() != nil {
+				logging.ForContext(ctx).Warn("scheduler_run_cancelled",
+					s.schedulerLogAttrs(job, run, &workerID,
+						slog.String("status", RunStatusCancelled),
+						slog.String("error", handlerErr.Error()),
+					)...,
+				)
 				if finishErr := s.finishRun(ctx, run.ID, RunStatusCancelled, map[string]any{"jobType": job.JobType}, handlerErr); finishErr != nil {
 					return finishErr
 				}
 				return ctx.Err()
 			}
+			logging.ForContext(ctx).Error("scheduler_run_failed",
+				s.schedulerLogAttrs(job, run, &workerID,
+					slog.String("status", RunStatusFailed),
+					slog.String("error", handlerErr.Error()),
+					slog.Any("result_summary", cloneJSONMap(result.ResultSummary)),
+				)...,
+			)
 			if finishErr := s.finishRun(ctx, run.ID, RunStatusFailed, result.ResultSummary, handlerErr); finishErr != nil {
 				return finishErr
 			}
@@ -439,6 +472,12 @@ func (s *Service) RunPendingSchedulerRuns(ctx context.Context, workerID int64, b
 		if status == "" {
 			status = RunStatusSucceeded
 		}
+		logging.ForContext(ctx).Info("scheduler_run_finished",
+			s.schedulerLogAttrs(job, run, &workerID,
+				slog.String("status", status),
+				slog.Any("result_summary", cloneJSONMap(result.ResultSummary)),
+			)...,
+		)
 		if finishErr := s.finishRun(ctx, run.ID, status, result.ResultSummary, nil); finishErr != nil {
 			return finishErr
 		}
@@ -880,6 +919,26 @@ func (s *Service) logAudit(ctx context.Context, event audit.Event) {
 	_ = s.auditService.Log(ctx, event)
 }
 
+func (s *Service) schedulerLogAttrs(job Record, run RunRecord, workerID *int64, extra ...slog.Attr) []any {
+	attrs := []any{
+		slog.Int64("job_id", job.ID),
+		slog.String("job_uid", job.UID),
+		slog.String("job_code", job.Code),
+		slog.String("job_type", job.JobType),
+		slog.Int64("run_id", run.ID),
+		slog.String("run_uid", run.UID),
+		slog.String("trigger_mode", run.TriggerMode),
+		slog.Time("scheduled_for", run.ScheduledFor),
+	}
+	if workerID != nil {
+		attrs = append(attrs, slog.Int64("worker_id", *workerID))
+	}
+	for _, attr := range extra {
+		attrs = append(attrs, attr)
+	}
+	return attrs
+}
+
 func mapConstraintError(err error) error {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
@@ -909,4 +968,11 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func valueOrZeroTime(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return value.UTC()
 }

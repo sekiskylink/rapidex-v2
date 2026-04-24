@@ -1,10 +1,14 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
+
+	"basepro/backend/internal/logging"
 )
 
 func TestCalculateNextRunInterval(t *testing.T) {
@@ -321,5 +325,68 @@ func TestRunPendingSchedulerRunsFailsUnknownJobType(t *testing.T) {
 	}
 	if finishedRun.ErrorMessage == "" {
 		t.Fatalf("expected error message for unknown job type, got %+v", finishedRun)
+	}
+}
+
+func TestDispatchDueJobsAndRunPendingSchedulerRunsEmitLifecycleLogs(t *testing.T) {
+	now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
+	logOutput := captureSchedulerLogs(t)
+	svc := NewService(NewRepository()).WithClock(func() time.Time { return now })
+
+	_, err := svc.CreateScheduledJob(context.Background(), CreateInput{
+		Code:         "metadata-sync",
+		Name:         "Metadata Sync",
+		JobCategory:  JobCategoryIntegration,
+		JobType:      "metadata_sync",
+		ScheduleType: ScheduleTypeInterval,
+		ScheduleExpr: "15m",
+		Timezone:     "UTC",
+		Enabled:      true,
+		Config: map[string]any{
+			"serverCode": "dhis2",
+			"batchSize":  25,
+			"dryRun":     true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create scheduled job: %v", err)
+	}
+	now = now.Add(16 * time.Minute)
+	if _, err := svc.DispatchDueJobs(context.Background(), 1); err != nil {
+		t.Fatalf("dispatch due jobs: %v", err)
+	}
+	if err := svc.RunPendingSchedulerRuns(context.Background(), 42, 1); err != nil {
+		t.Fatalf("run pending scheduler runs: %v", err)
+	}
+
+	assertSchedulerLogContains(t, logOutput.String(),
+		"scheduler_run_queued",
+		"\"job_code\":\"metadata-sync\"",
+		"scheduler_run_claimed",
+		"\"worker_id\":42",
+		"scheduler_run_started",
+		"scheduler_run_finished",
+		"\"status\":\"succeeded\"",
+	)
+}
+
+func captureSchedulerLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	t.Cleanup(func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	})
+	return &logOutput
+}
+
+func assertSchedulerLogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("expected logs to contain %q, got:\n%s", fragment, logs)
+		}
 	}
 }

@@ -1,11 +1,16 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
@@ -36,12 +41,21 @@ type fakeSchedulerRequestCreator struct {
 	err    error
 }
 
+type fakeSchedulerReporterSyncer struct {
+	result reporter.SyncBatchResult
+	err    error
+}
+
 func testIntPtr(value int) *int {
 	return &value
 }
 
 func (f *fakeSchedulerRequestCreator) CreateExternalRequest(_ context.Context, input requests.ExternalCreateInput) (requests.CreateResult, error) {
 	f.input = input
+	return f.result, f.err
+}
+
+func (f fakeSchedulerReporterSyncer) SyncUpdatedSince(context.Context, *time.Time, int, bool, bool) (reporter.SyncBatchResult, error) {
 	return f.result, f.err
 }
 
@@ -211,5 +225,84 @@ func TestRequestExchangeSchedulerJobCreatesExternalRequest(t *testing.T) {
 	}
 	if len(runs.Items) != 1 || runs.Items[0].ResultSummary["requestUid"] != "req-uid" {
 		t.Fatalf("expected request summary, got %+v", runs.Items)
+	}
+}
+
+func TestRapidProReporterSyncSchedulerJobEmitsBatchLogs(t *testing.T) {
+	now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
+	logOutput := captureSchedulerIntegrationLogs(t)
+	syncer := fakeSchedulerReporterSyncer{
+		result: reporter.SyncBatchResult{
+			Scanned:    3,
+			Synced:     2,
+			Created:    1,
+			Updated:    1,
+			Failed:     1,
+			DryRun:     false,
+			OnlyActive: true,
+			WatermarkTo: func() *time.Time {
+				value := now.Add(time.Minute)
+				return &value
+			}(),
+		},
+		err: errors.New("1 reporter syncs failed: remote validation"),
+	}
+	svc := NewService(NewRepository()).
+		WithClock(func() time.Time { return now }).
+		WithIntegrationHandlers(integrationHandlerDependencies{reporterSyncer: syncer})
+
+	job, err := svc.CreateScheduledJob(context.Background(), CreateInput{
+		Code:         "rapidpro-sync",
+		Name:         "RapidPro Sync",
+		JobCategory:  JobCategoryIntegration,
+		JobType:      JobTypeRapidProReporterSync,
+		ScheduleType: ScheduleTypeInterval,
+		ScheduleExpr: "15m",
+		Timezone:     "UTC",
+		Enabled:      true,
+		Config: map[string]any{
+			"batchSize":  50,
+			"dryRun":     false,
+			"onlyActive": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if _, err := svc.RunNow(context.Background(), nil, job.ID); err != nil {
+		t.Fatalf("run now: %v", err)
+	}
+	if err := svc.RunPendingSchedulerRuns(context.Background(), 101, 1); err != nil {
+		t.Fatalf("run pending scheduler runs: %v", err)
+	}
+
+	assertSchedulerIntegrationLogContains(t, logOutput.String(),
+		"rapidpro_reporter_sync_batch_started",
+		"\"job_code\":\"rapidpro-sync\"",
+		"\"batch_size\":50",
+		"rapidpro_reporter_sync_batch_failed",
+		"\"failed_count\":1",
+		"\"error\":\"1 reporter syncs failed: remote validation\"",
+	)
+}
+
+func captureSchedulerIntegrationLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logOutput bytes.Buffer
+	logging.SetOutput(&logOutput)
+	logging.ApplyConfig(logging.Config{Level: "info", Format: "json"})
+	t.Cleanup(func() {
+		logging.SetOutput(nil)
+		logging.ApplyConfig(logging.Config{Level: "info", Format: "console"})
+	})
+	return &logOutput
+}
+
+func assertSchedulerIntegrationLogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("expected logs to contain %q, got:\n%s", fragment, logs)
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/logging"
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
@@ -869,14 +871,37 @@ func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, d
 		DryRun:        dryRun,
 		OnlyActive:    onlyActive,
 	}
+	logger := logging.ForContext(ctx).With(
+		slog.Int("requested_count", result.Requested),
+		slog.Bool("dry_run", dryRun),
+		slog.Bool("only_active", onlyActive),
+		slog.Any("watermark_from", since),
+	)
+	logger.Info("rapidpro_reporter_sync_scan_started")
 	if len(reporters) == 0 {
 		now := s.clock()
 		result.WatermarkTo = &now
+		logger.Info("rapidpro_reporter_sync_scan_completed",
+			slog.Int("scanned_count", result.Scanned),
+			slog.Int("synced_count", result.Synced),
+			slog.Int("created_count", result.Created),
+			slog.Int("updated_count", result.Updated),
+			slog.Int("failed_count", result.Failed),
+			slog.Any("watermark_to", result.WatermarkTo),
+		)
 		return result, nil
 	}
 	if dryRun {
 		now := s.clock()
 		result.WatermarkTo = &now
+		logger.Info("rapidpro_reporter_sync_scan_completed",
+			slog.Int("scanned_count", result.Scanned),
+			slog.Int("synced_count", result.Synced),
+			slog.Int("created_count", result.Created),
+			slog.Int("updated_count", result.Updated),
+			slog.Int("failed_count", result.Failed),
+			slog.Any("watermark_to", result.WatermarkTo),
+		)
 		return result, nil
 	}
 	var batchErr error
@@ -887,6 +912,11 @@ func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, d
 			result.FailedIDs = append(result.FailedIDs, reporter.ID)
 			result.FailedNames = append(result.FailedNames, reporter.Name)
 			batchErr = errors.Join(batchErr, err)
+			logger.Error("rapidpro_reporter_sync_reporter_failed",
+				slog.Int64("reporter_id", reporter.ID),
+				slog.String("reporter_name", reporter.Name),
+				slog.String("error", err.Error()),
+			)
 			continue
 		}
 		result.Reporters = append(result.Reporters, syncResult.Reporter)
@@ -901,8 +931,24 @@ func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, d
 	now := s.clock()
 	result.WatermarkTo = &now
 	if batchErr != nil {
+		logger.Error("rapidpro_reporter_sync_scan_failed",
+			slog.Int("scanned_count", result.Scanned),
+			slog.Int("synced_count", result.Synced),
+			slog.Int("created_count", result.Created),
+			slog.Int("updated_count", result.Updated),
+			slog.Int("failed_count", result.Failed),
+			slog.Any("watermark_to", result.WatermarkTo),
+		)
 		return result, fmt.Errorf("%d reporter syncs failed: %w", result.Failed, batchErr)
 	}
+	logger.Info("rapidpro_reporter_sync_scan_completed",
+		slog.Int("scanned_count", result.Scanned),
+		slog.Int("synced_count", result.Synced),
+		slog.Int("created_count", result.Created),
+		slog.Int("updated_count", result.Updated),
+		slog.Int("failed_count", result.Failed),
+		slog.Any("watermark_to", result.WatermarkTo),
+	)
 	return result, nil
 }
 
