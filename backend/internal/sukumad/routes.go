@@ -575,6 +575,24 @@ func registerReporterRoutes(
 		}
 		c.JSON(http.StatusOK, result)
 	})
+	group.GET("/reporters/:id/reports", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), func(c *gin.Context) {
+		userID, ok := currentUserID(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			return
+		}
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid reporter id"}}))
+			return
+		}
+		result, err := service.GetRecentReportsForUser(c.Request.Context(), userID, id)
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
 	group.POST("/reporters/bulk/sync", middleware.RequirePermission(rbacService, rbac.PermissionReportersWrite), func(c *gin.Context) {
 		userID, ok := currentUserID(c)
 		if !ok {

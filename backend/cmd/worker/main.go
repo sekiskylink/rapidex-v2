@@ -121,6 +121,7 @@ func run() error {
 		WithRapidProIntegration(sukumadServerService, rapidpro.NewClient(nil))
 	sukumadReporterService = sukumadReporterService.
 		WithOrgUnitLookup(sukumadOrgUnitService).
+		WithRecentReportsLookup(requests.NewRepository(database)).
 		WithReporterGroupCatalog(sukumadReporterGroupService).
 		WithScopeResolver(sukumadUserOrgUnitService)
 	sukumadIngestService := ingest.NewService(ingest.NewRepository(database), sukumadRequestService, auditService)

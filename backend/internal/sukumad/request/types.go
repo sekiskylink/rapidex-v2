@@ -87,6 +87,12 @@ type ListResult struct {
 	MetadataColumns []MetadataColumn `json:"metadataColumns"`
 }
 
+type ReporterRecentReportsQuery struct {
+	MSISDN   string
+	Facility string
+	Limit    int
+}
+
 type CreateParams struct {
 	UID                     string
 	SourceSystem            string
@@ -153,6 +159,7 @@ type Repository interface {
 	ListRequestsByBatchID(ctx context.Context, batchID string) ([]Record, error)
 	ListRequestsByCorrelationID(ctx context.Context, correlationID string) ([]Record, error)
 	GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
+	ListRecentReporterReports(ctx context.Context, query ReporterRecentReportsQuery) ([]Record, error)
 	GetTargetStatusSummary(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error)
 	CreateRequest(ctx context.Context, params CreateParams) (Record, error)
 	UpdateRequestStatus(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)

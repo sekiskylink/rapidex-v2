@@ -188,6 +188,56 @@ func TestSQLRepositoryListRequestsSearchesConfiguredMetadataColumns(t *testing.T
 	}
 }
 
+func TestSQLRepositoryListRecentReporterReports(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
+	now := time.Now().UTC()
+	dataRows := sqlmock.NewRows([]string{
+		"id", "uid", "source_system", "destination_server_id", "destination_server_uid", "destination_server_name", "destination_server_code", "batch_id", "correlation_id",
+		"idempotency_key", "payload_body", "payload_format", "submission_binding", "response_body_persistence", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
+		"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
+	}).AddRow(
+		8, "11111111-1111-1111-1111-111111111111", "emr", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "batch-1", "corr-1",
+		"idem-1", `{"trackedEntity":"12345678901234567890"}`, "json", "body", "", "/api/data", "completed", "", nil, []byte(`{"msisdn":"+256700000001","facility":"Kampala Health Centre"}`), now, now, int64(7),
+		nil, "", "", nil, "", "", "", "",
+	)
+
+	mock.ExpectQuery("(?s)SELECT r\\.id, r\\.uid::text AS uid.*WHERE COALESCE\\(r\\.extras ->> 'msisdn', ''\\) = \\$1.*COALESCE\\(r\\.extras ->> 'facility', ''\\) = \\$2.*ORDER BY r\\.created_at DESC, r\\.id DESC.*LIMIT \\$3").
+		WithArgs("+256700000001", "Kampala Health Centre", 5).
+		WillReturnRows(dataRows)
+	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").
+		WithArgs(int64(8)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "uid", "request_id", "server_id", "server_uid", "server_name", "server_code", "target_kind", "priority", "status", "blocked_reason", "deferred_until", "last_released_at",
+			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url", "created_at", "updated_at",
+		}))
+	mock.ExpectQuery("(?s)SELECT d.request_id, d.depends_on_request_id, .*WHERE d.request_id IN \\(\\?\\).*").
+		WithArgs(int64(8)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"request_id", "depends_on_request_id", "request_uid", "depends_on_uid", "status", "status_reason", "deferred_until", "depends_on_destination_server_name",
+		}))
+
+	items, err := repo.ListRecentReporterReports(context.Background(), ReporterRecentReportsQuery{
+		MSISDN:   "+256700000001",
+		Facility: "Kampala Health Centre",
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatalf("list recent reporter reports: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one request, got %+v", items)
+	}
+	if items[0].Status != "completed" {
+		t.Fatalf("expected completed status, got %+v", items[0])
+	}
+}
+
 func TestSQLRepositoryGetTargetStatusSummary(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	if err != nil {

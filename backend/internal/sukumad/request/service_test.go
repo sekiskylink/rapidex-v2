@@ -19,6 +19,7 @@ type fakeRepo struct {
 	listByBatchFn               func(ctx context.Context, batchID string) ([]Record, error)
 	listByCorrelationFn         func(ctx context.Context, correlationID string) ([]Record, error)
 	getBySourceAndIdempotencyFn func(ctx context.Context, sourceSystem string, idempotencyKey string) (Record, error)
+	listRecentReporterReportsFn func(ctx context.Context, query ReporterRecentReportsQuery) ([]Record, error)
 	summaryFn                   func(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error)
 	createFn                    func(ctx context.Context, params CreateParams) (Record, error)
 	updateFn                    func(ctx context.Context, id int64, status string, reason string, deferredUntil *time.Time) (Record, error)
@@ -59,6 +60,13 @@ func (f *fakeRepo) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Context
 		return Record{}, sql.ErrNoRows
 	}
 	return f.getBySourceAndIdempotencyFn(ctx, sourceSystem, idempotencyKey)
+}
+
+func (f *fakeRepo) ListRecentReporterReports(ctx context.Context, query ReporterRecentReportsQuery) ([]Record, error) {
+	if f.listRecentReporterReportsFn == nil {
+		return []Record{}, nil
+	}
+	return f.listRecentReporterReportsFn(ctx, query)
 }
 
 func (f *fakeRepo) GetTargetStatusSummary(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {

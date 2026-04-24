@@ -217,3 +217,17 @@ type RapidProMessageHistoryResult struct {
 	Items    []RapidProMessageRecord `json:"items"`
 	Next     string                  `json:"next,omitempty"`
 }
+
+type ReporterRecentReportRecord struct {
+	ID             int64     `json:"id"`
+	UID            string    `json:"uid"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"createdAt"`
+	PayloadBody    string    `json:"payloadBody"`
+	PayloadPreview string    `json:"payloadPreview"`
+}
+
+type ReporterRecentReportsResult struct {
+	Reporter Reporter                     `json:"reporter"`
+	Items    []ReporterRecentReportRecord `json:"items"`
+}

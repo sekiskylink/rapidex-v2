@@ -13,6 +13,7 @@ import (
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/reporter"
+	request "basepro/backend/internal/sukumad/request"
 )
 
 func TestRapidexRoutesRequireAuthAndPermissions(t *testing.T) {
@@ -60,7 +61,7 @@ func TestRapidexRoutesRequireAuthAndPermissions(t *testing.T) {
 		t.Fatalf("expected /api/v1/reporters/broadcasts with permission to return 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	for _, path := range []string{"/api/v1/reporters/1/rapidpro-contact", "/api/v1/reporters/1/chat-history"} {
+	for _, path := range []string{"/api/v1/reporters/1/rapidpro-contact", "/api/v1/reporters/1/chat-history", "/api/v1/reporters/1/reports"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
@@ -201,6 +202,9 @@ func (r *rapidexReporterRepo) ListBroadcastRecipients(context.Context, reporter.
 }
 func (r *rapidexReporterRepo) GetRecentPendingBroadcastByDedupeKey(context.Context, string, time.Time) (reporter.JurisdictionBroadcastRecord, error) {
 	return reporter.JurisdictionBroadcastRecord{}, sql.ErrNoRows
+}
+func (r *rapidexReporterRepo) ListRecentReporterReports(context.Context, request.ReporterRecentReportsQuery) ([]request.Record, error) {
+	return []request.Record{}, nil
 }
 func (r *rapidexReporterRepo) CreateJurisdictionBroadcast(_ context.Context, item reporter.JurisdictionBroadcastRecord) (reporter.JurisdictionBroadcastRecord, error) {
 	item.ID = 1

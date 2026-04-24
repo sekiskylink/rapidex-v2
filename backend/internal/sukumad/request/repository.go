@@ -226,6 +226,62 @@ func (r *SQLRepository) GetRequestBySourceSystemAndIdempotencyKey(ctx context.Co
 	return r.getRequestByWhere(ctx, "r.source_system = $1 AND r.idempotency_key = $2", strings.TrimSpace(sourceSystem), strings.TrimSpace(idempotencyKey))
 }
 
+func (r *SQLRepository) ListRecentReporterReports(ctx context.Context, query ReporterRecentReportsQuery) ([]Record, error) {
+	msisdn := strings.TrimSpace(query.MSISDN)
+	facility := strings.TrimSpace(query.Facility)
+	if msisdn == "" || facility == "" {
+		return []Record{}, nil
+	}
+	limit := query.Limit
+	if limit <= 0 || limit > 50 {
+		limit = 5
+	}
+	rows := []recordRow{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT r.id, r.uid::text AS uid, r.source_system, r.destination_server_id,
+		       COALESCE(s.uid::text, '') AS destination_server_uid,
+		       COALESCE(s.name, '') AS destination_server_name,
+		       COALESCE(s.code, '') AS destination_server_code,
+		       COALESCE(r.batch_id, '') AS batch_id, COALESCE(r.correlation_id, '') AS correlation_id, COALESCE(r.idempotency_key, '') AS idempotency_key,
+		       r.payload_body, r.payload_format, r.submission_binding, COALESCE(r.response_body_persistence, '') AS response_body_persistence, COALESCE(r.url_suffix, '') AS url_suffix, r.status, COALESCE(r.status_reason, '') AS status_reason, r.deferred_until,
+		       r.extras, r.created_at, r.updated_at, r.created_by,
+		       ld.id AS latest_delivery_id,
+		       COALESCE(ld.uid, '') AS latest_delivery_uid,
+		       COALESCE(ld.status, '') AS latest_delivery_status,
+		       a.id AS latest_async_task_id,
+		       COALESCE(a.uid::text, '') AS latest_async_task_uid,
+		       COALESCE(a.terminal_state, CASE WHEN COALESCE(a.remote_status, '') = '' THEN '' ELSE a.remote_status END) AS latest_async_state,
+		       COALESCE(a.remote_job_id, '') AS latest_async_remote_job_id,
+		       COALESCE(a.poll_url, '') AS latest_async_poll_url
+		FROM exchange_requests r
+		LEFT JOIN integration_servers s ON s.id = r.destination_server_id
+		LEFT JOIN LATERAL (
+			SELECT d.id,
+			       d.uid::text AS uid,
+			       d.status
+			FROM delivery_attempts d
+			WHERE d.request_id = r.id
+			ORDER BY d.attempt_number DESC, d.created_at DESC
+			LIMIT 1
+		) ld ON TRUE
+		LEFT JOIN async_tasks a ON a.delivery_attempt_id = ld.id
+		WHERE COALESCE(r.extras ->> 'msisdn', '') = $1
+		  AND COALESCE(r.extras ->> 'facility', '') = $2
+		ORDER BY r.created_at DESC, r.id DESC
+		LIMIT $3
+	`, msisdn, facility, limit); err != nil {
+		return nil, fmt.Errorf("list reporter recent exchange requests: %w", err)
+	}
+	items, err := decodeRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateRequests(ctx, items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *SQLRepository) GetTargetStatusSummary(ctx context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {
 	var summary TargetStatusSummary
 	if err := r.db.GetContext(ctx, &summary, `
@@ -855,6 +911,50 @@ func (r *memoryRepository) GetRequestBySourceSystemAndIdempotencyKey(_ context.C
 		}
 	}
 	return Record{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) ListRecentReporterReports(_ context.Context, query ReporterRecentReportsQuery) ([]Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	msisdn := strings.TrimSpace(query.MSISDN)
+	facility := strings.TrimSpace(query.Facility)
+	if msisdn == "" || facility == "" {
+		return []Record{}, nil
+	}
+	limit := query.Limit
+	if limit <= 0 || limit > 50 {
+		limit = 5
+	}
+
+	items := make([]Record, 0, len(r.items))
+	for _, item := range r.items {
+		if strings.TrimSpace(fmt.Sprint(item.Extras["msisdn"])) != msisdn {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(item.Extras["facility"])) != facility {
+			continue
+		}
+		items = append(items, cloneRecord(item))
+	}
+	slices.SortFunc(items, func(a, b Record) int {
+		cmp := compareTimes(b.CreatedAt, a.CreatedAt)
+		if cmp != 0 {
+			return cmp
+		}
+		switch {
+		case b.ID > a.ID:
+			return 1
+		case b.ID < a.ID:
+			return -1
+		default:
+			return 0
+		}
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
 }
 
 func (r *memoryRepository) GetTargetStatusSummary(_ context.Context, query TargetStatusSummaryQuery) (TargetStatusSummary, error) {

@@ -13,7 +13,9 @@ import (
 	"basepro/backend/internal/settings"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
+	sukumadrequest "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
+	"basepro/backend/internal/sukumad/userorg"
 )
 
 type reporterServiceRepo struct {
@@ -24,6 +26,8 @@ type reporterServiceRepo struct {
 	countBroadcastRecipients int
 	broadcastRecipients      []Reporter
 	recentBroadcast          *JurisdictionBroadcastRecord
+	recentReports            []sukumadrequest.Record
+	recentReportsQuery       *sukumadrequest.ReporterRecentReportsQuery
 	createdBroadcasts        []JurisdictionBroadcastRecord
 	claimedBroadcasts        []JurisdictionBroadcastRecord
 	updatedBroadcasts        []JurisdictionBroadcastRecord
@@ -68,6 +72,11 @@ func (r *reporterServiceRepo) GetRecentPendingBroadcastByDedupeKey(context.Conte
 		return *r.recentBroadcast, nil
 	}
 	return JurisdictionBroadcastRecord{}, sql.ErrNoRows
+}
+func (r *reporterServiceRepo) ListRecentReporterReports(_ context.Context, query sukumadrequest.ReporterRecentReportsQuery) ([]sukumadrequest.Record, error) {
+	copyQuery := query
+	r.recentReportsQuery = &copyQuery
+	return append([]sukumadrequest.Record(nil), r.recentReports...), nil
 }
 func (r *reporterServiceRepo) CreateJurisdictionBroadcast(_ context.Context, record JurisdictionBroadcastRecord) (JurisdictionBroadcastRecord, error) {
 	record.ID = int64(len(r.createdBroadcasts) + 1)
@@ -219,6 +228,15 @@ func (l reporterOrgUnitLookup) Get(_ context.Context, id int64) (orgunit.OrgUnit
 		}
 	}
 	return l.item, nil
+}
+
+type reporterScopeResolverStub struct {
+	scope userorg.Scope
+	err   error
+}
+
+func (s reporterScopeResolverStub) ResolveScope(context.Context, int64) (userorg.Scope, error) {
+	return s.scope, s.err
 }
 
 type reporterGroupCatalogStub struct {
@@ -1050,6 +1068,87 @@ func TestGetRapidProContactDetailsUsesUUIDAndMapsSnapshot(t *testing.T) {
 	}
 	if details.Contact.Fields["Facility"] != "Kampala Health Centre" {
 		t.Fatalf("expected custom fields to be preserved, got %+v", details.Contact.Fields)
+	}
+}
+
+func TestGetRecentReportsForUserMatchesTelephoneAndFacility(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+		recentReports: []sukumadrequest.Record{
+			{
+				ID:          88,
+				UID:         "req-88",
+				Status:      sukumadrequest.StatusCompleted,
+				PayloadBody: `{"foo":"bar","value":"12345678901234567890ABCDE"}`,
+				CreatedAt:   time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	service := NewService(repo).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			item: orgunit.OrgUnit{ID: 2, Name: "Kampala Health Centre"},
+		}).
+		WithRecentReportsLookup(repo)
+
+	result, err := service.GetRecentReportsForUser(context.Background(), 7, 1)
+	if err != nil {
+		t.Fatalf("get recent reports: %v", err)
+	}
+	if repo.recentReportsQuery == nil {
+		t.Fatal("expected recent reports lookup query to be captured")
+	}
+	if repo.recentReportsQuery.MSISDN != "+256700000001" {
+		t.Fatalf("expected msisdn query, got %+v", repo.recentReportsQuery)
+	}
+	if repo.recentReportsQuery.Facility != "Kampala Health Centre" {
+		t.Fatalf("expected facility query, got %+v", repo.recentReportsQuery)
+	}
+	if repo.recentReportsQuery.Limit != 5 {
+		t.Fatalf("expected limit 5, got %+v", repo.recentReportsQuery)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected one recent report, got %+v", result)
+	}
+	if result.Items[0].PayloadPreview != `{"foo":"bar","value"...` {
+		t.Fatalf("expected truncated payload preview, got %q", result.Items[0].PayloadPreview)
+	}
+}
+
+func TestGetRecentReportsForUserRespectsScope(t *testing.T) {
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:        1,
+				Name:      "Alice Reporter",
+				Telephone: "+256700000001",
+				OrgUnitID: 2,
+				IsActive:  true,
+			},
+		},
+	}
+	service := NewService(repo).
+		WithOrgUnitLookup(reporterOrgUnitLookup{
+			item: orgunit.OrgUnit{ID: 2, Name: "Kampala Health Centre", Path: "/UG/Kampala/KHC/"},
+		}).
+		WithScopeResolver(reporterScopeResolverStub{
+			scope: userorg.Scope{Restricted: true, PathPrefixes: []string{"/UG/Gulu/"}},
+		})
+
+	_, err := service.GetRecentReportsForUser(context.Background(), 7, 1)
+	if err == nil {
+		t.Fatal("expected scope error")
+	}
+	var typed *apperror.AppError
+	if !errors.As(err, &typed) || typed.Code != apperror.CodeAuthForbidden {
+		t.Fatalf("expected forbidden app error, got %v", err)
 	}
 }
 

@@ -28,13 +28,15 @@ import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
 import { useAppNotify } from '../notifications/facade'
-import { CampaignRoundedIcon, MessageRoundedIcon, PersonAddRoundedIcon, SyncRoundedIcon } from '../ui/icons'
+import { ArticleRoundedIcon, CampaignRoundedIcon, MessageRoundedIcon, PersonAddRoundedIcon, SyncRoundedIcon } from '../ui/icons'
 import {
   ChatHistoryDialog,
   RapidProDetailsDialog,
+  ReporterReportsDialog,
   ReporterDetailsDialog,
   type RapidProContactDetailsResponse,
   type RapidProMessageHistoryResponse,
+  type ReporterReportsResponse,
 } from './reporter-dialogs'
 
 interface Reporter {
@@ -267,6 +269,11 @@ export function ReportersPage() {
   const [chatHistory, setChatHistory] = React.useState<RapidProMessageHistoryResponse | null>(null)
   const [chatHistoryLoading, setChatHistoryLoading] = React.useState(false)
   const [chatHistoryError, setChatHistoryError] = React.useState('')
+  const [reportsReporter, setReportsReporter] = React.useState<Reporter | null>(null)
+  const [recentReports, setRecentReports] = React.useState<ReporterReportsResponse | null>(null)
+  const [recentReportsLoading, setRecentReportsLoading] = React.useState(false)
+  const [recentReportsError, setRecentReportsError] = React.useState('')
+  const [selectedReportId, setSelectedReportId] = React.useState<number | null>(null)
   const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({ page: 0, pageSize: 25 })
   const [selectedFacility, setSelectedFacility] = React.useState<OrgUnit | null>(null)
   const [facilitySearchInput, setFacilitySearchInput] = React.useState('')
@@ -481,6 +488,23 @@ export function ReportersPage() {
     }
   }, [])
 
+  const openReportsDialog = React.useCallback(async (reporter: Reporter) => {
+    setReportsReporter(reporter)
+    setRecentReports(null)
+    setRecentReportsError('')
+    setRecentReportsLoading(true)
+    setSelectedReportId(null)
+    try {
+      const response = await apiRequest<ReporterReportsResponse>(`/reporters/${reporter.id}/reports`)
+      setRecentReports(response)
+      setSelectedReportId(response.items?.[0]?.id ?? null)
+    } catch (reportsError) {
+      setRecentReportsError(reportsError instanceof Error ? reportsError.message : 'Unable to load recent reports.')
+    } finally {
+      setRecentReportsLoading(false)
+    }
+  }, [])
+
   const columns = React.useMemo<GridColDef<Reporter>[]>(
     () => [
       {
@@ -580,6 +604,7 @@ export function ReportersPage() {
             rowLabel={row.name}
             actions={[
               { id: 'view', label: 'View details', icon: 'view', onClick: () => setViewing(row) },
+              { id: 'reports', label: 'Reports', icon: <ArticleRoundedIcon fontSize="small" />, onClick: () => void openReportsDialog(row) },
               { id: 'rapidpro', label: 'RapidPro Details', icon: 'rapidpro', onClick: () => void openRapidProDetails(row) },
               { id: 'edit', label: 'Edit', icon: 'edit', onClick: () => openDialog(row) },
               { id: 'sync', label: 'Sync to RapidPro', icon: 'sync', onClick: () => void syncReporter(row.id) },
@@ -598,7 +623,7 @@ export function ReportersPage() {
         ),
       },
     ],
-    [allVisibleSelected, getOrgUnitName, openChatHistoryDialog, openRapidProDetails, selectedIds, someVisibleSelected, visibleReporterIds],
+    [allVisibleSelected, getOrgUnitName, openChatHistoryDialog, openRapidProDetails, openReportsDialog, selectedIds, someVisibleSelected, visibleReporterIds],
   )
 
   const broadcastColumns = React.useMemo<GridColDef<BroadcastHistoryItem>[]>(
@@ -967,6 +992,23 @@ export function ReportersPage() {
           setChatHistory(null)
           setChatHistoryError('')
           setChatHistoryLoading(false)
+        }}
+      />
+
+      <ReporterReportsDialog
+        open={Boolean(reportsReporter)}
+        reporter={reportsReporter}
+        loading={recentReportsLoading}
+        error={recentReportsError}
+        reports={recentReports}
+        selectedReportId={selectedReportId}
+        onSelectReport={setSelectedReportId}
+        onClose={() => {
+          setReportsReporter(null)
+          setRecentReports(null)
+          setRecentReportsError('')
+          setRecentReportsLoading(false)
+          setSelectedReportId(null)
         }}
       />
 

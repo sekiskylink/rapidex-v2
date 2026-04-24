@@ -190,6 +190,7 @@ func run() error {
 		WithRapidProSettings(settingsService).
 		WithReporterGroupCatalog(sukumadReporterGroupService).
 		WithOrgUnitLookup(sukumadOrgUnitService).
+		WithRecentReportsLookup(requests.NewRepository(database)).
 		WithScopeResolver(sukumadUserOrgUnitService)
 	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {

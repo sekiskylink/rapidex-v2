@@ -168,6 +168,30 @@ function buildChatHistory() {
   }
 }
 
+function buildReporterReports() {
+  return {
+    reporter: buildReporter(),
+    items: [
+      {
+        id: 91,
+        uid: 'req-91',
+        status: 'completed',
+        createdAt: '2026-04-24T09:30:00Z',
+        payloadBody: JSON.stringify({ alpha: 1, nested: { hello: 'world' } }),
+        payloadPreview: '{"alpha":1,"nested":...',
+      },
+      {
+        id: 90,
+        uid: 'req-90',
+        status: 'failed',
+        createdAt: '2026-04-23T07:15:00Z',
+        payloadBody: '{"beta":2}',
+        payloadPreview: '{"beta":2}',
+      },
+    ],
+  }
+}
+
 function buildBroadcastHistoryItem(overrides: Record<string, unknown> = {}) {
   return {
     id: 31,
@@ -323,6 +347,83 @@ describe('desktop reporters page', () => {
     expect(await screen.findByText('Broadcast History')).toBeInTheDocument()
     expect(await screen.findByText('Background hello')).toBeInTheDocument()
     expect(await screen.findByText('completed')).toBeInTheDocument()
+  })
+
+  it('shows recent reporter reports and pretty prints the selected payload', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Staff'],
+              permissions: ['reporters.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/reporters?')) {
+          return new Response(JSON.stringify({ items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.endsWith('/api/v1/reporters/broadcasts?page=0&pageSize=10')) {
+          return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 10 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.endsWith('/api/v1/reporters/11/reports')) {
+          return new Response(JSON.stringify(buildReporterReports()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.endsWith('/api/v1/reporter-groups/options')) {
+          return new Response(JSON.stringify({ items: [{ id: 1, name: 'Lead' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/orgunits?')) {
+          return new Response(JSON.stringify({ items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/reporters', store)
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Reports' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Reporter Reports' })
+    expect(within(dialog).getByText('{"alpha":1,"nested":...')).toBeInTheDocument()
+    expect(within(dialog).getByText(/"hello": "world"/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '{"beta":2}' }))
+    expect(within(dialog).getByText('failed')).toBeInTheDocument()
+    expect(within(dialog).getByText(/"beta": 2/)).toBeInTheDocument()
   })
 
   it('create, edit, and messaging flows use the RapidPro actions workflow', async () => {

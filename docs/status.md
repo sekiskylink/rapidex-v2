@@ -1,5 +1,39 @@
 # Status
 
+## Milestone — Reporter Recent Reports Action (Complete)
+
+### What changed
+- Added a new `Reports` row action to the Reporters page in both web and desktop.
+- The action opens a dialog that looks up the 5 most recent `exchange_requests` for that reporter, ordered by `created_at DESC`.
+- Matching is intentionally narrow and requires both:
+  - `exchange_requests.extras.msisdn` equals the reporter telephone exactly
+  - `exchange_requests.extras.facility` equals the reporter facility name exactly
+- The dialog shows each matched report’s created date, status, and a short payload preview.
+- Clicking a payload preview loads a pretty-printed, scrollable payload body in the right-hand pane of the dialog.
+- Added a new backend reporter endpoint at `GET /api/v1/reporters/:id/reports`, wired through the existing reporter scope and `reporters.read` permission checks.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-24-reporter-recent-reports-action.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter service coverage for recent report lookup query shaping and scope enforcement
+  - request repository coverage for the `extras.msisdn` and `extras.facility` SQL filter
+  - API/router stub updates for the new reporter reports endpoint
+- Web:
+  - reporters page coverage for opening the `Reports` dialog and switching the payload preview pane
+- Desktop:
+  - matching reporters page coverage for the `Reports` dialog and payload preview selection
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused tests: PASS (`cd web && npm test -- --run src/pages/reporters-page.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/reporters-page.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Matching currently uses exact stored telephone and facility-name equality only; phone normalization and alternate facility aliases are not part of this change.
+
 ## Milestone — Jurisdiction-Scoped Reporter Broadcast Queue (Complete)
 
 ### What changed

@@ -63,6 +63,18 @@ export interface RapidProMessageHistoryResponse {
   next?: string
 }
 
+export interface ReporterReportsResponse {
+  reporter: ReporterLike
+  items: Array<{
+    id: number
+    uid: string
+    status: string
+    createdAt: string
+    payloadBody: string
+    payloadPreview: string
+  }>
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) {
     return '-'
@@ -72,6 +84,17 @@ function formatDateTime(value?: string | null) {
     return value
   }
   return parsed.toLocaleString()
+}
+
+function formatPrettyJSON(value?: string | null) {
+  if (!value) {
+    return ''
+  }
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2)
+  } catch {
+    return value
+  }
 }
 
 function chipColor(status: string): 'default' | 'success' | 'warning' | 'error' | 'info' {
@@ -414,6 +437,141 @@ export function ChatHistoryDialog({ open, reporter, loading, error, history, onC
                 </Typography>
               ) : null}
             </Stack>
+          ) : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+interface ReporterReportsDialogProps {
+  open: boolean
+  reporter: ReporterLike | null
+  loading: boolean
+  error: string
+  reports: ReporterReportsResponse | null
+  selectedReportId: number | null
+  onSelectReport: (reportId: number) => void
+  onClose: () => void
+}
+
+export function ReporterReportsDialog({
+  open,
+  reporter,
+  loading,
+  error,
+  reports,
+  selectedReportId,
+  onSelectReport,
+  onClose,
+}: ReporterReportsDialogProps) {
+  const items = reports?.items ?? []
+  const selectedReport = items.find((item) => item.id === selectedReportId) ?? items[0] ?? null
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="lg"
+      PaperProps={{
+        sx: {
+          width: { xs: 'calc(100vw - 16px)', sm: 'min(1100px, calc(100vw - 40px))' },
+          maxWidth: 'none',
+          height: { xs: 'calc(100vh - 16px)', sm: 'min(84vh, 860px)' },
+        },
+      }}
+    >
+      <DialogTitle>Reporter Reports</DialogTitle>
+      <DialogContent
+        dividers
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          px: { xs: 2, sm: 3 },
+          py: 2,
+        }}
+      >
+        <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
+          {reporter ? (
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', md: 'center' }}>
+              <Typography variant="h6">{reporter.name}</Typography>
+              <Chip label={reporter.telephone || 'No telephone'} size="small" variant="outlined" />
+            </Stack>
+          ) : null}
+          {loading ? <Typography color="text.secondary">Loading recent reports...</Typography> : null}
+          {error ? <Alert severity="error">{error}</Alert> : null}
+          {!loading && !error && items.length === 0 ? <Alert severity="info">No recent reports found for this reporter.</Alert> : null}
+          {!loading && !error && items.length > 0 ? (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'minmax(320px, 0.95fr) minmax(0, 1.35fr)' },
+                gap: 2,
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              <Stack spacing={1.25} sx={{ minHeight: 0, overflowY: 'auto', pr: { md: 1 } }}>
+                {items.map((item) => {
+                  const active = item.id === selectedReport?.id
+                  return (
+                    <Box
+                      key={item.id}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: active ? 'primary.main' : 'divider',
+                        bgcolor: active ? alpha('#2563eb', 0.06) : 'background.paper',
+                      }}
+                    >
+                      <Stack spacing={1}>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {formatDateTime(item.createdAt)}
+                          </Typography>
+                          <Chip label={item.status || 'unknown'} color={chipColor(item.status || '')} size="small" />
+                        </Stack>
+                        <Button
+                          variant="text"
+                          size="small"
+                          sx={{ p: 0, minWidth: 0, justifyContent: 'flex-start', textTransform: 'none', fontWeight: 600 }}
+                          onClick={() => onSelectReport(item.id)}
+                        >
+                          {item.payloadPreview || '(empty payload)'}
+                        </Button>
+                      </Stack>
+                    </Box>
+                  )
+                })}
+              </Stack>
+              <Box
+                sx={{
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.default',
+                }}
+              >
+                <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between">
+                    <Typography variant="subtitle2">Payload</Typography>
+                    {selectedReport ? <Typography variant="caption" color="text.secondary">{selectedReport.uid}</Typography> : null}
+                  </Stack>
+                </Box>
+                <Box component="pre" sx={{ m: 0, p: 2, flex: 1, minHeight: 0, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {selectedReport ? formatPrettyJSON(selectedReport.payloadBody) : 'Select a report to inspect its payload.'}
+                </Box>
+              </Box>
+            </Box>
           ) : null}
         </Stack>
       </DialogContent>

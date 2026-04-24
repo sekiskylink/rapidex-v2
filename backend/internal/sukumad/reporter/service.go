@@ -18,6 +18,7 @@ import (
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	"basepro/backend/internal/sukumad/reportergroup"
+	sukumadrequest "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 	"basepro/backend/internal/sukumad/userorg"
 )
@@ -62,6 +63,10 @@ type reporterScopeResolver interface {
 	ResolveScope(context.Context, int64) (userorg.Scope, error)
 }
 
+type reporterRecentReportsLookup interface {
+	ListRecentReporterReports(context.Context, sukumadrequest.ReporterRecentReportsQuery) ([]sukumadrequest.Record, error)
+}
+
 // Service encapsulates business logic for reporters and depends on a Repository.
 type Service struct {
 	repo             Repository
@@ -72,6 +77,7 @@ type Service struct {
 	orgUnitLookup    orgUnitLookup
 	groupCatalog     reporterGroupCatalog
 	scopeResolver    reporterScopeResolver
+	recentReports    reporterRecentReportsLookup
 	clock            func() time.Time
 }
 
@@ -136,6 +142,14 @@ func (s *Service) WithScopeResolver(resolver reporterScopeResolver) *Service {
 		return s
 	}
 	s.scopeResolver = resolver
+	return s
+}
+
+func (s *Service) WithRecentReportsLookup(lookup reporterRecentReportsLookup) *Service {
+	if s == nil {
+		return s
+	}
+	s.recentReports = lookup
 	return s
 }
 
@@ -805,6 +819,47 @@ func (s *Service) GetRapidProMessageHistoryForUser(ctx context.Context, userID, 
 	return s.getRapidProMessageHistoryForReporter(ctx, reporter)
 }
 
+func (s *Service) GetRecentReportsForUser(ctx context.Context, userID, id int64) (ReporterRecentReportsResult, error) {
+	reporter, err := s.GetForUser(ctx, userID, id)
+	if err != nil {
+		return ReporterRecentReportsResult{}, err
+	}
+	if s.recentReports == nil {
+		return ReporterRecentReportsResult{Reporter: reporter, Items: []ReporterRecentReportRecord{}}, nil
+	}
+	facilityName := ""
+	if s.orgUnitLookup != nil && reporter.OrgUnitID > 0 {
+		unit, lookupErr := s.orgUnitLookup.Get(ctx, reporter.OrgUnitID)
+		if lookupErr != nil {
+			return ReporterRecentReportsResult{}, lookupErr
+		}
+		facilityName = strings.TrimSpace(unit.Name)
+	}
+	items, err := s.recentReports.ListRecentReporterReports(ctx, sukumadrequest.ReporterRecentReportsQuery{
+		MSISDN:   strings.TrimSpace(reporter.Telephone),
+		Facility: facilityName,
+		Limit:    5,
+	})
+	if err != nil {
+		return ReporterRecentReportsResult{}, err
+	}
+	resultItems := make([]ReporterRecentReportRecord, 0, len(items))
+	for _, item := range items {
+		resultItems = append(resultItems, ReporterRecentReportRecord{
+			ID:             item.ID,
+			UID:            item.UID,
+			Status:         item.Status,
+			CreatedAt:      item.CreatedAt,
+			PayloadBody:    item.PayloadBody,
+			PayloadPreview: buildPayloadPreview(item.PayloadBody, 20),
+		})
+	}
+	return ReporterRecentReportsResult{
+		Reporter: reporter,
+		Items:    resultItems,
+	}, nil
+}
+
 func (s *Service) syncReporterBatch(ctx context.Context, reporters []Reporter, dryRun bool, since *time.Time, onlyActive bool) (SyncBatchResult, error) {
 	result := SyncBatchResult{
 		Requested:     len(reporters),
@@ -1013,6 +1068,18 @@ func (s *Service) resolveScope(ctx context.Context, userID int64) (userorg.Scope
 		return userorg.Scope{}, nil
 	}
 	return s.scopeResolver.ResolveScope(ctx, userID)
+}
+
+func buildPayloadPreview(payload string, limit int) string {
+	trimmed := strings.TrimSpace(payload)
+	if limit <= 0 {
+		limit = 20
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= limit {
+		return trimmed
+	}
+	return string(runes[:limit]) + "..."
 }
 
 type rapidProContactData struct {

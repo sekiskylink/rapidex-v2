@@ -156,6 +156,30 @@ function buildChatHistory() {
   }
 }
 
+function buildReporterReports() {
+  return {
+    reporter: buildReporter(),
+    items: [
+      {
+        id: 91,
+        uid: 'req-91',
+        status: 'completed',
+        createdAt: '2026-04-24T09:30:00Z',
+        payloadBody: JSON.stringify({ alpha: 1, nested: { hello: 'world' } }),
+        payloadPreview: '{"alpha":1,"nested":...',
+      },
+      {
+        id: 90,
+        uid: 'req-90',
+        status: 'failed',
+        createdAt: '2026-04-23T07:15:00Z',
+        payloadBody: '{"beta":2}',
+        payloadPreview: '{"beta":2}',
+      },
+    ],
+  }
+}
+
 function buildBroadcastHistoryItem(overrides: Record<string, unknown> = {}) {
   return {
     id: 31,
@@ -240,6 +264,39 @@ describe('reporters page', () => {
     expect(await screen.findByText('Broadcast History')).toBeInTheDocument()
     expect(await screen.findByText('Background hello')).toBeInTheDocument()
     expect(await screen.findByText('completed')).toBeInTheDocument()
+  })
+
+  it('shows recent reporter reports and pretty prints the selected payload', async () => {
+    authenticate(['reporters.read'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/reporters?')) {
+        return { items: [buildReporter()], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/broadcasts?page=0&pageSize=10') {
+        return { items: [], totalCount: 0, page: 0, pageSize: 10 }
+      }
+      if (path === '/reporters/11/reports') {
+        return buildReporterReports()
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [{ id: 1, name: 'Lead' }] }
+      }
+      if (path.includes('/orgunits?')) {
+        return { items: [{ id: 2, name: 'Kampala Health Centre' }], totalCount: 1, page: 1, pageSize: 25 }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByLabelText('Actions for Alice Reporter'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Reports' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Reporter Reports' })
+    expect(within(dialog).getByText('{"alpha":1,"nested":...')).toBeInTheDocument()
+    expect(within(dialog).getByText(/"hello": "world"/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '{"beta":2}' }))
+    expect(within(dialog).getByText('failed')).toBeInTheDocument()
+    expect(within(dialog).getByText(/"beta": 2/)).toBeInTheDocument()
   })
 
   it('create reporter omits backend-managed payload fields and hides backend-managed inputs', async () => {
