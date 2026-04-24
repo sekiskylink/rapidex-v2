@@ -15,6 +15,7 @@ import (
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
@@ -110,6 +111,17 @@ func (s *Service) WithRapidProReporterSyncService(syncer interface {
 	}
 	return s.WithIntegrationHandlers(integrationHandlerDependencies{
 		reporterSyncer: syncer,
+	})
+}
+
+func (s *Service) WithOrgUnitHierarchySyncService(syncer interface {
+	SyncHierarchy(context.Context, orgunit.SyncRequest) (orgunit.SyncResult, error)
+}) *Service {
+	if s == nil {
+		return s
+	}
+	return s.WithIntegrationHandlers(integrationHandlerDependencies{
+		orgUnitRefresher: syncer,
 	})
 }
 
@@ -719,6 +731,23 @@ func (s *Service) EnsureDefaultIntegrationJobs(ctx context.Context) ([]Record, e
 				"dryRun":     false,
 				"batchSize":  100,
 				"onlyActive": true,
+			},
+		},
+		{
+			Code:         "dhis2-org-unit-refresh",
+			Name:         "DHIS2 Org Unit Refresh",
+			Description:  "Refresh the Rapidex organisation-unit hierarchy from DHIS2 metadata.",
+			JobCategory:  JobCategoryIntegration,
+			JobType:      JobTypeDHIS2OrgUnitRefresh,
+			ScheduleType: ScheduleTypeInterval,
+			ScheduleExpr: "24h",
+			Timezone:     "UTC",
+			Enabled:      false,
+			Config: map[string]any{
+				"fullRefresh":       true,
+				"dryRun":            false,
+				"serverCode":        "dhis2",
+				"districtLevelName": "District",
 			},
 		},
 	}

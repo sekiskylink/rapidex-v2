@@ -11,6 +11,7 @@ import (
 
 	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
@@ -20,6 +21,7 @@ const (
 	JobTypeURLCall              = "url_call"
 	JobTypeRequestExchange      = "request_exchange"
 	JobTypeRapidProReporterSync = "rapidpro_reporter_sync"
+	JobTypeDHIS2OrgUnitRefresh  = "dhis2_org_unit_refresh"
 )
 
 type integrationHandlerDependencies struct {
@@ -34,6 +36,9 @@ type integrationHandlerDependencies struct {
 	}
 	reporterSyncer interface {
 		SyncUpdatedSince(context.Context, *time.Time, int, bool, bool) (reporter.SyncBatchResult, error)
+	}
+	orgUnitRefresher interface {
+		SyncHierarchy(context.Context, orgunit.SyncRequest) (orgunit.SyncResult, error)
 	}
 }
 
@@ -68,6 +73,15 @@ type rapidProReporterSyncConfig struct {
 	LookbackMinutes int  `json:"lookbackMinutes"`
 }
 
+type dhis2OrgUnitRefreshConfig struct {
+	ServerUID         string `json:"serverUid"`
+	ServerCode        string `json:"serverCode"`
+	FullRefresh       bool   `json:"fullRefresh"`
+	DryRun            bool   `json:"dryRun"`
+	DistrictLevelName string `json:"districtLevelName"`
+	DistrictLevelCode string `json:"districtLevelCode"`
+}
+
 func newIntegrationHandlers(deps integrationHandlerDependencies) map[string]typedRegistration {
 	return map[string]typedRegistration{
 		JobTypeURLCall: {
@@ -84,6 +98,11 @@ func newIntegrationHandlers(deps integrationHandlerDependencies) map[string]type
 			handler: typedHandlerWithValidate[rapidProReporterSyncConfig](func(ctx context.Context, exec JobExecution, cfg rapidProReporterSyncConfig) (JobResult, error) {
 				return runRapidProReporterSync(ctx, exec, cfg, deps)
 			}, validateRapidProReporterSyncConfig),
+		},
+		JobTypeDHIS2OrgUnitRefresh: {
+			handler: typedHandlerWithValidate[dhis2OrgUnitRefreshConfig](func(ctx context.Context, exec JobExecution, cfg dhis2OrgUnitRefreshConfig) (JobResult, error) {
+				return runDHIS2OrgUnitRefresh(ctx, exec, cfg, deps)
+			}, validateDHIS2OrgUnitRefreshConfig),
 		},
 	}
 }
@@ -240,6 +259,49 @@ func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidPr
 	return JobResult{Status: RunStatusSucceeded, ResultSummary: summary}, nil
 }
 
+func runDHIS2OrgUnitRefresh(ctx context.Context, exec JobExecution, cfg dhis2OrgUnitRefreshConfig, deps integrationHandlerDependencies) (JobResult, error) {
+	if deps.orgUnitRefresher == nil {
+		return JobResult{}, fmt.Errorf("org unit hierarchy refresh service is not configured")
+	}
+	result, err := deps.orgUnitRefresher.SyncHierarchy(ctx, orgunit.SyncRequest{
+		ServerUID:         cfg.ServerUID,
+		ServerCode:        cfg.ServerCode,
+		FullRefresh:       cfg.FullRefresh,
+		DryRun:            cfg.DryRun,
+		DistrictLevelName: cfg.DistrictLevelName,
+		DistrictLevelCode: cfg.DistrictLevelCode,
+	})
+	summary := map[string]any{
+		"jobType":             JobTypeDHIS2OrgUnitRefresh,
+		"runUid":              exec.Run.UID,
+		"serverCode":          result.ServerCode,
+		"dryRun":              result.DryRun,
+		"fullRefresh":         result.FullRefresh,
+		"districtLevelName":   result.DistrictLevelName,
+		"districtLevelCode":   result.DistrictLevelCode,
+		"levelsCount":         result.LevelsCount,
+		"groupsCount":         result.GroupsCount,
+		"attributesCount":     result.AttributesCount,
+		"orgUnitsCount":       result.OrgUnitsCount,
+		"groupMembersCount":   result.GroupMembersCount,
+		"deletedAssignments":  result.DeletedAssignments,
+		"deletedReporters":    result.DeletedReporters,
+		"resolvedDistrictUid": result.ResolvedDistrictUID,
+		"resolvedDistrict":    result.ResolvedDistrict,
+		"status":              result.Status,
+	}
+	if result.CompletedAt != nil {
+		summary["completedAt"] = result.CompletedAt
+	}
+	if result.ErrorMessage != "" {
+		summary["errorMessage"] = result.ErrorMessage
+	}
+	if err != nil {
+		return JobResult{ResultSummary: summary}, err
+	}
+	return JobResult{Status: RunStatusSucceeded, ResultSummary: summary}, nil
+}
+
 func effectiveRapidProReporterSyncLookbackMinutes(cfg rapidProReporterSyncConfig) int {
 	if cfg.LookbackMinutes <= 0 {
 		return 1
@@ -291,6 +353,17 @@ func validateRapidProReporterSyncConfig(cfg rapidProReporterSyncConfig) map[stri
 	}
 	if cfg.LookbackMinutes < 0 {
 		details["config.lookbackMinutes"] = []string{"must be zero or greater"}
+	}
+	return detailsOrNil(details)
+}
+
+func validateDHIS2OrgUnitRefreshConfig(cfg dhis2OrgUnitRefreshConfig) map[string]any {
+	details := map[string]any{}
+	if strings.TrimSpace(cfg.ServerUID) == "" && strings.TrimSpace(cfg.ServerCode) == "" {
+		details["config.serverCode"] = []string{"serverCode or serverUid is required"}
+	}
+	if strings.TrimSpace(cfg.DistrictLevelName) == "" && strings.TrimSpace(cfg.DistrictLevelCode) == "" {
+		details["config.districtLevelName"] = []string{"districtLevelName or districtLevelCode is required"}
 	}
 	return detailsOrNil(details)
 }

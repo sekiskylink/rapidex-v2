@@ -8,7 +8,7 @@ import (
 )
 
 func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
-	files, err := filepath.Glob("0000{2[6-9],3[0-1]}_*.sql")
+	files, err := filepath.Glob("0000{2[6-9],3[0-3]}_*.sql")
 	if err != nil {
 		t.Fatalf("glob migrations: %v", err)
 	}
@@ -17,7 +17,7 @@ func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("glob fallback migrations: %v", err)
 		}
-		extra, err := filepath.Glob("00003[0-1]_*.sql")
+		extra, err := filepath.Glob("00003[0-3]_*.sql")
 		if err != nil {
 			t.Fatalf("glob 00003x migrations: %v", err)
 		}
@@ -138,6 +138,38 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 	reporterGroupCatalogDown := readMigration(t, "000031_create_reporter_group_catalog.down.sql")
 	if !strings.Contains(reporterGroupCatalogDown, "DROP TABLE IF EXISTS reporter_group_catalog") {
 		t.Fatal("expected reporter group catalog rollback to drop reporter_group_catalog")
+	}
+
+	reporterBroadcastsUp := readMigration(t, "000032_create_reporter_broadcasts.up.sql")
+	if !strings.Contains(reporterBroadcastsUp, "CREATE TABLE reporter_broadcasts") {
+		t.Fatal("expected reporter broadcasts migration to create reporter_broadcasts")
+	}
+
+	hierarchySyncUp := readMigration(t, "000033_add_dhis2_hierarchy_sync_metadata.up.sql")
+	for _, fragment := range []string{
+		"CREATE TABLE IF NOT EXISTS org_unit_levels",
+		"CREATE TABLE IF NOT EXISTS org_unit_groups",
+		"CREATE TABLE IF NOT EXISTS org_unit_attributes",
+		"CREATE TABLE IF NOT EXISTS org_unit_group_members",
+		"ADD COLUMN IF NOT EXISTS district_level_name",
+		"ADD COLUMN IF NOT EXISTS last_counts JSONB",
+	} {
+		if !strings.Contains(hierarchySyncUp, fragment) {
+			t.Fatalf("expected hierarchy sync migration to contain %q", fragment)
+		}
+	}
+
+	hierarchySyncDown := readMigration(t, "000033_add_dhis2_hierarchy_sync_metadata.down.sql")
+	for _, fragment := range []string{
+		"DROP TABLE IF EXISTS org_unit_group_members",
+		"DROP TABLE IF EXISTS org_unit_attributes",
+		"DROP TABLE IF EXISTS org_unit_groups",
+		"DROP TABLE IF EXISTS org_unit_levels",
+		"DROP COLUMN IF EXISTS district_level_name",
+	} {
+		if !strings.Contains(hierarchySyncDown, fragment) {
+			t.Fatalf("expected hierarchy sync rollback to contain %q", fragment)
+		}
 	}
 }
 

@@ -46,6 +46,28 @@ interface OrgUnitListResponse {
   totalCount: number
 }
 
+interface SyncState {
+  lastStartedAt?: string | null
+  lastCompletedAt?: string | null
+  lastSyncedAt?: string | null
+  lastStatus?: string | null
+  lastError?: string | null
+  sourceServerCode?: string | null
+  districtLevelName?: string | null
+}
+
+interface SyncResult {
+  status: string
+  serverCode: string
+  dryRun: boolean
+  fullRefresh: boolean
+  districtLevelName: string
+  orgUnitsCount: number
+  deletedReporters: number
+  deletedAssignments: number
+  errorMessage?: string | null
+}
+
 type OrgUnitFormState = {
   code: string
   name: string
@@ -74,6 +96,15 @@ const emptyForm: OrgUnitFormState = {
   openingDate: '',
   extrasText: '{}',
   attributeValuesText: '{}',
+}
+
+const defaultSyncForm = {
+  serverCode: 'dhis2',
+  serverUid: '',
+  districtLevelName: 'District',
+  districtLevelCode: '',
+  dryRun: true,
+  fullRefresh: true,
 }
 
 const dataGridSx = {
@@ -127,10 +158,15 @@ export function OrgUnitsPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [syncDialogOpen, setSyncDialogOpen] = React.useState(false)
   const [viewing, setViewing] = React.useState<OrgUnit | null>(null)
   const [editing, setEditing] = React.useState<OrgUnit | null>(null)
   const [form, setForm] = React.useState<OrgUnitFormState>(emptyForm)
   const [submitting, setSubmitting] = React.useState(false)
+  const [syncing, setSyncing] = React.useState(false)
+  const [syncState, setSyncState] = React.useState<SyncState | null>(null)
+  const [syncResult, setSyncResult] = React.useState<SyncResult | null>(null)
+  const [syncForm, setSyncForm] = React.useState(defaultSyncForm)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -138,6 +174,8 @@ export function OrgUnitsPage() {
     try {
       const response = await apiRequest<OrgUnitListResponse>('/orgunits?page=0&pageSize=200')
       setItems(response.items ?? [])
+      const state = await apiRequest<SyncState>('/orgunits/sync-state')
+      setSyncState(state)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load facilities.')
     } finally {
@@ -209,6 +247,13 @@ export function OrgUnitsPage() {
     setForm(emptyForm)
   }
 
+  function closeSyncDialog() {
+    if (syncing) {
+      return
+    }
+    setSyncDialogOpen(false)
+  }
+
   async function submitOrgUnit() {
     setSubmitting(true)
     setError('')
@@ -253,6 +298,34 @@ export function OrgUnitsPage() {
     }
   }
 
+  async function runSync() {
+    setSyncing(true)
+    setError('')
+    setSyncResult(null)
+    try {
+      const response = await apiRequest<SyncResult>('/orgunits/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          serverCode: syncForm.serverCode.trim(),
+          serverUid: syncForm.serverUid.trim(),
+          districtLevelName: syncForm.districtLevelName.trim(),
+          districtLevelCode: syncForm.districtLevelCode.trim(),
+          dryRun: syncForm.dryRun,
+          fullRefresh: syncForm.fullRefresh,
+        }),
+      })
+      setSyncResult(response)
+      await load()
+      if (!response.dryRun) {
+        setSyncDialogOpen(false)
+      }
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to run DHIS2 hierarchy sync.')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const parentOptions = React.useMemo(
     () => items.filter((item) => item.id !== editing?.id),
     [editing?.id, items],
@@ -267,9 +340,16 @@ export function OrgUnitsPage() {
           </Typography>
           <Typography color="text.secondary">Rapidex organisation units and facility hierarchy.</Typography>
         </Box>
-        <Button variant="contained" size="small" startIcon={<AddCircleRoundedIcon />} onClick={() => openDialog()}>
-          New Facility
-        </Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          {currentUser?.permissions.includes('orgunits.write') ? (
+            <Button variant="outlined" size="small" onClick={() => setSyncDialogOpen(true)}>
+              Sync DHIS2 Hierarchy
+            </Button>
+          ) : null}
+          <Button variant="contained" size="small" startIcon={<AddCircleRoundedIcon />} onClick={() => openDialog()}>
+            New Facility
+          </Button>
+        </Stack>
       </Stack>
       {Boolean(currentUser?.isOrgUnitScopeRestricted && (currentUser.assignedOrgUnitIds?.length ?? 0) === 0) ? (
         <Alert severity="info" sx={{ mb: 2 }}>
@@ -278,6 +358,21 @@ export function OrgUnitsPage() {
       ) : null}
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {syncState?.lastStatus ? (
+        <Alert severity={syncState.lastStatus === 'failed' ? 'error' : syncState.lastStatus === 'succeeded' ? 'success' : 'info'} sx={{ mb: 2 }}>
+          Last hierarchy sync: {syncState.lastStatus}
+          {syncState.sourceServerCode ? ` via ${syncState.sourceServerCode}` : ''}
+          {syncState.lastCompletedAt ? ` at ${new Date(syncState.lastCompletedAt).toLocaleString()}` : ''}
+          {syncState.districtLevelName ? ` using district level ${syncState.districtLevelName}` : ''}
+          {syncState.lastError ? ` (${syncState.lastError})` : ''}
+        </Alert>
+      ) : null}
+      {syncResult ? (
+        <Alert severity={syncResult.status === 'failed' ? 'error' : syncResult.dryRun ? 'info' : 'success'} sx={{ mb: 2 }}>
+          {syncResult.dryRun ? 'Dry run complete.' : 'Hierarchy refresh complete.'} Imported {syncResult.orgUnitsCount} org units.
+          {!syncResult.dryRun ? ` Cleared ${syncResult.deletedReporters} reporters and ${syncResult.deletedAssignments} user assignments.` : ''}
+        </Alert>
+      ) : null}
 
       <DataGrid
         autoHeight
@@ -422,6 +517,37 @@ export function OrgUnitsPage() {
           <Button onClick={closeDialog} disabled={submitting}>Cancel</Button>
           <Button onClick={() => void submitOrgUnit()} disabled={submitting || !form.code.trim() || !form.name.trim()} variant="contained">
             {editing ? 'Save' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={syncDialogOpen} onClose={closeSyncDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Sync DHIS2 Hierarchy</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning">
+              Full refresh deletes local reporters and user-facility assignments before rebuilding the hierarchy from DHIS2.
+            </Alert>
+            <TextField label="Server Code" value={syncForm.serverCode} onChange={(event) => setSyncForm((current) => ({ ...current, serverCode: event.target.value }))} />
+            <TextField label="Server UID" value={syncForm.serverUid} onChange={(event) => setSyncForm((current) => ({ ...current, serverUid: event.target.value }))} helperText="Optional override when you prefer UID lookup." />
+            <TextField label="District Level Name" value={syncForm.districtLevelName} onChange={(event) => setSyncForm((current) => ({ ...current, districtLevelName: event.target.value }))} />
+            <TextField label="District Level Code" value={syncForm.districtLevelCode} onChange={(event) => setSyncForm((current) => ({ ...current, districtLevelCode: event.target.value }))} />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <Button variant={syncForm.dryRun ? 'contained' : 'outlined'} onClick={() => setSyncForm((current) => ({ ...current, dryRun: !current.dryRun }))}>
+                {syncForm.dryRun ? 'Dry Run Enabled' : 'Enable Dry Run'}
+              </Button>
+              <Button variant={syncForm.fullRefresh ? 'contained' : 'outlined'} color="warning" onClick={() => setSyncForm((current) => ({ ...current, fullRefresh: !current.fullRefresh }))}>
+                {syncForm.fullRefresh ? 'Full Refresh Enabled' : 'Enable Full Refresh'}
+              </Button>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeSyncDialog} disabled={syncing}>
+            Cancel
+          </Button>
+          <Button onClick={() => void runSync()} variant="contained" color={syncForm.dryRun ? 'primary' : 'warning'} disabled={syncing}>
+            {syncing ? 'Running…' : syncForm.dryRun ? 'Run Dry Sync' : 'Run Full Refresh'}
           </Button>
         </DialogActions>
       </Dialog>

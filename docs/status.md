@@ -1,5 +1,67 @@
 # Status
 
+## Milestone — DHIS2 Hierarchy Refresh and Scheduler Sync (Complete)
+
+### What changed
+- Added first-class DHIS2 hierarchy refresh support for RapidEx org units, including import of:
+  - organisation unit levels
+  - organisation unit groups
+  - organisation unit attributes
+  - organisation unit group memberships
+- Added new hierarchy metadata tables and extended sync-state tracking so each run now records:
+  - start and completion timestamps
+  - status and last error
+  - source server code
+  - district-level configuration
+  - imported and deleted row counts
+- Replaced the previous org-unit sync stub with a production-shaped hierarchy sync service that:
+  - resolves the DHIS2 integration server from existing integration-server records
+  - fetches and validates DHIS2 hierarchy metadata before applying a full refresh
+  - supports `dryRun` validation-only execution
+  - derives district from configured DHIS2 level metadata instead of a fixed local level assumption
+- Implemented the initial destructive full-refresh mode requested for rollout:
+  - clears `user_org_units`
+  - clears `reporters`
+  - clears existing org-unit hierarchy metadata
+  - imports a fresh DHIS2 hierarchy snapshot
+- Added manual hierarchy refresh APIs and surfaced them in both web and desktop Facilities pages with:
+  - latest sync-state visibility
+  - manual sync dialog
+  - explicit destructive-refresh warning
+- Added a new scheduler integration job type, `dhis2_org_unit_refresh`, including:
+  - typed config validation
+  - default disabled seed job
+  - worker execution through the shared scheduler runtime
+- Updated reporter district derivation so new or edited reporters now resolve district from the configured DHIS2 district level when sync metadata exists.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-24-dhis2-hierarchy-refresh.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - hierarchy sync service dry-run and failure-state coverage
+  - scheduler integration coverage for the new `dhis2_org_unit_refresh` job type
+  - scheduler seed coverage for the default disabled hierarchy-refresh job
+  - migration coverage for the new hierarchy metadata tables and sync-state columns
+- Web:
+  - scheduler job form coverage for the new DHIS2 hierarchy refresh config
+- Desktop:
+  - matching scheduler job form coverage for the new DHIS2 hierarchy refresh config
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Backend binary build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api ./cmd/worker ./cmd/migrate`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web scheduler page tests: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop scheduler page tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- The first hierarchy refresh mode is intentionally destructive for local reporters and user-org assignments; automatic remapping is not part of this milestone.
+- Existing non-blocking jsdom/MUI `anchorEl` and MUI X `rowCount` warnings still appear in frontend test runs.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — Scheduled RapidPro Reporter Sync Logging (Complete)
 
 ### What changed

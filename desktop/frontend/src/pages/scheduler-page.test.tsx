@@ -356,6 +356,87 @@ describe('desktop scheduler pages', () => {
     })
   })
 
+  it('submits DHIS2 org unit refresh scheduled job config through backend API', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let createPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['scheduler.read', 'scheduler.write'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              id: 9,
+              uid: 'sch-9',
+              code: 'dhis2-orgunits',
+              name: 'DHIS2 Org Units',
+              description: '',
+              jobCategory: 'integration',
+              jobType: 'dhis2_org_unit_refresh',
+              scheduleType: 'interval',
+              scheduleExpr: '24h',
+              timezone: 'UTC',
+              enabled: false,
+              allowConcurrentRuns: false,
+              config: {},
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/9')) {
+          return new Response(JSON.stringify({ id: 9, uid: 'sch-9', code: 'dhis2-orgunits', name: 'DHIS2 Org Units', config: {} }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/scheduler/new', store)
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'dhis2-orgunits' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'DHIS2 Org Units' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Org Unit Refresh' }))
+    fireEvent.change(screen.getByLabelText('Server Code'), { target: { value: 'dhis2-prod' } })
+    fireEvent.change(screen.getByLabelText('District Level Name'), { target: { value: 'District' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'dhis2-orgunits',
+      jobType: 'dhis2_org_unit_refresh',
+      config: {
+        serverCode: 'dhis2-prod',
+        districtLevelName: 'District',
+        dryRun: false,
+        fullRefresh: true,
+      },
+    })
+  })
+
   it('submits request exchange scheduled job config through backend API', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

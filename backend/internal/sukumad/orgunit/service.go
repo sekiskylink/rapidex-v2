@@ -18,6 +18,7 @@ type orgUnitScopeResolver interface {
 type Service struct {
 	repo          Repository
 	scopeResolver orgUnitScopeResolver
+	syncService   *HierarchySyncService
 }
 
 // NewService constructs a new Service from a repository implementation.
@@ -30,6 +31,14 @@ func (s *Service) WithScopeResolver(resolver orgUnitScopeResolver) *Service {
 		return s
 	}
 	s.scopeResolver = resolver
+	return s
+}
+
+func (s *Service) WithSyncService(syncService *HierarchySyncService) *Service {
+	if s == nil {
+		return s
+	}
+	s.syncService = syncService
 	return s
 }
 
@@ -172,6 +181,20 @@ func (s *Service) DeleteForUser(ctx context.Context, userID, id int64) error {
 		}
 	}
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *Service) SyncHierarchy(ctx context.Context, req SyncRequest) (SyncResult, error) {
+	if s == nil || s.syncService == nil {
+		return SyncResult{}, errors.New("hierarchy sync is not configured")
+	}
+	return s.syncService.Sync(ctx, req)
+}
+
+func (s *Service) GetSyncState(ctx context.Context) (SyncState, error) {
+	if s == nil || s.syncService == nil {
+		return SyncState{}, errors.New("hierarchy sync is not configured")
+	}
+	return s.syncService.GetState(ctx)
 }
 
 func (s *Service) applyScope(ctx context.Context, userID int64, query ListQuery) (ListQuery, error) {

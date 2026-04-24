@@ -166,7 +166,9 @@ func run() error {
 	sukumadRateLimitService := sukumadratelimit.NewService(sukumadratelimit.NewRepository(database))
 	sukumadObservabilityService := observability.NewService(observability.NewRepository(database, sukumadWorkerService, sukumadRateLimitService))
 	sukumadDashboardService := dashboard.NewService(dashboard.NewRepository(database))
-	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database)).WithScopeResolver(sukumadUserOrgUnitService)
+	sukumadOrgUnitRepo := orgunit.NewPgRepository(database)
+	sukumadOrgUnitSyncService := orgunit.NewHierarchySyncService(sukumadOrgUnitRepo, sukumadServerService, nil)
+	sukumadOrgUnitService := orgunit.NewService(sukumadOrgUnitRepo).WithScopeResolver(sukumadUserOrgUnitService).WithSyncService(sukumadOrgUnitSyncService)
 	sukumadRapidProClient := rapidpro.NewClient(nil)
 	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService).
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
@@ -214,6 +216,7 @@ func run() error {
 	sukumadRequestService.WithDeliveryService(sukumadDeliveryService).WithServerService(sukumadServerService).WithEventWriter(sukumadObservabilityService)
 	sukumadSchedulerService.WithIntegrationServices(sukumadServerService, sukumadRequestService, sukumadDHIS2Service)
 	sukumadSchedulerService.WithRapidProReporterSyncService(sukumadReporterService)
+	sukumadSchedulerService.WithOrgUnitHierarchySyncService(sukumadOrgUnitService)
 	sukumadAsyncService.WithReconciliation(sukumadDeliveryService, sukumadRequestService).WithEventWriter(sukumadObservabilityService)
 	sukumadWorkerService.WithEventWriter(sukumadObservabilityService)
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)

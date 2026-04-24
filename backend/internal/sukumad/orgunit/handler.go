@@ -10,6 +10,27 @@ import (
 // RegisterRoutes registers the organisation unit API handlers under the provided router group.
 // It expects the group to be configured with authentication and RBAC middleware upstream.
 func RegisterRoutes(rg *gin.RouterGroup, svc *Service) {
+	rg.GET("/orgunits/sync-state", func(c *gin.Context) {
+		result, err := svc.GetSyncState(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
+	rg.POST("/orgunits/sync", func(c *gin.Context) {
+		var input SyncRequest
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		result, err := svc.SyncHierarchy(c.Request.Context(), input)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "result": result})
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
 	rg.GET("/orgunits", func(c *gin.Context) {
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 		pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))

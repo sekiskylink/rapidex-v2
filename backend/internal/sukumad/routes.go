@@ -325,6 +325,30 @@ func registerOrgUnitRoutes(
 		}
 		c.JSON(http.StatusOK, result)
 	})
+	group.GET("/orgunits/sync-state", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsRead), func(c *gin.Context) {
+		result, err := service.GetSyncState(c.Request.Context())
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
+	group.POST("/orgunits/sync", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsWrite), func(c *gin.Context) {
+		var input orgunit.SyncRequest
+		if err := c.ShouldBindJSON(&input); err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"body": []string{"invalid JSON payload"}}))
+			return
+		}
+		result, err := service.SyncHierarchy(c.Request.Context(), input)
+		if err != nil {
+			apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"sync":   []string{err.Error()},
+				"result": result,
+			}))
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
 	group.POST("/orgunits", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsWrite), func(c *gin.Context) {
 		userID, ok := currentUserID(c)
 		if !ok {

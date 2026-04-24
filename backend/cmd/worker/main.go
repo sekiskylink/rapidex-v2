@@ -116,7 +116,9 @@ func run() error {
 	sukumadReporterService := reporter.NewService(reporter.NewPgRepository(database), auditService).
 		WithRapidProIntegration(sukumadServerService, rapidpro.NewClient(nil))
 	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database))
-	sukumadOrgUnitService := orgunit.NewService(orgunit.NewPgRepository(database)).WithScopeResolver(sukumadUserOrgUnitService)
+	sukumadOrgUnitRepo := orgunit.NewPgRepository(database)
+	sukumadOrgUnitSyncService := orgunit.NewHierarchySyncService(sukumadOrgUnitRepo, sukumadServerService, nil)
+	sukumadOrgUnitService := orgunit.NewService(sukumadOrgUnitRepo).WithScopeResolver(sukumadUserOrgUnitService).WithSyncService(sukumadOrgUnitSyncService)
 	sukumadReporterGroupService := reportergroup.NewService(reportergroup.NewSQLRepository(database)).
 		WithRapidProIntegration(sukumadServerService, rapidpro.NewClient(nil))
 	sukumadReporterService = sukumadReporterService.
@@ -141,6 +143,7 @@ func run() error {
 	sukumadRetentionService.WithEventWriter(sukumadObservabilityService)
 	sukumadSchedulerService.WithIntegrationServices(sukumadServerService, sukumadRequestService, sukumadDHIS2Service)
 	sukumadSchedulerService.WithRapidProReporterSyncService(sukumadReporterService)
+	sukumadSchedulerService.WithOrgUnitHierarchySyncService(sukumadOrgUnitService)
 	schedulerRuntime := scheduler.NewRuntime(sukumadSchedulerService, func() scheduler.RuntimeConfig {
 		nextCfg := config.Get().Sukumad.Scheduler
 		return scheduler.RuntimeConfig{

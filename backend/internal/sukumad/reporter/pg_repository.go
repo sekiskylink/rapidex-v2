@@ -681,17 +681,26 @@ func (r *PgRepository) resolveLocationFields(ctx context.Context, tx *sqlx.Tx, o
 		ID             int64  `db:"id"`
 		Name           string `db:"name"`
 		HierarchyLevel int    `db:"hierarchy_level"`
+		LevelName      string `db:"level_name"`
+		LevelCode      string `db:"level_code"`
+	}
+	type districtConfig struct {
+		Name string `db:"district_level_name"`
+		Code string `db:"district_level_code"`
 	}
 	var targetPath string
 	if err := tx.GetContext(ctx, &targetPath, `SELECT path FROM org_units WHERE id = $1`, orgUnitID); err != nil {
 		return "", nil, err
 	}
+	cfg := districtConfig{}
+	_ = tx.GetContext(ctx, &cfg, `SELECT district_level_name, district_level_code FROM org_unit_sync_state WHERE id = 1`)
 	rows := []locationRow{}
 	if err := tx.SelectContext(ctx, &rows, `
-		SELECT id, name, hierarchy_level
-		FROM org_units
-		WHERE $1 LIKE path || '%'
-		ORDER BY hierarchy_level ASC, path ASC
+		SELECT ou.id, ou.name, ou.hierarchy_level, COALESCE(l.name, '') AS level_name, COALESCE(l.code, '') AS level_code
+		FROM org_units ou
+		LEFT JOIN org_unit_levels l ON l.level = ou.hierarchy_level
+		WHERE $1 LIKE ou.path || '%'
+		ORDER BY ou.hierarchy_level ASC, ou.path ASC
 	`, targetPath); err != nil {
 		return "", nil, err
 	}
@@ -702,7 +711,9 @@ func (r *PgRepository) resolveLocationFields(ctx context.Context, tx *sqlx.Tx, o
 	var districtID *int64
 	for _, row := range rows {
 		parts = append(parts, row.Name)
-		if row.HierarchyLevel == 2 && districtID == nil {
+		if districtID == nil && ((cfg.Name != "" && strings.EqualFold(strings.TrimSpace(row.LevelName), strings.TrimSpace(cfg.Name))) ||
+			(cfg.Code != "" && strings.EqualFold(strings.TrimSpace(row.LevelCode), strings.TrimSpace(cfg.Code))) ||
+			(cfg.Name == "" && cfg.Code == "" && row.HierarchyLevel == 2)) {
 			id := row.ID
 			districtID = &id
 		}

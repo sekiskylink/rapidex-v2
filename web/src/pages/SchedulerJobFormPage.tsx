@@ -66,6 +66,7 @@ const jobTypeOptions = [
   { value: 'url_call', label: 'URL Call' },
   { value: 'request_exchange', label: 'Request Exchange' },
   { value: 'rapidpro_reporter_sync', label: 'RapidPro Reporter Sync' },
+  { value: 'dhis2_org_unit_refresh', label: 'DHIS2 Org Unit Refresh' },
   { value: 'metadata_sync', label: 'Metadata Sync' },
   { value: 'export_pending_requests', label: 'Export Pending Requests' },
   { value: 'reconciliation_pull', label: 'Reconciliation Pull' },
@@ -116,6 +117,15 @@ interface RapidProReporterSyncConfigState {
   lookbackMinutes: string
 }
 
+interface DHIS2OrgUnitRefreshConfigState {
+  serverUid: string
+  serverCode: string
+  fullRefresh: boolean
+  dryRun: boolean
+  districtLevelName: string
+  districtLevelCode: string
+}
+
 const defaultMaintenanceConfigs: Record<string, MaintenanceConfigState> = {
   archive_old_requests: { dryRun: false, batchSize: '100', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
   purge_old_logs: { dryRun: false, batchSize: '500', maxAgeDays: '30', staleCutoffMinutes: '', staleCutoffHours: '' },
@@ -149,6 +159,15 @@ const defaultRapidProReporterSyncConfig: RapidProReporterSyncConfigState = {
   lookbackMinutes: '1',
 }
 
+const defaultDHIS2OrgUnitRefreshConfig: DHIS2OrgUnitRefreshConfigState = {
+  serverUid: '',
+  serverCode: 'dhis2',
+  fullRefresh: true,
+  dryRun: false,
+  districtLevelName: 'District',
+  districtLevelCode: '',
+}
+
 function isMaintenanceJobType(jobType: string) {
   return maintenanceJobTypes.has(jobType)
 }
@@ -163,6 +182,10 @@ function isRequestExchangeJobType(jobType: string) {
 
 function isRapidProReporterSyncJobType(jobType: string) {
   return jobType === 'rapidpro_reporter_sync'
+}
+
+function isDHIS2OrgUnitRefreshJobType(jobType: string) {
+  return jobType === 'dhis2_org_unit_refresh'
 }
 
 function toStringNumber(value: unknown, fallback = '') {
@@ -225,6 +248,17 @@ function getRapidProReporterSyncConfigState(config: Record<string, unknown>): Ra
   }
 }
 
+function getDHIS2OrgUnitRefreshConfigState(config: Record<string, unknown>): DHIS2OrgUnitRefreshConfigState {
+  return {
+    serverUid: typeof config.serverUid === 'string' ? config.serverUid : '',
+    serverCode: typeof config.serverCode === 'string' && config.serverCode ? config.serverCode : defaultDHIS2OrgUnitRefreshConfig.serverCode,
+    fullRefresh: config.fullRefresh !== false,
+    dryRun: Boolean(config.dryRun ?? defaultDHIS2OrgUnitRefreshConfig.dryRun),
+    districtLevelName: typeof config.districtLevelName === 'string' && config.districtLevelName ? config.districtLevelName : defaultDHIS2OrgUnitRefreshConfig.districtLevelName,
+    districtLevelCode: typeof config.districtLevelCode === 'string' ? config.districtLevelCode : '',
+  }
+}
+
 function parseOptionalInt(value: string) {
   const trimmed = value.trim()
   if (!trimmed) {
@@ -274,6 +308,17 @@ function buildRapidProReporterSyncConfig(config: RapidProReporterSyncConfigState
   }
 }
 
+function buildDHIS2OrgUnitRefreshConfig(config: DHIS2OrgUnitRefreshConfigState) {
+  return {
+    serverUid: config.serverUid.trim(),
+    serverCode: config.serverCode.trim(),
+    fullRefresh: config.fullRefresh,
+    dryRun: config.dryRun,
+    districtLevelName: config.districtLevelName.trim(),
+    districtLevelCode: config.districtLevelCode.trim(),
+  }
+}
+
 function statusChip(status: string) {
   const normalized = status.trim().toLowerCase()
   const color =
@@ -315,6 +360,7 @@ export function SchedulerJobFormPage() {
   const [urlCallConfig, setURLCallConfig] = React.useState<URLCallConfigState>(defaultURLCallConfig)
   const [requestExchangeConfig, setRequestExchangeConfig] = React.useState<RequestExchangeConfigState>(defaultRequestExchangeConfig)
   const [rapidProReporterSyncConfig, setRapidProReporterSyncConfig] = React.useState<RapidProReporterSyncConfigState>(defaultRapidProReporterSyncConfig)
+  const [dhis2OrgUnitRefreshConfig, setDHIS2OrgUnitRefreshConfig] = React.useState<DHIS2OrgUnitRefreshConfigState>(defaultDHIS2OrgUnitRefreshConfig)
 
   React.useEffect(() => {
     if (!isEdit || !jobId) {
@@ -324,6 +370,7 @@ export function SchedulerJobFormPage() {
       setURLCallConfig(defaultURLCallConfig)
       setRequestExchangeConfig(defaultRequestExchangeConfig)
       setRapidProReporterSyncConfig(defaultRapidProReporterSyncConfig)
+      setDHIS2OrgUnitRefreshConfig(defaultDHIS2OrgUnitRefreshConfig)
       return
     }
 
@@ -353,6 +400,7 @@ export function SchedulerJobFormPage() {
         setURLCallConfig(getURLCallConfigState(response.config ?? {}))
         setRequestExchangeConfig(getRequestExchangeConfigState(response.config ?? {}))
         setRapidProReporterSyncConfig(getRapidProReporterSyncConfigState(response.config ?? {}))
+        setDHIS2OrgUnitRefreshConfig(getDHIS2OrgUnitRefreshConfigState(response.config ?? {}))
       })
       .catch(async (error) => {
         if (!active) {
@@ -405,6 +453,8 @@ export function SchedulerJobFormPage() {
       setRequestExchangeConfig(defaultRequestExchangeConfig)
     } else if (isRapidProReporterSyncJobType(nextJobType)) {
       setRapidProReporterSyncConfig(defaultRapidProReporterSyncConfig)
+    } else if (isDHIS2OrgUnitRefreshJobType(nextJobType)) {
+      setDHIS2OrgUnitRefreshConfig(defaultDHIS2OrgUnitRefreshConfig)
     }
   }
 
@@ -419,6 +469,8 @@ export function SchedulerJobFormPage() {
       setRequestExchangeConfig(getRequestExchangeConfigState(record?.config ?? {}))
     } else if (isRapidProReporterSyncJobType(jobType)) {
       setRapidProReporterSyncConfig(getRapidProReporterSyncConfigState(record?.config ?? {}))
+    } else if (isDHIS2OrgUnitRefreshJobType(jobType)) {
+      setDHIS2OrgUnitRefreshConfig(getDHIS2OrgUnitRefreshConfigState(record?.config ?? {}))
     }
   }
 
@@ -467,6 +519,8 @@ export function SchedulerJobFormPage() {
       }
     } else if (isRapidProReporterSyncJobType(form.jobType)) {
       configValue = buildRapidProReporterSyncConfig(rapidProReporterSyncConfig)
+    } else if (isDHIS2OrgUnitRefreshJobType(form.jobType)) {
+      configValue = buildDHIS2OrgUnitRefreshConfig(dhis2OrgUnitRefreshConfig)
     } else {
       try {
         configValue = JSON.parse(form.configText || '{}') as Record<string, unknown>
@@ -820,6 +874,68 @@ export function SchedulerJobFormPage() {
                   <Switch
                     checked={rapidProReporterSyncConfig.dryRun}
                     onChange={(event) => setRapidProReporterSyncConfig((current) => ({ ...current, dryRun: event.target.checked }))}
+                    disabled={loading || saving}
+                  />
+                }
+                label="Dry Run"
+              />
+            </Stack>
+          ) : isDHIS2OrgUnitRefreshJobType(form.jobType) ? (
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">DHIS2 Org Unit Refresh Configuration</Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField
+                  label="Server Code"
+                  value={dhis2OrgUnitRefreshConfig.serverCode}
+                  onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, serverCode: event.target.value }))}
+                  fullWidth
+                  disabled={loading || saving}
+                  helperText="Recommended when the DHIS2 integration server has a stable code."
+                />
+                <TextField
+                  label="Server UID"
+                  value={dhis2OrgUnitRefreshConfig.serverUid}
+                  onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, serverUid: event.target.value }))}
+                  fullWidth
+                  disabled={loading || saving}
+                  helperText="Optional override when you prefer UID lookup."
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField
+                  label="District Level Name"
+                  value={dhis2OrgUnitRefreshConfig.districtLevelName}
+                  onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, districtLevelName: event.target.value }))}
+                  fullWidth
+                  disabled={loading || saving}
+                />
+                <TextField
+                  label="District Level Code"
+                  value={dhis2OrgUnitRefreshConfig.districtLevelCode}
+                  onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, districtLevelCode: event.target.value }))}
+                  fullWidth
+                  disabled={loading || saving}
+                  helperText="Optional fallback if level names vary."
+                />
+              </Stack>
+              <Alert severity="warning">
+                Full refresh deletes local reporters and user-facility assignments before rebuilding the hierarchy.
+              </Alert>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={dhis2OrgUnitRefreshConfig.fullRefresh}
+                    onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, fullRefresh: event.target.checked }))}
+                    disabled={loading || saving}
+                  />
+                }
+                label="Full Refresh"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={dhis2OrgUnitRefreshConfig.dryRun}
+                    onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, dryRun: event.target.checked }))}
                     disabled={loading || saving}
                   />
                 }

@@ -260,6 +260,57 @@ describe('scheduler pages', () => {
     })
   })
 
+  it('submits DHIS2 org unit refresh scheduled job config through API', async () => {
+    authenticate(['scheduler.read', 'scheduler.write'])
+    let createPayload: Record<string, unknown> | null = null
+    apiRequestSpy.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/scheduler/jobs' && init?.method === 'POST') {
+        createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+        return {
+          id: 9,
+          uid: 'sch-9',
+          code: 'dhis2-orgunits',
+          name: 'DHIS2 Org Units',
+          description: '',
+          jobCategory: 'integration',
+          jobType: 'dhis2_org_unit_refresh',
+          scheduleType: 'interval',
+          scheduleExpr: '24h',
+          timezone: 'UTC',
+          enabled: false,
+          allowConcurrentRuns: false,
+          config: {},
+        }
+      }
+      if (path === '/scheduler/jobs/9') {
+        return { id: 9, uid: 'sch-9', code: 'dhis2-orgunits', name: 'DHIS2 Org Units', config: {}, latestRunStatus: '' }
+      }
+      return {}
+    })
+
+    renderRoute('/scheduler/new')
+
+    fireEvent.change(await screen.findByLabelText('Code'), { target: { value: 'dhis2-orgunits' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'DHIS2 Org Units' } })
+    fireEvent.mouseDown(screen.getByLabelText('Job Type'))
+    fireEvent.click(await screen.findByRole('option', { name: 'DHIS2 Org Unit Refresh' }))
+    fireEvent.change(screen.getByLabelText('Server Code'), { target: { value: 'dhis2-prod' } })
+    fireEvent.change(screen.getByLabelText('District Level Name'), { target: { value: 'District' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
+
+    await waitFor(() => expect(createPayload).not.toBeNull())
+    expect(createPayload).toMatchObject({
+      code: 'dhis2-orgunits',
+      jobType: 'dhis2_org_unit_refresh',
+      config: {
+        serverCode: 'dhis2-prod',
+        districtLevelName: 'District',
+        dryRun: false,
+        fullRefresh: true,
+      },
+    })
+  })
+
   it('submits request exchange scheduled job config through API', async () => {
     authenticate(['scheduler.read', 'scheduler.write'])
     let createPayload: Record<string, unknown> | null = null

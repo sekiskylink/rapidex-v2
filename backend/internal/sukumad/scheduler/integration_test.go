@@ -10,6 +10,7 @@ import (
 
 	"basepro/backend/internal/logging"
 	"basepro/backend/internal/sukumad/delivery"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/reporter"
 	requests "basepro/backend/internal/sukumad/request"
 	sukumadserver "basepro/backend/internal/sukumad/server"
@@ -50,6 +51,12 @@ type fakeSchedulerReporterSyncer struct {
 	err        error
 }
 
+type fakeSchedulerOrgUnitRefresher struct {
+	input  orgunit.SyncRequest
+	result orgunit.SyncResult
+	err    error
+}
+
 func testIntPtr(value int) *int {
 	return &value
 }
@@ -64,6 +71,11 @@ func (f *fakeSchedulerReporterSyncer) SyncUpdatedSince(_ context.Context, since 
 	f.limit = limit
 	f.onlyActive = onlyActive
 	f.dryRun = dryRun
+	return f.result, f.err
+}
+
+func (f *fakeSchedulerOrgUnitRefresher) SyncHierarchy(_ context.Context, input orgunit.SyncRequest) (orgunit.SyncResult, error) {
+	f.input = input
 	return f.result, f.err
 }
 
@@ -344,6 +356,61 @@ func TestCreateScheduledJobRejectsNegativeRapidProReporterSyncLookback(t *testin
 	})
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestDHIS2OrgUnitRefreshSchedulerJobRunsHierarchySync(t *testing.T) {
+	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+	refresher := &fakeSchedulerOrgUnitRefresher{
+		result: orgunit.SyncResult{
+			ServerCode:         "dhis2",
+			DryRun:             true,
+			FullRefresh:        true,
+			DistrictLevelName:  "District",
+			OrgUnitsCount:      24,
+			DeletedAssignments: 0,
+			DeletedReporters:   0,
+			Status:             "succeeded",
+		},
+	}
+	svc := NewService(NewRepository()).
+		WithClock(func() time.Time { return now }).
+		WithIntegrationHandlers(integrationHandlerDependencies{orgUnitRefresher: refresher})
+
+	job, err := svc.CreateScheduledJob(context.Background(), CreateInput{
+		Code:         "dhis2-orgunits",
+		Name:         "DHIS2 Org Units",
+		JobCategory:  JobCategoryIntegration,
+		JobType:      JobTypeDHIS2OrgUnitRefresh,
+		ScheduleType: ScheduleTypeInterval,
+		ScheduleExpr: "24h",
+		Timezone:     "UTC",
+		Enabled:      true,
+		Config: map[string]any{
+			"serverCode":        "dhis2",
+			"fullRefresh":       true,
+			"dryRun":            true,
+			"districtLevelName": "District",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if _, err := svc.RunNow(context.Background(), nil, job.ID); err != nil {
+		t.Fatalf("run now: %v", err)
+	}
+	if err := svc.RunPendingSchedulerRuns(context.Background(), 102, 1); err != nil {
+		t.Fatalf("run pending scheduler runs: %v", err)
+	}
+	if refresher.input.ServerCode != "dhis2" || refresher.input.DistrictLevelName != "District" || !refresher.input.DryRun {
+		t.Fatalf("unexpected hierarchy refresh input: %+v", refresher.input)
+	}
+	runs, err := svc.ListJobRuns(context.Background(), job.ID, RunListQuery{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if len(runs.Items) != 1 || runs.Items[0].ResultSummary["orgUnitsCount"] != 24 {
+		t.Fatalf("expected hierarchy sync summary, got %+v", runs.Items)
 	}
 }
 
