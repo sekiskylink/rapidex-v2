@@ -267,7 +267,10 @@ function ServerFormDialog({
             value={form.baseUrl}
             onChange={(event) => onChange({ baseUrl: event.target.value })}
             error={Boolean(errors.baseUrl)}
-            helperText={errors.baseUrl}
+            helperText={
+              errors.baseUrl
+                || 'For DHIS2, use the instance root URL, for example https://play.im.dhis2.org/dev. Do not include /api or a specific endpoint.'
+            }
             fullWidth
           />
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>

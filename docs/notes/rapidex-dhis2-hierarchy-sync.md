@@ -19,6 +19,9 @@ Date: 2026-04-24
 ## Sync Model
 
 - Hierarchy refresh resolves its source from the existing Sukumad integration-server records for DHIS2.
+- The DHIS2 integration server `baseUrl` must be the DHIS2 instance root, including any deployment context path:
+  - valid examples: `https://play.im.dhis2.org/dev`, `https://dhis.example.org`, `https://dhis.example.org/dhis`
+  - do not include `/api` or a specific metadata endpoint such as `/api/organisationUnits.json`
 - Each run fetches DHIS2 metadata for:
   - organisation unit levels
   - organisation unit groups
