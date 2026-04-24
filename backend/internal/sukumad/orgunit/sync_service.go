@@ -147,6 +147,7 @@ func (s *HierarchySyncService) Sync(ctx context.Context, req SyncRequest) (SyncR
 		slog.String("server_code", serverRecord.Code),
 		slog.Bool("dry_run", normalized.DryRun),
 		slog.Bool("full_refresh", normalized.FullRefresh),
+		slog.Bool("initial_sync", normalized.InitialSync),
 		slog.String("district_level_name", normalized.DistrictLevelName),
 		slog.String("district_level_code", normalized.DistrictLevelCode),
 	)
@@ -204,6 +205,10 @@ func (s *HierarchySyncService) Sync(ctx context.Context, req SyncRequest) (SyncR
 		slog.Int("group_members_count", result.GroupMembersCount),
 		slog.Int("deleted_reporters", result.DeletedReporters),
 		slog.Int("deleted_assignments", result.DeletedAssignments),
+		slog.Int("orphaned_reporters", result.OrphanedReporters),
+		slog.Int("remapped_reporters", result.RemappedReporters),
+		slog.Int("reassigned_assignments", result.ReassignedAssignments),
+		slog.Int("dropped_assignments", result.DroppedAssignments),
 	)
 	return result, nil
 }
@@ -213,6 +218,7 @@ func normalizeSyncRequest(req SyncRequest) (SyncRequest, error) {
 		ServerUID:         strings.TrimSpace(req.ServerUID),
 		ServerCode:        strings.TrimSpace(req.ServerCode),
 		FullRefresh:       req.FullRefresh,
+		InitialSync:       req.InitialSync,
 		DryRun:            req.DryRun,
 		DistrictLevelName: strings.TrimSpace(req.DistrictLevelName),
 		DistrictLevelCode: strings.TrimSpace(req.DistrictLevelCode),

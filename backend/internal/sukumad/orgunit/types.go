@@ -103,30 +103,35 @@ type SyncRequest struct {
 	ServerUID         string `json:"serverUid"`
 	ServerCode        string `json:"serverCode"`
 	FullRefresh       bool   `json:"fullRefresh"`
+	InitialSync       bool   `json:"initialSync"`
 	DryRun            bool   `json:"dryRun"`
 	DistrictLevelName string `json:"districtLevelName"`
 	DistrictLevelCode string `json:"districtLevelCode"`
 }
 
 type SyncResult struct {
-	ServerCode          string     `json:"serverCode"`
-	DryRun              bool       `json:"dryRun"`
-	FullRefresh         bool       `json:"fullRefresh"`
-	DistrictLevelName   string     `json:"districtLevelName"`
-	DistrictLevelCode   string     `json:"districtLevelCode"`
-	ResolvedDistrictUID string     `json:"resolvedDistrictUid"`
-	ResolvedDistrict    string     `json:"resolvedDistrictName"`
-	StartedAt           time.Time  `json:"startedAt"`
-	CompletedAt         *time.Time `json:"completedAt,omitempty"`
-	Status              string     `json:"status"`
-	LevelsCount         int        `json:"levelsCount"`
-	GroupsCount         int        `json:"groupsCount"`
-	AttributesCount     int        `json:"attributesCount"`
-	OrgUnitsCount       int        `json:"orgUnitsCount"`
-	GroupMembersCount   int        `json:"groupMembersCount"`
-	DeletedReporters    int        `json:"deletedReporters"`
-	DeletedAssignments  int        `json:"deletedAssignments"`
-	ErrorMessage        string     `json:"errorMessage,omitempty"`
+	ServerCode            string     `json:"serverCode"`
+	DryRun                bool       `json:"dryRun"`
+	FullRefresh           bool       `json:"fullRefresh"`
+	DistrictLevelName     string     `json:"districtLevelName"`
+	DistrictLevelCode     string     `json:"districtLevelCode"`
+	ResolvedDistrictUID   string     `json:"resolvedDistrictUid"`
+	ResolvedDistrict      string     `json:"resolvedDistrictName"`
+	StartedAt             time.Time  `json:"startedAt"`
+	CompletedAt           *time.Time `json:"completedAt,omitempty"`
+	Status                string     `json:"status"`
+	LevelsCount           int        `json:"levelsCount"`
+	GroupsCount           int        `json:"groupsCount"`
+	AttributesCount       int        `json:"attributesCount"`
+	OrgUnitsCount         int        `json:"orgUnitsCount"`
+	GroupMembersCount     int        `json:"groupMembersCount"`
+	DeletedReporters      int        `json:"deletedReporters"`
+	DeletedAssignments    int        `json:"deletedAssignments"`
+	OrphanedReporters     int        `json:"orphanedReporters"`
+	RemappedReporters     int        `json:"remappedReporters"`
+	ReassignedAssignments int        `json:"reassignedAssignments"`
+	DroppedAssignments    int        `json:"droppedAssignments"`
+	ErrorMessage          string     `json:"errorMessage,omitempty"`
 }
 
 type SyncState struct {

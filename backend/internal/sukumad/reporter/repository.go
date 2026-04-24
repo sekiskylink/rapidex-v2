@@ -55,6 +55,9 @@ type Repository interface {
 	// UpdateRapidProStatus updates RapidPro linkage fields without mutating the local change timestamp watermark.
 	UpdateRapidProStatus(ctx context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error)
 
+	// MarkForSync marks a reporter unsynced without mutating RapidPro linkage identifiers.
+	MarkForSync(ctx context.Context, id int64) (Reporter, error)
+
 	// Create inserts a new reporter and returns the persisted record.
 	Create(ctx context.Context, reporter Reporter) (Reporter, error)
 

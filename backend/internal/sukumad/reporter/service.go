@@ -71,16 +71,17 @@ type reporterRecentReportsLookup interface {
 
 // Service encapsulates business logic for reporters and depends on a Repository.
 type Service struct {
-	repo             Repository
-	auditService     *audit.Service
-	serverLookup     rapidProServerLookup
-	rapidProClient   rapidProClient
-	rapidProSettings rapidProReporterSyncSettingsProvider
-	orgUnitLookup    orgUnitLookup
-	groupCatalog     reporterGroupCatalog
-	scopeResolver    reporterScopeResolver
-	recentReports    reporterRecentReportsLookup
-	clock            func() time.Time
+	repo               Repository
+	auditService       *audit.Service
+	serverLookup       rapidProServerLookup
+	rapidProClient     rapidProClient
+	rapidProSettings   rapidProReporterSyncSettingsProvider
+	orgUnitLookup      orgUnitLookup
+	groupCatalog       reporterGroupCatalog
+	scopeResolver      reporterScopeResolver
+	recentReports      reporterRecentReportsLookup
+	clock              func() time.Time
+	facilitySyncRunner func(context.Context, Reporter)
 }
 
 // NewService constructs a new Service with the provided repository.
@@ -128,6 +129,14 @@ func (s *Service) WithClock(clock func() time.Time) *Service {
 		return s
 	}
 	s.clock = clock
+	return s
+}
+
+func (s *Service) WithFacilitySyncRunner(runner func(context.Context, Reporter)) *Service {
+	if s == nil {
+		return s
+	}
+	s.facilitySyncRunner = runner
 	return s
 }
 
@@ -370,6 +379,10 @@ func (s *Service) CreateForUser(ctx context.Context, userID int64, r Reporter) (
 
 // Update validates and updates an existing reporter.
 func (s *Service) Update(ctx context.Context, r Reporter) (Reporter, error) {
+	existing, err := s.repo.GetByID(ctx, r.ID)
+	if err != nil {
+		return Reporter{}, mapReporterLookupError(err)
+	}
 	if err := validateReporter(r, true); err != nil {
 		return Reporter{}, err
 	}
@@ -385,6 +398,13 @@ func (s *Service) Update(ctx context.Context, r Reporter) (Reporter, error) {
 	updated, err := s.repo.Update(ctx, r)
 	if err != nil {
 		return Reporter{}, mapReporterLookupError(err)
+	}
+	if reporterFacilityChanged(existing, updated) {
+		pending, markErr := s.repo.MarkForSync(ctx, updated.ID)
+		if markErr == nil {
+			updated = pending
+		}
+		s.runFacilitySync(ctx, updated)
 	}
 	return updated, nil
 }
@@ -1469,6 +1489,47 @@ func validateReporter(r Reporter, requireID bool) error {
 		return apperror.ValidationWithDetails("validation failed", map[string]any{"orgUnitId": []string{"is required"}})
 	}
 	return nil
+}
+
+func reporterFacilityChanged(before Reporter, after Reporter) bool {
+	if before.OrgUnitID != after.OrgUnitID {
+		return true
+	}
+	if before.ReportingLocation != after.ReportingLocation {
+		return true
+	}
+	return !sameInt64Ptr(before.DistrictID, after.DistrictID)
+}
+
+func sameInt64Ptr(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func (s *Service) runFacilitySync(ctx context.Context, reporter Reporter) {
+	if s == nil {
+		return
+	}
+	if s.facilitySyncRunner != nil {
+		s.facilitySyncRunner(ctx, reporter)
+		return
+	}
+	if s.serverLookup == nil || s.rapidProClient == nil {
+		return
+	}
+	backgroundCtx := context.WithoutCancel(ctx)
+	go func(item Reporter) {
+		syncCtx, cancel := context.WithTimeout(backgroundCtx, 30*time.Second)
+		defer cancel()
+		logger := logging.ForContext(syncCtx).With(slog.Int64("reporter_id", item.ID), slog.String("reporter_name", item.Name))
+		if _, err := s.syncReporter(syncCtx, item); err != nil {
+			logger.Error("reporter_facility_change_sync_failed", slog.String("error", err.Error()))
+			return
+		}
+		logger.Info("reporter_facility_change_sync_completed")
+	}(reporter)
 }
 
 func mapReporterLookupError(err error) error {

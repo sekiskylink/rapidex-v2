@@ -65,6 +65,8 @@ interface SyncResult {
   orgUnitsCount: number
   deletedReporters: number
   deletedAssignments: number
+  orphanedReporters: number
+  remappedReporters: number
   errorMessage?: string | null
 }
 
@@ -105,6 +107,7 @@ const defaultSyncForm = {
   districtLevelCode: '',
   dryRun: true,
   fullRefresh: true,
+  initialSync: false,
 }
 
 const dataGridSx = {
@@ -312,6 +315,7 @@ export function OrgUnitsPage() {
           districtLevelCode: syncForm.districtLevelCode.trim(),
           dryRun: syncForm.dryRun,
           fullRefresh: syncForm.fullRefresh,
+          initialSync: syncForm.initialSync,
         }),
       })
       setSyncResult(response)
@@ -370,7 +374,11 @@ export function OrgUnitsPage() {
       {syncResult ? (
         <Alert severity={syncResult.status === 'failed' ? 'error' : syncResult.dryRun ? 'info' : 'success'} sx={{ mb: 2 }}>
           {syncResult.dryRun ? 'Dry run complete.' : 'Hierarchy refresh complete.'} Imported {syncResult.orgUnitsCount} org units.
-          {!syncResult.dryRun ? ` Cleared ${syncResult.deletedReporters} reporters and ${syncResult.deletedAssignments} user assignments.` : ''}
+          {!syncResult.dryRun
+            ? syncForm.initialSync
+              ? ` Cleared ${syncResult.deletedReporters} reporters and ${syncResult.deletedAssignments} user assignments.`
+              : ` Remapped ${syncResult.remappedReporters} reporters, orphaned ${syncResult.orphanedReporters}, and rebuilt ${syncResult.deletedAssignments} user assignments.`
+            : ''}
         </Alert>
       ) : null}
 
@@ -526,12 +534,21 @@ export function OrgUnitsPage() {
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="warning">
-              Full refresh deletes local reporters and user-facility assignments before rebuilding the hierarchy from DHIS2.
+              Initial sync deletes local reporters and user assignments. Reconcile mode preserves reporters, remaps them by DHIS2 UID, and orphans only unmatched reporters.
             </Alert>
             <TextField label="Server Code" value={syncForm.serverCode} onChange={(event) => setSyncForm((current) => ({ ...current, serverCode: event.target.value }))} />
             <TextField label="Server UID" value={syncForm.serverUid} onChange={(event) => setSyncForm((current) => ({ ...current, serverUid: event.target.value }))} helperText="Optional override when you prefer UID lookup." />
             <TextField label="District Level Name" value={syncForm.districtLevelName} onChange={(event) => setSyncForm((current) => ({ ...current, districtLevelName: event.target.value }))} />
             <TextField label="District Level Code" value={syncForm.districtLevelCode} onChange={(event) => setSyncForm((current) => ({ ...current, districtLevelCode: event.target.value }))} />
+            <TextField
+              select
+              label="Refresh Mode"
+              value={syncForm.initialSync ? 'initial' : 'reconcile'}
+              onChange={(event) => setSyncForm((current) => ({ ...current, initialSync: event.target.value === 'initial' }))}
+            >
+              <MenuItem value="reconcile">Reconcile Existing Reporters</MenuItem>
+              <MenuItem value="initial">Initial Sync (Destructive)</MenuItem>
+            </TextField>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
               <Button variant={syncForm.dryRun ? 'contained' : 'outlined'} onClick={() => setSyncForm((current) => ({ ...current, dryRun: !current.dryRun }))}>
                 {syncForm.dryRun ? 'Dry Run Enabled' : 'Enable Dry Run'}

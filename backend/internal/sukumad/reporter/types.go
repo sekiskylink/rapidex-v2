@@ -17,27 +17,31 @@ const (
 
 // Reporter represents a RapidPro contact that has permission to submit reports.
 type Reporter struct {
-	ID                int64      `db:"id" json:"id"`
-	UID               string     `db:"uid" json:"uid"`
-	Name              string     `db:"name" json:"name"`
-	Telephone         string     `db:"telephone" json:"telephone"`
-	WhatsApp          string     `db:"whatsapp" json:"whatsapp"`
-	Telegram          string     `db:"telegram" json:"telegram"`
-	OrgUnitID         int64      `db:"org_unit_id" json:"orgUnitId"`
-	ReportingLocation string     `db:"reporting_location" json:"reportingLocation"`
-	DistrictID        *int64     `db:"district_id" json:"districtId,omitempty"`
-	TotalReports      int        `db:"total_reports" json:"totalReports"`
-	LastReportingDate *time.Time `db:"last_reporting_date" json:"lastReportingDate,omitempty"`
-	SMSCode           string     `db:"sms_code" json:"smsCode"`
-	SMSCodeExpiresAt  *time.Time `db:"sms_code_expires_at" json:"smsCodeExpiresAt,omitempty"`
-	MTUUID            string     `db:"mtuuid" json:"mtuuid"`
-	Synced            bool       `db:"synced" json:"synced"`
-	RapidProUUID      string     `db:"rapidpro_uuid" json:"rapidProUuid"`
-	IsActive          bool       `db:"is_active" json:"isActive"`
-	CreatedAt         time.Time  `db:"created_at" json:"createdAt"`
-	UpdatedAt         time.Time  `db:"updated_at" json:"updatedAt"`
-	LastLoginAt       *time.Time `db:"last_login_at" json:"lastLoginAt,omitempty"`
-	Groups            []string   `json:"groups"`
+	ID                   int64      `db:"id" json:"id"`
+	UID                  string     `db:"uid" json:"uid"`
+	Name                 string     `db:"name" json:"name"`
+	Telephone            string     `db:"telephone" json:"telephone"`
+	WhatsApp             string     `db:"whatsapp" json:"whatsapp"`
+	Telegram             string     `db:"telegram" json:"telegram"`
+	OrgUnitID            int64      `db:"org_unit_id" json:"orgUnitId"`
+	ReportingLocation    string     `db:"reporting_location" json:"reportingLocation"`
+	DistrictID           *int64     `db:"district_id" json:"districtId,omitempty"`
+	OrphanedAt           *time.Time `db:"orphaned_at" json:"orphanedAt,omitempty"`
+	OrphanReason         string     `db:"orphan_reason" json:"orphanReason,omitempty"`
+	LastKnownOrgUnitUID  string     `db:"last_known_org_unit_uid" json:"lastKnownOrgUnitUid,omitempty"`
+	LastKnownOrgUnitName string     `db:"last_known_org_unit_name" json:"lastKnownOrgUnitName,omitempty"`
+	TotalReports         int        `db:"total_reports" json:"totalReports"`
+	LastReportingDate    *time.Time `db:"last_reporting_date" json:"lastReportingDate,omitempty"`
+	SMSCode              string     `db:"sms_code" json:"smsCode"`
+	SMSCodeExpiresAt     *time.Time `db:"sms_code_expires_at" json:"smsCodeExpiresAt,omitempty"`
+	MTUUID               string     `db:"mtuuid" json:"mtuuid"`
+	Synced               bool       `db:"synced" json:"synced"`
+	RapidProUUID         string     `db:"rapidpro_uuid" json:"rapidProUuid"`
+	IsActive             bool       `db:"is_active" json:"isActive"`
+	CreatedAt            time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt            time.Time  `db:"updated_at" json:"updatedAt"`
+	LastLoginAt          *time.Time `db:"last_login_at" json:"lastLoginAt,omitempty"`
+	Groups               []string   `json:"groups"`
 }
 
 func (r *Reporter) UnmarshalJSON(data []byte) error {

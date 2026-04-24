@@ -19,26 +19,30 @@ type PgRepository struct {
 }
 
 type reporterRow struct {
-	ID                int64        `db:"id"`
-	UID               string       `db:"uid"`
-	Name              string       `db:"name"`
-	Telephone         string       `db:"telephone"`
-	WhatsApp          string       `db:"whatsapp"`
-	Telegram          string       `db:"telegram"`
-	OrgUnitID         int64        `db:"org_unit_id"`
-	ReportingLocation string       `db:"reporting_location"`
-	DistrictID        *int64       `db:"district_id"`
-	TotalReports      int          `db:"total_reports"`
-	LastReportingDate sql.NullTime `db:"last_reporting_date"`
-	SMSCode           string       `db:"sms_code"`
-	SMSCodeExpiresAt  sql.NullTime `db:"sms_code_expires_at"`
-	MTUUID            string       `db:"mtuuid"`
-	Synced            bool         `db:"synced"`
-	RapidProUUID      string       `db:"rapidpro_uuid"`
-	IsActive          bool         `db:"is_active"`
-	CreatedAt         time.Time    `db:"created_at"`
-	UpdatedAt         time.Time    `db:"updated_at"`
-	LastLoginAt       sql.NullTime `db:"last_login_at"`
+	ID                   int64         `db:"id"`
+	UID                  string        `db:"uid"`
+	Name                 string        `db:"name"`
+	Telephone            string        `db:"telephone"`
+	WhatsApp             string        `db:"whatsapp"`
+	Telegram             string        `db:"telegram"`
+	OrgUnitID            sql.NullInt64 `db:"org_unit_id"`
+	ReportingLocation    string        `db:"reporting_location"`
+	DistrictID           *int64        `db:"district_id"`
+	OrphanedAt           sql.NullTime  `db:"orphaned_at"`
+	OrphanReason         string        `db:"orphan_reason"`
+	LastKnownOrgUnitUID  string        `db:"last_known_org_unit_uid"`
+	LastKnownOrgUnitName string        `db:"last_known_org_unit_name"`
+	TotalReports         int           `db:"total_reports"`
+	LastReportingDate    sql.NullTime  `db:"last_reporting_date"`
+	SMSCode              string        `db:"sms_code"`
+	SMSCodeExpiresAt     sql.NullTime  `db:"sms_code_expires_at"`
+	MTUUID               string        `db:"mtuuid"`
+	Synced               bool          `db:"synced"`
+	RapidProUUID         string        `db:"rapidpro_uuid"`
+	IsActive             bool          `db:"is_active"`
+	CreatedAt            time.Time     `db:"created_at"`
+	UpdatedAt            time.Time     `db:"updated_at"`
+	LastLoginAt          sql.NullTime  `db:"last_login_at"`
 }
 
 type jurisdictionBroadcastRow struct {
@@ -71,7 +75,7 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	result := ListResult{Page: query.Page, PageSize: query.PageSize}
 	where := "WHERE 1=1"
 	args := []interface{}{}
-	from := "FROM reporters JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id"
+	from := "FROM reporters LEFT JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id"
 
 	if query.ScopeRestricted && len(query.ScopePaths) == 0 {
 		result.Total = 0
@@ -113,7 +117,8 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	offset := query.Page * limit
 	listQuery := fmt.Sprintf(`
 		SELECT reporters.id, reporters.uid, reporters.name, reporters.telephone, reporters.whatsapp, reporters.telegram, reporters.org_unit_id, reporters.reporting_location,
-		       reporters.district_id, reporters.total_reports, reporters.last_reporting_date, reporters.sms_code, reporters.sms_code_expires_at,
+		       reporters.district_id, reporters.orphaned_at, reporters.orphan_reason, reporters.last_known_org_unit_uid, reporters.last_known_org_unit_name,
+		       reporters.total_reports, reporters.last_reporting_date, reporters.sms_code, reporters.sms_code_expires_at,
 		       reporters.mtuuid, reporters.synced, reporters.rapidpro_uuid, reporters.is_active, reporters.created_at, reporters.updated_at, reporters.last_login_at
 		%s
 		%s
@@ -192,7 +197,7 @@ func (r *PgRepository) ListByIDs(ctx context.Context, ids []int64) ([]Reporter, 
 	}
 	query, args, err := sqlx.In(`
 		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
-		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
+		       district_id, orphaned_at, orphan_reason, last_known_org_unit_uid, last_known_org_unit_name, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
 		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
 		FROM reporters
 		WHERE id IN (?)
@@ -232,7 +237,7 @@ func (r *PgRepository) ListUpdatedSince(ctx context.Context, since *time.Time, l
 	}
 	query := fmt.Sprintf(`
 		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
-		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
+		       district_id, orphaned_at, orphan_reason, last_known_org_unit_uid, last_known_org_unit_name, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
 		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
 		FROM reporters
 		%s
@@ -259,7 +264,7 @@ func (r *PgRepository) CountBroadcastRecipients(ctx context.Context, query Broad
 	countQuery := `
 		SELECT COUNT(DISTINCT reporters.id)
 		FROM reporters
-		JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id
+		LEFT JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id
 		JOIN reporter_groups rg ON rg.reporter_id = reporters.id
 		WHERE ` + where
 	if err := r.db.GetContext(ctx, &total, r.db.Rebind(countQuery), args...); err != nil {
@@ -275,10 +280,11 @@ func (r *PgRepository) ListBroadcastRecipients(ctx context.Context, query Broadc
 	}
 	listQuery := `
 		SELECT DISTINCT reporters.id, reporters.uid, reporters.name, reporters.telephone, reporters.whatsapp, reporters.telegram, reporters.org_unit_id, reporters.reporting_location,
-		       reporters.district_id, reporters.total_reports, reporters.last_reporting_date, reporters.sms_code, reporters.sms_code_expires_at,
+		       reporters.district_id, reporters.orphaned_at, reporters.orphan_reason, reporters.last_known_org_unit_uid, reporters.last_known_org_unit_name,
+		       reporters.total_reports, reporters.last_reporting_date, reporters.sms_code, reporters.sms_code_expires_at,
 		       reporters.mtuuid, reporters.synced, reporters.rapidpro_uuid, reporters.is_active, reporters.created_at, reporters.updated_at, reporters.last_login_at
 		FROM reporters
-		JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id
+		LEFT JOIN org_units scope_org_unit ON scope_org_unit.id = reporters.org_unit_id
 		JOIN reporter_groups rg ON rg.reporter_id = reporters.id
 		WHERE ` + where + `
 		ORDER BY reporters.name ASC, reporters.id ASC
@@ -407,12 +413,18 @@ func (r *PgRepository) UpdateJurisdictionBroadcastResult(ctx context.Context, id
 }
 
 func (r *PgRepository) UpdateRapidProStatus(ctx context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error) {
+	uuid := strings.TrimSpace(rapidProUUID)
+	if uuid == "" {
+		if err := r.db.GetContext(ctx, &uuid, `SELECT COALESCE(rapidpro_uuid, '') FROM reporters WHERE id = $1`, id); err != nil {
+			return Reporter{}, err
+		}
+	}
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE reporters
 		SET rapidpro_uuid = $2,
 		    synced = $3
 		WHERE id = $1
-	`, id, strings.TrimSpace(rapidProUUID), synced)
+	`, id, uuid, synced)
 	if err != nil {
 		return Reporter{}, err
 	}
@@ -424,6 +436,10 @@ func (r *PgRepository) UpdateRapidProStatus(ctx context.Context, id int64, rapid
 		return Reporter{}, sql.ErrNoRows
 	}
 	return r.GetByID(ctx, id)
+}
+
+func (r *PgRepository) MarkForSync(ctx context.Context, id int64) (Reporter, error) {
+	return r.UpdateRapidProStatus(ctx, id, "", false)
 }
 
 func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter, error) {
@@ -441,19 +457,29 @@ func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter,
 	if err != nil {
 		return Reporter{}, err
 	}
+	lastKnownUID, lastKnownName, err := r.resolveOrgUnitIdentity(ctx, tx, reporter.OrgUnitID)
+	if err != nil {
+		return Reporter{}, err
+	}
 	reporter.ReportingLocation = location
 	reporter.DistrictID = districtID
+	reporter.LastKnownOrgUnitUID = lastKnownUID
+	reporter.LastKnownOrgUnitName = lastKnownName
+	reporter.OrphanedAt = nil
+	reporter.OrphanReason = ""
 
 	query := `
 		INSERT INTO reporters (
 			uid, phone_number, display_name, org_unit_id, is_active, created_at, updated_at,
 			name, telephone, whatsapp, telegram, reporting_location, district_id, total_reports,
-			last_reporting_date, sms_code, sms_code_expires_at, mtuuid, synced, rapidpro_uuid, last_login_at
+			last_reporting_date, sms_code, sms_code_expires_at, mtuuid, synced, rapidpro_uuid, last_login_at,
+			orphaned_at, orphan_reason, last_known_org_unit_uid, last_known_org_unit_name
 		)
 		VALUES (
 			COALESCE(NULLIF($1, ''), gen_random_uuid()::text), $2, $3, $4, $5, $6, $7,
 			$8, $9, $10, $11, $12, $13, $14,
-			$15, $16, $17, $18, $19, $20, $21
+			$15, $16, $17, $18, $19, $20, $21,
+			$22, $23, $24, $25
 		)
 		RETURNING id, uid
 	`
@@ -481,6 +507,10 @@ func (r *PgRepository) Create(ctx context.Context, reporter Reporter) (Reporter,
 		reporter.Synced,
 		strings.TrimSpace(reporter.RapidProUUID),
 		reporter.LastLoginAt,
+		reporter.OrphanedAt,
+		reporter.OrphanReason,
+		reporter.LastKnownOrgUnitUID,
+		reporter.LastKnownOrgUnitName,
 	).Scan(&reporter.ID, &reporter.UID); err != nil {
 		return Reporter{}, err
 	}
@@ -516,8 +546,18 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 	if err != nil {
 		return Reporter{}, err
 	}
+	lastKnownUID, lastKnownName, err := r.resolveOrgUnitIdentity(ctx, tx, reporter.OrgUnitID)
+	if err != nil {
+		return Reporter{}, err
+	}
 
 	reporter = preserveSystemManagedFields(existing, reporter)
+	reporter.ReportingLocation = location
+	reporter.DistrictID = districtID
+	reporter.LastKnownOrgUnitUID = lastKnownUID
+	reporter.LastKnownOrgUnitName = lastKnownName
+	reporter.OrphanedAt = nil
+	reporter.OrphanReason = ""
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE reporters
@@ -532,15 +572,19 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 		    telegram = $9,
 		    reporting_location = $10,
 		    district_id = $11,
-		    total_reports = $12,
-		    last_reporting_date = $13,
-		    sms_code = $14,
-		    sms_code_expires_at = $15,
-		    mtuuid = $16,
-		    synced = $17,
-		    rapidpro_uuid = $18,
-		    last_login_at = $19
-		WHERE id = $20
+		    orphaned_at = $12,
+		    orphan_reason = $13,
+		    last_known_org_unit_uid = $14,
+		    last_known_org_unit_name = $15,
+		    total_reports = $16,
+		    last_reporting_date = $17,
+		    sms_code = $18,
+		    sms_code_expires_at = $19,
+		    mtuuid = $20,
+		    synced = $21,
+		    rapidpro_uuid = $22,
+		    last_login_at = $23
+		WHERE id = $24
 	`,
 		reporter.Telephone,
 		reporter.Name,
@@ -551,8 +595,12 @@ func (r *PgRepository) Update(ctx context.Context, reporter Reporter) (Reporter,
 		reporter.Telephone,
 		reporter.WhatsApp,
 		reporter.Telegram,
-		location,
-		districtID,
+		reporter.ReportingLocation,
+		reporter.DistrictID,
+		reporter.OrphanedAt,
+		reporter.OrphanReason,
+		reporter.LastKnownOrgUnitUID,
+		reporter.LastKnownOrgUnitName,
 		reporter.TotalReports,
 		reporter.LastReportingDate,
 		reporter.SMSCode,
@@ -610,6 +658,12 @@ func preserveSystemManagedFields(existing Reporter, incoming Reporter) Reporter 
 	if incoming.LastLoginAt == nil {
 		incoming.LastLoginAt = existing.LastLoginAt
 	}
+	if incoming.LastKnownOrgUnitUID == "" {
+		incoming.LastKnownOrgUnitUID = existing.LastKnownOrgUnitUID
+	}
+	if incoming.LastKnownOrgUnitName == "" {
+		incoming.LastKnownOrgUnitName = existing.LastKnownOrgUnitName
+	}
 	return incoming
 }
 
@@ -632,7 +686,7 @@ func (r *PgRepository) getByWhere(ctx context.Context, where string, arg any) (R
 	row := reporterRow{}
 	query := `
 		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
-		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
+		       district_id, orphaned_at, orphan_reason, last_known_org_unit_uid, last_known_org_unit_name, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
 		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
 		FROM reporters
 		WHERE ` + where
@@ -666,7 +720,7 @@ func (r *PgRepository) getByIDTx(ctx context.Context, tx *sqlx.Tx, id int64) (Re
 	row := reporterRow{}
 	if err := tx.GetContext(ctx, &row, `
 		SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,
-		       district_id, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
+		       district_id, orphaned_at, orphan_reason, last_known_org_unit_uid, last_known_org_unit_name, total_reports, last_reporting_date, sms_code, sms_code_expires_at,
 		       mtuuid, synced, rapidpro_uuid, is_active, created_at, updated_at, last_login_at
 		FROM reporters
 		WHERE id = $1
@@ -723,6 +777,18 @@ func (r *PgRepository) resolveLocationFields(ctx context.Context, tx *sqlx.Tx, o
 		districtID = &id
 	}
 	return strings.Join(parts, " / "), districtID, nil
+}
+
+func (r *PgRepository) resolveOrgUnitIdentity(ctx context.Context, tx *sqlx.Tx, orgUnitID int64) (string, string, error) {
+	type identityRow struct {
+		UID  string `db:"uid"`
+		Name string `db:"name"`
+	}
+	row := identityRow{}
+	if err := tx.GetContext(ctx, &row, `SELECT uid, name FROM org_units WHERE id = $1`, orgUnitID); err != nil {
+		return "", "", err
+	}
+	return strings.TrimSpace(row.UID), strings.TrimSpace(row.Name), nil
 }
 
 func (r *PgRepository) replaceGroups(ctx context.Context, tx *sqlx.Tx, reporterID int64, groups []string) error {
@@ -799,28 +865,36 @@ func convertReporterRows(rows []reporterRow) []Reporter {
 }
 
 func (r reporterRow) toReporter() Reporter {
+	orgUnitID := int64(0)
+	if r.OrgUnitID.Valid {
+		orgUnitID = r.OrgUnitID.Int64
+	}
 	return Reporter{
-		ID:                r.ID,
-		UID:               r.UID,
-		Name:              r.Name,
-		Telephone:         r.Telephone,
-		WhatsApp:          r.WhatsApp,
-		Telegram:          r.Telegram,
-		OrgUnitID:         r.OrgUnitID,
-		ReportingLocation: r.ReportingLocation,
-		DistrictID:        r.DistrictID,
-		TotalReports:      r.TotalReports,
-		LastReportingDate: nullTimePtr(r.LastReportingDate),
-		SMSCode:           r.SMSCode,
-		SMSCodeExpiresAt:  nullTimePtr(r.SMSCodeExpiresAt),
-		MTUUID:            r.MTUUID,
-		Synced:            r.Synced,
-		RapidProUUID:      r.RapidProUUID,
-		IsActive:          r.IsActive,
-		CreatedAt:         r.CreatedAt,
-		UpdatedAt:         r.UpdatedAt,
-		LastLoginAt:       nullTimePtr(r.LastLoginAt),
-		Groups:            []string{},
+		ID:                   r.ID,
+		UID:                  r.UID,
+		Name:                 r.Name,
+		Telephone:            r.Telephone,
+		WhatsApp:             r.WhatsApp,
+		Telegram:             r.Telegram,
+		OrgUnitID:            orgUnitID,
+		ReportingLocation:    r.ReportingLocation,
+		DistrictID:           r.DistrictID,
+		OrphanedAt:           nullTimePtr(r.OrphanedAt),
+		OrphanReason:         r.OrphanReason,
+		LastKnownOrgUnitUID:  r.LastKnownOrgUnitUID,
+		LastKnownOrgUnitName: r.LastKnownOrgUnitName,
+		TotalReports:         r.TotalReports,
+		LastReportingDate:    nullTimePtr(r.LastReportingDate),
+		SMSCode:              r.SMSCode,
+		SMSCodeExpiresAt:     nullTimePtr(r.SMSCodeExpiresAt),
+		MTUUID:               r.MTUUID,
+		Synced:               r.Synced,
+		RapidProUUID:         r.RapidProUUID,
+		IsActive:             r.IsActive,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+		LastLoginAt:          nullTimePtr(r.LastLoginAt),
+		Groups:               []string{},
 	}
 }
 

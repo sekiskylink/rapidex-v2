@@ -25,6 +25,8 @@ type reporterServiceRepo struct {
 	broadcastListResult      BroadcastListResult
 	updatedSinceItems        []Reporter
 	updateCalls              int
+	markForSyncCalls         int
+	updateInput              *Reporter
 	countBroadcastRecipients int
 	broadcastRecipients      []Reporter
 	recentBroadcast          *JurisdictionBroadcastRecord
@@ -100,17 +102,46 @@ func (r *reporterServiceRepo) UpdateJurisdictionBroadcastResult(_ context.Contex
 }
 func (r *reporterServiceRepo) UpdateRapidProStatus(_ context.Context, id int64, rapidProUUID string, synced bool) (Reporter, error) {
 	item := r.byID[id]
-	item.RapidProUUID = rapidProUUID
+	if strings.TrimSpace(rapidProUUID) != "" {
+		item.RapidProUUID = rapidProUUID
+	}
 	item.Synced = synced
 	r.byID[id] = item
 	r.updateCalls++
 	return item, nil
 }
+func (r *reporterServiceRepo) MarkForSync(_ context.Context, id int64) (Reporter, error) {
+	item := r.byID[id]
+	item.Synced = false
+	r.byID[id] = item
+	r.markForSyncCalls++
+	return item, nil
+}
 func (r *reporterServiceRepo) Create(context.Context, Reporter) (Reporter, error) {
 	return Reporter{}, nil
 }
-func (r *reporterServiceRepo) Update(context.Context, Reporter) (Reporter, error) {
-	return Reporter{}, nil
+func (r *reporterServiceRepo) Update(_ context.Context, reporter Reporter) (Reporter, error) {
+	copyItem := reporter
+	r.updateInput = &copyItem
+	if existing, ok := r.byID[reporter.ID]; ok {
+		if copyItem.ReportingLocation == "" {
+			copyItem.ReportingLocation = existing.ReportingLocation
+		}
+		if copyItem.DistrictID == nil {
+			copyItem.DistrictID = existing.DistrictID
+		}
+		if copyItem.RapidProUUID == "" {
+			copyItem.RapidProUUID = existing.RapidProUUID
+		}
+		if !copyItem.Synced {
+			copyItem.Synced = existing.Synced
+		}
+		if !copyItem.IsActive {
+			copyItem.IsActive = existing.IsActive
+		}
+	}
+	r.byID[reporter.ID] = copyItem
+	return copyItem, nil
 }
 func (r *reporterServiceRepo) Delete(context.Context, int64) error {
 	return nil
@@ -414,6 +445,100 @@ func TestRunQueuedBroadcastsProcessesClaimedBroadcast(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(observed, ","), "claimed:1") || !strings.Contains(strings.Join(observed, ","), "completed:1") {
 		t.Fatalf("expected worker observations, got %#v", observed)
+	}
+}
+
+func TestUpdateMarksReporterForSyncAndTriggersFacilityResync(t *testing.T) {
+	district := int64(9)
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:                1,
+				Name:              "Alice Reporter",
+				Telephone:         "+256700000001",
+				OrgUnitID:         8,
+				ReportingLocation: "Uganda / Old District / Old Facility",
+				DistrictID:        &district,
+				Synced:            true,
+				RapidProUUID:      "contact-existing",
+			},
+		},
+	}
+	service := NewService(repo)
+	called := make(chan Reporter, 1)
+	service.WithFacilitySyncRunner(func(_ context.Context, reporter Reporter) {
+		called <- reporter
+	})
+
+	updated, err := service.Update(context.Background(), Reporter{
+		ID:                1,
+		Name:              "Alice Reporter",
+		Telephone:         "+256700000001",
+		OrgUnitID:         12,
+		ReportingLocation: "Uganda / New District / New Facility",
+		DistrictID:        &district,
+		IsActive:          true,
+	})
+	if err != nil {
+		t.Fatalf("update reporter: %v", err)
+	}
+	if repo.markForSyncCalls != 1 {
+		t.Fatalf("expected one mark-for-sync call, got %d", repo.markForSyncCalls)
+	}
+	if updated.Synced {
+		t.Fatal("expected updated reporter to be marked unsynced pending RapidPro refresh")
+	}
+	select {
+	case synced := <-called:
+		if synced.ID != 1 || synced.OrgUnitID != 12 {
+			t.Fatalf("unexpected reporter passed to facility sync runner: %+v", synced)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected facility sync runner to be invoked")
+	}
+}
+
+func TestUpdateSkipsFacilityResyncWhenFacilityContextIsUnchanged(t *testing.T) {
+	district := int64(9)
+	repo := &reporterServiceRepo{
+		byID: map[int64]Reporter{
+			1: {
+				ID:                1,
+				Name:              "Alice Reporter",
+				Telephone:         "+256700000001",
+				OrgUnitID:         8,
+				ReportingLocation: "Uganda / Kampala / Facility A",
+				DistrictID:        &district,
+				Synced:            true,
+			},
+		},
+	}
+	service := NewService(repo)
+	triggered := false
+	service.WithFacilitySyncRunner(func(_ context.Context, reporter Reporter) {
+		triggered = true
+	})
+
+	updated, err := service.Update(context.Background(), Reporter{
+		ID:                1,
+		Name:              "Alice Reporter Updated",
+		Telephone:         "+256700000001",
+		OrgUnitID:         8,
+		ReportingLocation: "Uganda / Kampala / Facility A",
+		DistrictID:        &district,
+		IsActive:          true,
+	})
+	if err != nil {
+		t.Fatalf("update reporter: %v", err)
+	}
+	if repo.markForSyncCalls != 0 {
+		t.Fatalf("expected no mark-for-sync call, got %d", repo.markForSyncCalls)
+	}
+	if triggered {
+		t.Fatal("expected facility sync runner to be skipped")
+	}
+	if !updated.Synced {
+		t.Fatal("expected unchanged facility update to preserve synced state")
 	}
 }
 

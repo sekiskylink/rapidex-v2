@@ -120,6 +120,7 @@ interface DHIS2OrgUnitRefreshConfigState {
   serverUid: string
   serverCode: string
   fullRefresh: boolean
+  initialSync: boolean
   dryRun: boolean
   districtLevelName: string
   districtLevelCode: string
@@ -162,6 +163,7 @@ const defaultDHIS2OrgUnitRefreshConfig: DHIS2OrgUnitRefreshConfigState = {
   serverUid: '',
   serverCode: 'dhis2',
   fullRefresh: true,
+  initialSync: false,
   dryRun: false,
   districtLevelName: 'District',
   districtLevelCode: '',
@@ -252,6 +254,7 @@ function getDHIS2OrgUnitRefreshConfigState(config: Record<string, unknown>): DHI
     serverUid: typeof config.serverUid === 'string' ? config.serverUid : '',
     serverCode: typeof config.serverCode === 'string' && config.serverCode ? config.serverCode : defaultDHIS2OrgUnitRefreshConfig.serverCode,
     fullRefresh: config.fullRefresh !== false,
+    initialSync: Boolean(config.initialSync ?? defaultDHIS2OrgUnitRefreshConfig.initialSync),
     dryRun: Boolean(config.dryRun ?? defaultDHIS2OrgUnitRefreshConfig.dryRun),
     districtLevelName: typeof config.districtLevelName === 'string' && config.districtLevelName ? config.districtLevelName : defaultDHIS2OrgUnitRefreshConfig.districtLevelName,
     districtLevelCode: typeof config.districtLevelCode === 'string' ? config.districtLevelCode : '',
@@ -312,6 +315,7 @@ function buildDHIS2OrgUnitRefreshConfig(config: DHIS2OrgUnitRefreshConfigState) 
     serverUid: config.serverUid.trim(),
     serverCode: config.serverCode.trim(),
     fullRefresh: config.fullRefresh,
+    initialSync: config.initialSync,
     dryRun: config.dryRun,
     districtLevelName: config.districtLevelName.trim(),
     districtLevelCode: config.districtLevelCode.trim(),
@@ -830,8 +834,18 @@ export function SchedulerJobFormPage() {
                 />
               </Stack>
               <Alert severity="warning">
-                Full refresh deletes local reporters and user-facility assignments before rebuilding the hierarchy.
+                Initial sync is destructive. Later refreshes will reconcile by DHIS2 UID, preserve reporters, and orphan only unmatched ones.
               </Alert>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={dhis2OrgUnitRefreshConfig.initialSync}
+                    onChange={(event) => setDHIS2OrgUnitRefreshConfig((current) => ({ ...current, initialSync: event.target.checked }))}
+                    disabled={loading || saving}
+                  />
+                }
+                label="Initial Sync (Destructive)"
+              />
               <FormControlLabel
                 control={
                   <Switch

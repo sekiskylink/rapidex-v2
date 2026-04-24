@@ -12,7 +12,9 @@ Date: 2026-04-24
   - `org_unit_group_members`
 - District is no longer treated as a fixed local hierarchy level.
 - District derivation now uses configured DHIS2 level metadata recorded on the most recent successful or attempted hierarchy sync.
-- The first rollout mode is a full destructive refresh instead of an incremental merge.
+- Hierarchy refresh now has two explicit modes:
+  - `initialSync=true`
+  - `initialSync=false`
 
 ## Sync Model
 
@@ -30,13 +32,36 @@ Date: 2026-04-24
 
 ## Refresh Semantics
 
-- The initial full refresh deliberately clears:
+- `initialSync=true` is the destructive bootstrap mode.
+- It deliberately clears:
   - `user_org_units`
   - `reporters`
   - existing hierarchy metadata
   - existing `org_units`
-- This matches the current operational requirement to rebuild the local facility hierarchy cleanly from DHIS2 before re-establishing downstream assignments.
+- `initialSync=false` is the normal steady-state refresh mode.
+- In steady-state refresh:
+  - existing org units are rebuilt from DHIS2
+  - existing reporters are matched back to facilities by DHIS2 org-unit UID
+  - matched reporters are remapped to the rebuilt local `org_units.id`
+  - unmatched reporters are preserved and marked orphaned instead of being deleted
+  - `user_org_units` assignments are rebuilt by DHIS2 org-unit UID where possible
+  - unmatched user-org assignments are dropped because they cannot be represented without a target org unit
+- Reporter orphaning is stored directly on the reporter record:
+  - nullable `org_unit_id`
+  - `orphaned_at`
+  - `orphan_reason`
+  - `last_known_org_unit_uid`
+  - `last_known_org_unit_name`
 - Sync-state persistence records run timing, status, errors, source server, district-level settings, and row counts so operators can inspect the most recent run from the UI.
+
+## Reporter Sync Fallout
+
+- Reporter facility changes now trigger an automatic RapidPro contact refresh attempt after the local update succeeds.
+- The local reporter update remains authoritative:
+  - the reporter is first marked `synced=false`
+  - RapidPro refresh is attempted afterward
+  - a failed RapidPro refresh does not roll back the local facility update
+- Hierarchy reconcile refresh also marks remapped or orphaned reporters unsynced so downstream RapidPro synchronization can observe the changed facility context.
 
 ## Scheduler and UI
 
@@ -48,8 +73,9 @@ Date: 2026-04-24
   - `fullRefresh: true`
   - `dryRun: false`
 - Both web and desktop Facilities pages now expose a manual sync dialog and the latest sync-state summary.
+- Both web and desktop scheduler forms now expose the `initialSync` choice explicitly.
 
 ## Follow-ups
 
 - If production payload size makes single-transaction replacement too heavy, move the refresh path to staging tables plus a final swap transaction.
-- Add automatic reassignment/remapping only after the rebuilt hierarchy and district-level semantics are stable in real data.
+- Consider a dedicated queue-backed reporter RapidPro resync worker if facility-change sync volume becomes high enough that detached best-effort sync is no longer sufficient.

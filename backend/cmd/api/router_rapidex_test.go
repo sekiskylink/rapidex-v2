@@ -219,6 +219,9 @@ func (r *rapidexReporterRepo) UpdateJurisdictionBroadcastResult(_ context.Contex
 func (r *rapidexReporterRepo) UpdateRapidProStatus(_ context.Context, id int64, rapidProUUID string, synced bool) (reporter.Reporter, error) {
 	return reporter.Reporter{ID: id, RapidProUUID: rapidProUUID, Synced: synced}, nil
 }
+func (r *rapidexReporterRepo) MarkForSync(_ context.Context, id int64) (reporter.Reporter, error) {
+	return reporter.Reporter{ID: id, Synced: false}, nil
+}
 func (r *rapidexReporterRepo) Create(_ context.Context, item reporter.Reporter) (reporter.Reporter, error) {
 	item.ID = 1
 	return item, nil

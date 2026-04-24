@@ -8,7 +8,7 @@ import (
 )
 
 func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
-	files, err := filepath.Glob("0000{2[6-9],3[0-3]}_*.sql")
+	files, err := filepath.Glob("0000{2[6-9],3[0-4]}_*.sql")
 	if err != nil {
 		t.Fatalf("glob migrations: %v", err)
 	}
@@ -17,7 +17,7 @@ func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("glob fallback migrations: %v", err)
 		}
-		extra, err := filepath.Glob("00003[0-3]_*.sql")
+		extra, err := filepath.Glob("00003[0-4]_*.sql")
 		if err != nil {
 			t.Fatalf("glob 00003x migrations: %v", err)
 		}
@@ -169,6 +169,29 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 	} {
 		if !strings.Contains(hierarchySyncDown, fragment) {
 			t.Fatalf("expected hierarchy sync rollback to contain %q", fragment)
+		}
+	}
+
+	reporterOrphaningUp := readMigration(t, "000034_add_reporter_orphaning.up.sql")
+	for _, fragment := range []string{
+		"ALTER COLUMN org_unit_id DROP NOT NULL",
+		"ON DELETE SET NULL",
+		"ADD COLUMN IF NOT EXISTS orphaned_at",
+		"ADD COLUMN IF NOT EXISTS last_known_org_unit_uid",
+	} {
+		if !strings.Contains(reporterOrphaningUp, fragment) {
+			t.Fatalf("expected reporter orphaning migration to contain %q", fragment)
+		}
+	}
+
+	reporterOrphaningDown := readMigration(t, "000034_add_reporter_orphaning.down.sql")
+	for _, fragment := range []string{
+		"DROP COLUMN IF EXISTS orphaned_at",
+		"ON DELETE RESTRICT",
+		"ALTER COLUMN org_unit_id SET NOT NULL",
+	} {
+		if !strings.Contains(reporterOrphaningDown, fragment) {
+			t.Fatalf("expected reporter orphaning rollback to contain %q", fragment)
 		}
 	}
 }

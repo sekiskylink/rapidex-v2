@@ -73,10 +73,10 @@ func TestListUpdatedSinceIncludesReportersWithoutRapidProUUID(t *testing.T) {
 	since := time.Date(2026, time.April, 24, 10, 0, 0, 0, time.UTC)
 	rows := sqlmock.NewRows([]string{
 		"id", "uid", "name", "telephone", "whatsapp", "telegram", "org_unit_id", "reporting_location",
-		"district_id", "total_reports", "last_reporting_date", "sms_code", "sms_code_expires_at",
+		"district_id", "orphaned_at", "orphan_reason", "last_known_org_unit_uid", "last_known_org_unit_name", "total_reports", "last_reporting_date", "sms_code", "sms_code_expires_at",
 		"mtuuid", "synced", "rapidpro_uuid", "is_active", "created_at", "updated_at", "last_login_at",
 	}).AddRow(
-		1, "rep-1", "Alice Reporter", "+256700000001", "", "", 4, "Kampala", nil, 0, nil, "", nil,
+		1, "rep-1", "Alice Reporter", "+256700000001", "", "", 4, "Kampala", nil, nil, "", "ou-4", "Kampala", 0, nil, "", nil,
 		"", false, "", true, since.Add(-time.Hour), since.Add(time.Minute), nil,
 	)
 	mock.ExpectQuery(`(?s)SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,.*FROM reporters.*WHERE updated_at > \? AND is_active = TRUE.*ORDER BY updated_at ASC, id ASC.*LIMIT 10`).

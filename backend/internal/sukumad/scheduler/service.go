@@ -745,6 +745,7 @@ func (s *Service) EnsureDefaultIntegrationJobs(ctx context.Context) ([]Record, e
 			Enabled:      false,
 			Config: map[string]any{
 				"fullRefresh":       true,
+				"initialSync":       false,
 				"dryRun":            false,
 				"serverCode":        "dhis2",
 				"districtLevelName": "District",

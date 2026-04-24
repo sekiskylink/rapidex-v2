@@ -77,6 +77,7 @@ type dhis2OrgUnitRefreshConfig struct {
 	ServerUID         string `json:"serverUid"`
 	ServerCode        string `json:"serverCode"`
 	FullRefresh       bool   `json:"fullRefresh"`
+	InitialSync       bool   `json:"initialSync"`
 	DryRun            bool   `json:"dryRun"`
 	DistrictLevelName string `json:"districtLevelName"`
 	DistrictLevelCode string `json:"districtLevelCode"`
@@ -267,28 +268,34 @@ func runDHIS2OrgUnitRefresh(ctx context.Context, exec JobExecution, cfg dhis2Org
 		ServerUID:         cfg.ServerUID,
 		ServerCode:        cfg.ServerCode,
 		FullRefresh:       cfg.FullRefresh,
+		InitialSync:       cfg.InitialSync,
 		DryRun:            cfg.DryRun,
 		DistrictLevelName: cfg.DistrictLevelName,
 		DistrictLevelCode: cfg.DistrictLevelCode,
 	})
 	summary := map[string]any{
-		"jobType":             JobTypeDHIS2OrgUnitRefresh,
-		"runUid":              exec.Run.UID,
-		"serverCode":          result.ServerCode,
-		"dryRun":              result.DryRun,
-		"fullRefresh":         result.FullRefresh,
-		"districtLevelName":   result.DistrictLevelName,
-		"districtLevelCode":   result.DistrictLevelCode,
-		"levelsCount":         result.LevelsCount,
-		"groupsCount":         result.GroupsCount,
-		"attributesCount":     result.AttributesCount,
-		"orgUnitsCount":       result.OrgUnitsCount,
-		"groupMembersCount":   result.GroupMembersCount,
-		"deletedAssignments":  result.DeletedAssignments,
-		"deletedReporters":    result.DeletedReporters,
-		"resolvedDistrictUid": result.ResolvedDistrictUID,
-		"resolvedDistrict":    result.ResolvedDistrict,
-		"status":              result.Status,
+		"jobType":               JobTypeDHIS2OrgUnitRefresh,
+		"runUid":                exec.Run.UID,
+		"serverCode":            result.ServerCode,
+		"dryRun":                result.DryRun,
+		"fullRefresh":           result.FullRefresh,
+		"initialSync":           cfg.InitialSync,
+		"districtLevelName":     result.DistrictLevelName,
+		"districtLevelCode":     result.DistrictLevelCode,
+		"levelsCount":           result.LevelsCount,
+		"groupsCount":           result.GroupsCount,
+		"attributesCount":       result.AttributesCount,
+		"orgUnitsCount":         result.OrgUnitsCount,
+		"groupMembersCount":     result.GroupMembersCount,
+		"deletedAssignments":    result.DeletedAssignments,
+		"deletedReporters":      result.DeletedReporters,
+		"orphanedReporters":     result.OrphanedReporters,
+		"remappedReporters":     result.RemappedReporters,
+		"reassignedAssignments": result.ReassignedAssignments,
+		"droppedAssignments":    result.DroppedAssignments,
+		"resolvedDistrictUid":   result.ResolvedDistrictUID,
+		"resolvedDistrict":      result.ResolvedDistrict,
+		"status":                result.Status,
 	}
 	if result.CompletedAt != nil {
 		summary["completedAt"] = result.CompletedAt

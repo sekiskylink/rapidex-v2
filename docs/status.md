@@ -1,5 +1,60 @@
 # Status
 
+## Milestone — DHIS2 Reconcile Refresh and Reporter Facility Resync (Complete)
+
+### What changed
+- Extended the DHIS2 hierarchy refresh implementation with two explicit execution modes:
+  - `initialSync=true` for the destructive bootstrap rebuild
+  - `initialSync=false` for normal reconcile refreshes
+- Added reporter orphaning support so non-initial hierarchy refreshes no longer delete reporters when a DHIS2 facility disappears.
+- Reporter records can now preserve missing-facility context with:
+  - nullable `org_unit_id`
+  - `orphaned_at`
+  - `orphan_reason`
+  - `last_known_org_unit_uid`
+  - `last_known_org_unit_name`
+- Non-initial hierarchy refresh now:
+  - snapshots current reporter-to-facility DHIS2 UIDs
+  - rebuilds the local hierarchy
+  - remaps reporters whose DHIS2 org-unit UID still exists
+  - orphans only unmatched reporters
+  - rebuilds `user_org_units` assignments by DHIS2 UID where possible
+- Updated the sync-state summary counts to include:
+  - remapped reporters
+  - orphaned reporters
+  - reassigned user-org assignments
+  - dropped unmatched assignments
+- Updated both web and desktop hierarchy refresh UIs so operators can choose:
+  - reconcile existing reporters
+  - initial destructive sync
+- Reporter updates now trigger an automatic RapidPro resync attempt whenever facility context changes after the local update succeeds.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-24-dhis2-reconcile-orphaning-and-resync.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - reporter service coverage for facility-change resync triggering and unchanged-facility no-op behavior
+  - migration coverage for reporter orphaning schema changes
+  - cmd/api test stub updates for the extended reporter repository contract
+- Web:
+  - re-verified scheduler job form coverage with the updated DHIS2 hierarchy config model
+- Desktop:
+  - re-verified matching scheduler job form coverage with the updated DHIS2 hierarchy config model
+
+### Verification summary
+- Backend focused suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/reporter ./internal/sukumad/orgunit ./internal/sukumad/scheduler ./migrations`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web scheduler page tests: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop scheduler page tests: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Facility-change RapidPro refresh currently runs as a detached best-effort sync after local reporter updates; if operator volume grows, move this to a durable queue-backed worker.
+- Existing non-blocking jsdom/MUI `anchorEl` and MUI X `rowCount` warnings still appear in frontend test runs.
+- Existing Vite third-party `'use client' was ignored` and chunk-size warnings still appear during frontend builds.
+
 ## Milestone — DHIS2 Hierarchy Refresh and Scheduler Sync (Complete)
 
 ### What changed
