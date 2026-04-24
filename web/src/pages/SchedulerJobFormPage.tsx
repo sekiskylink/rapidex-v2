@@ -113,6 +113,7 @@ interface RapidProReporterSyncConfigState {
   dryRun: boolean
   batchSize: string
   onlyActive: boolean
+  lookbackMinutes: string
 }
 
 const defaultMaintenanceConfigs: Record<string, MaintenanceConfigState> = {
@@ -145,6 +146,7 @@ const defaultRapidProReporterSyncConfig: RapidProReporterSyncConfigState = {
   dryRun: false,
   batchSize: '100',
   onlyActive: true,
+  lookbackMinutes: '1',
 }
 
 function isMaintenanceJobType(jobType: string) {
@@ -219,6 +221,7 @@ function getRapidProReporterSyncConfigState(config: Record<string, unknown>): Ra
     dryRun: Boolean(config.dryRun ?? defaultRapidProReporterSyncConfig.dryRun),
     batchSize: toStringNumber(config.batchSize, defaultRapidProReporterSyncConfig.batchSize),
     onlyActive: Boolean(config.onlyActive ?? defaultRapidProReporterSyncConfig.onlyActive),
+    lookbackMinutes: toStringNumber(config.lookbackMinutes, defaultRapidProReporterSyncConfig.lookbackMinutes),
   }
 }
 
@@ -267,6 +270,7 @@ function buildRapidProReporterSyncConfig(config: RapidProReporterSyncConfigState
     dryRun: config.dryRun,
     batchSize: parseOptionalInt(config.batchSize) ?? 0,
     onlyActive: config.onlyActive,
+    lookbackMinutes: parseOptionalInt(config.lookbackMinutes) ?? 1,
   }
 }
 
@@ -793,6 +797,13 @@ export function SchedulerJobFormPage() {
                 value={rapidProReporterSyncConfig.batchSize}
                 onChange={(event) => setRapidProReporterSyncConfig((current) => ({ ...current, batchSize: event.target.value }))}
                 disabled={loading || saving}
+              />
+              <TextField
+                label="Lookback Minutes"
+                value={rapidProReporterSyncConfig.lookbackMinutes}
+                onChange={(event) => setRapidProReporterSyncConfig((current) => ({ ...current, lookbackMinutes: event.target.value }))}
+                disabled={loading || saving}
+                helperText="Subtract this overlap window from the last successful sync watermark."
               />
               <FormControlLabel
                 control={

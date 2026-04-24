@@ -351,6 +351,7 @@ describe('scheduler pages', () => {
     fireEvent.mouseDown(screen.getByLabelText('Job Type'))
     fireEvent.click(await screen.findByRole('option', { name: 'RapidPro Reporter Sync' }))
     fireEvent.change(screen.getByLabelText('Batch Size'), { target: { value: '150' } })
+    fireEvent.change(screen.getByLabelText('Lookback Minutes'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create Scheduled Job' }))
 
     await waitFor(() => expect(createPayload).not.toBeNull())
@@ -361,6 +362,7 @@ describe('scheduler pages', () => {
         dryRun: false,
         batchSize: 150,
         onlyActive: true,
+        lookbackMinutes: 3,
       },
     })
   })

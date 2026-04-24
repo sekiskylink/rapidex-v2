@@ -1,8 +1,12 @@
 package reporter
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
 )
 
 func TestPreserveSystemManagedFields(t *testing.T) {
@@ -55,5 +59,44 @@ func TestPreserveSystemManagedFields(t *testing.T) {
 	}
 	if got.LastLoginAt != existing.LastLoginAt {
 		t.Fatalf("expected last login to be preserved")
+	}
+}
+
+func TestListUpdatedSinceIncludesReportersWithoutRapidProUUID(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	repo := NewPgRepository(sqlx.NewDb(sqlDB, "sqlmock"))
+	since := time.Date(2026, time.April, 24, 10, 0, 0, 0, time.UTC)
+	rows := sqlmock.NewRows([]string{
+		"id", "uid", "name", "telephone", "whatsapp", "telegram", "org_unit_id", "reporting_location",
+		"district_id", "total_reports", "last_reporting_date", "sms_code", "sms_code_expires_at",
+		"mtuuid", "synced", "rapidpro_uuid", "is_active", "created_at", "updated_at", "last_login_at",
+	}).AddRow(
+		1, "rep-1", "Alice Reporter", "+256700000001", "", "", 4, "Kampala", nil, 0, nil, "", nil,
+		"", false, "", true, since.Add(-time.Hour), since.Add(time.Minute), nil,
+	)
+	mock.ExpectQuery(`(?s)SELECT id, uid, name, telephone, whatsapp, telegram, org_unit_id, reporting_location,.*FROM reporters.*WHERE updated_at > \? AND is_active = TRUE.*ORDER BY updated_at ASC, id ASC.*LIMIT 10`).
+		WithArgs(since.UTC()).
+		WillReturnRows(rows)
+	mock.ExpectQuery(`(?s)SELECT reporter_id, group_name FROM reporter_groups WHERE reporter_id IN \(\?\)`).
+		WithArgs(int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"reporter_id", "group_name"}))
+
+	items, err := repo.ListUpdatedSince(context.Background(), &since, 10, true)
+	if err != nil {
+		t.Fatalf("list updated since: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one reporter, got %d", len(items))
+	}
+	if items[0].RapidProUUID != "" {
+		t.Fatalf("expected blank rapidpro uuid, got %q", items[0].RapidProUUID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sqlmock expectations: %v", err)
 	}
 }

@@ -62,9 +62,10 @@ type requestExchangeConfig struct {
 }
 
 type rapidProReporterSyncConfig struct {
-	BatchSize  int  `json:"batchSize"`
-	DryRun     bool `json:"dryRun"`
-	OnlyActive bool `json:"onlyActive"`
+	BatchSize       int  `json:"batchSize"`
+	DryRun          bool `json:"dryRun"`
+	OnlyActive      bool `json:"onlyActive"`
+	LookbackMinutes int  `json:"lookbackMinutes"`
 }
 
 func newIntegrationHandlers(deps integrationHandlerDependencies) map[string]typedRegistration {
@@ -180,29 +181,34 @@ func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidPr
 	if deps.reporterSyncer == nil {
 		return JobResult{}, fmt.Errorf("rapidpro reporter sync service is not configured")
 	}
+	effectiveSince := rapidProReporterSyncEffectiveSince(exec.Job.LastSuccessAt, cfg)
 	logging.ForContext(ctx).Info("rapidpro_reporter_sync_batch_started",
 		slog.Int64("job_id", exec.Job.ID),
 		slog.String("job_code", exec.Job.Code),
 		slog.Int64("run_id", exec.Run.ID),
 		slog.String("run_uid", exec.Run.UID),
 		slog.Any("watermark_from", exec.Job.LastSuccessAt),
+		slog.Any("effective_watermark_from", effectiveSince),
 		slog.Int("batch_size", cfg.BatchSize),
 		slog.Bool("only_active", cfg.OnlyActive),
 		slog.Bool("dry_run", cfg.DryRun),
+		slog.Int("lookback_minutes", effectiveRapidProReporterSyncLookbackMinutes(cfg)),
 	)
-	result, err := deps.reporterSyncer.SyncUpdatedSince(ctx, exec.Job.LastSuccessAt, cfg.BatchSize, cfg.OnlyActive, cfg.DryRun)
+	result, err := deps.reporterSyncer.SyncUpdatedSince(ctx, effectiveSince, cfg.BatchSize, cfg.OnlyActive, cfg.DryRun)
 	summary := map[string]any{
-		"jobType":       JobTypeRapidProReporterSync,
-		"runUid":        exec.Run.UID,
-		"watermarkFrom": exec.Job.LastSuccessAt,
-		"watermarkTo":   result.WatermarkTo,
-		"scannedCount":  result.Scanned,
-		"syncedCount":   result.Synced,
-		"createdCount":  result.Created,
-		"updatedCount":  result.Updated,
-		"failedCount":   result.Failed,
-		"dryRun":        cfg.DryRun,
-		"onlyActive":    cfg.OnlyActive,
+		"jobType":                JobTypeRapidProReporterSync,
+		"runUid":                 exec.Run.UID,
+		"watermarkFrom":          exec.Job.LastSuccessAt,
+		"effectiveWatermarkFrom": effectiveSince,
+		"watermarkTo":            result.WatermarkTo,
+		"scannedCount":           result.Scanned,
+		"syncedCount":            result.Synced,
+		"createdCount":           result.Created,
+		"updatedCount":           result.Updated,
+		"failedCount":            result.Failed,
+		"dryRun":                 cfg.DryRun,
+		"onlyActive":             cfg.OnlyActive,
+		"lookbackMinutes":        effectiveRapidProReporterSyncLookbackMinutes(cfg),
 	}
 	level := logging.ForContext(ctx).Info
 	eventName := "rapidpro_reporter_sync_batch_completed"
@@ -216,6 +222,7 @@ func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidPr
 		slog.Int64("run_id", exec.Run.ID),
 		slog.String("run_uid", exec.Run.UID),
 		slog.Any("watermark_from", exec.Job.LastSuccessAt),
+		slog.Any("effective_watermark_from", effectiveSince),
 		slog.Any("watermark_to", result.WatermarkTo),
 		slog.Int("scanned_count", result.Scanned),
 		slog.Int("synced_count", result.Synced),
@@ -224,12 +231,28 @@ func runRapidProReporterSync(ctx context.Context, exec JobExecution, cfg rapidPr
 		slog.Int("failed_count", result.Failed),
 		slog.Bool("only_active", cfg.OnlyActive),
 		slog.Bool("dry_run", cfg.DryRun),
+		slog.Int("lookback_minutes", effectiveRapidProReporterSyncLookbackMinutes(cfg)),
 		slog.String("error", errorString(err)),
 	)
 	if err != nil {
 		return JobResult{ResultSummary: summary}, err
 	}
 	return JobResult{Status: RunStatusSucceeded, ResultSummary: summary}, nil
+}
+
+func effectiveRapidProReporterSyncLookbackMinutes(cfg rapidProReporterSyncConfig) int {
+	if cfg.LookbackMinutes <= 0 {
+		return 1
+	}
+	return cfg.LookbackMinutes
+}
+
+func rapidProReporterSyncEffectiveSince(since *time.Time, cfg rapidProReporterSyncConfig) *time.Time {
+	if since == nil {
+		return nil
+	}
+	effective := since.Add(-time.Duration(effectiveRapidProReporterSyncLookbackMinutes(cfg)) * time.Minute)
+	return &effective
 }
 
 func validateURLCallConfig(cfg urlCallConfig) map[string]any {
@@ -265,6 +288,9 @@ func validateRapidProReporterSyncConfig(cfg rapidProReporterSyncConfig) map[stri
 	details := map[string]any{}
 	if cfg.BatchSize <= 0 {
 		details["config.batchSize"] = []string{"must be greater than zero"}
+	}
+	if cfg.LookbackMinutes < 0 {
+		details["config.lookbackMinutes"] = []string{"must be zero or greater"}
 	}
 	return detailsOrNil(details)
 }

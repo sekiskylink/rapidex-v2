@@ -42,8 +42,12 @@ type fakeSchedulerRequestCreator struct {
 }
 
 type fakeSchedulerReporterSyncer struct {
-	result reporter.SyncBatchResult
-	err    error
+	since      *time.Time
+	limit      int
+	onlyActive bool
+	dryRun     bool
+	result     reporter.SyncBatchResult
+	err        error
 }
 
 func testIntPtr(value int) *int {
@@ -55,7 +59,11 @@ func (f *fakeSchedulerRequestCreator) CreateExternalRequest(_ context.Context, i
 	return f.result, f.err
 }
 
-func (f fakeSchedulerReporterSyncer) SyncUpdatedSince(context.Context, *time.Time, int, bool, bool) (reporter.SyncBatchResult, error) {
+func (f *fakeSchedulerReporterSyncer) SyncUpdatedSince(_ context.Context, since *time.Time, limit int, onlyActive bool, dryRun bool) (reporter.SyncBatchResult, error) {
+	f.since = since
+	f.limit = limit
+	f.onlyActive = onlyActive
+	f.dryRun = dryRun
 	return f.result, f.err
 }
 
@@ -231,7 +239,7 @@ func TestRequestExchangeSchedulerJobCreatesExternalRequest(t *testing.T) {
 func TestRapidProReporterSyncSchedulerJobEmitsBatchLogs(t *testing.T) {
 	now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
 	logOutput := captureSchedulerIntegrationLogs(t)
-	syncer := fakeSchedulerReporterSyncer{
+	syncer := &fakeSchedulerReporterSyncer{
 		result: reporter.SyncBatchResult{
 			Scanned:    3,
 			Synced:     2,
@@ -284,6 +292,59 @@ func TestRapidProReporterSyncSchedulerJobEmitsBatchLogs(t *testing.T) {
 		"\"failed_count\":1",
 		"\"error\":\"1 reporter syncs failed: remote validation\"",
 	)
+}
+
+func TestRapidProReporterSyncSchedulerJobAppliesLookbackToLastSuccessAt(t *testing.T) {
+	now := time.Date(2026, 4, 24, 10, 0, 0, 0, time.UTC)
+	lastSuccessAt := now.Add(-30 * time.Minute)
+	syncer := &fakeSchedulerReporterSyncer{}
+	_, err := runRapidProReporterSync(context.Background(), JobExecution{
+		Job: Record{
+			ID:            8,
+			Code:          "rapidpro-sync-lookback",
+			JobType:       JobTypeRapidProReporterSync,
+			LastSuccessAt: &lastSuccessAt,
+		},
+		Run: RunRecord{ID: 12, UID: "run-12"},
+		Now: now,
+	}, rapidProReporterSyncConfig{
+		BatchSize:       25,
+		OnlyActive:      true,
+		LookbackMinutes: 3,
+	}, integrationHandlerDependencies{reporterSyncer: syncer})
+	if err != nil {
+		t.Fatalf("run rapidpro reporter sync: %v", err)
+	}
+
+	expectedSince := lastSuccessAt.Add(-3 * time.Minute)
+	if syncer.since == nil || !syncer.since.Equal(expectedSince) {
+		t.Fatalf("expected since %s, got %+v", expectedSince, syncer.since)
+	}
+	if syncer.limit != 25 || !syncer.onlyActive || syncer.dryRun {
+		t.Fatalf("unexpected sync args: limit=%d onlyActive=%t dryRun=%t", syncer.limit, syncer.onlyActive, syncer.dryRun)
+	}
+}
+
+func TestCreateScheduledJobRejectsNegativeRapidProReporterSyncLookback(t *testing.T) {
+	svc := NewService(NewRepository()).WithIntegrationHandlers(integrationHandlerDependencies{})
+
+	_, err := svc.CreateScheduledJob(context.Background(), CreateInput{
+		Code:         "rapidpro-sync-invalid",
+		Name:         "RapidPro Sync",
+		JobCategory:  JobCategoryIntegration,
+		JobType:      JobTypeRapidProReporterSync,
+		ScheduleType: ScheduleTypeInterval,
+		ScheduleExpr: "15m",
+		Timezone:     "UTC",
+		Enabled:      true,
+		Config: map[string]any{
+			"batchSize":       25,
+			"lookbackMinutes": -1,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
 }
 
 func captureSchedulerIntegrationLogs(t *testing.T) *bytes.Buffer {

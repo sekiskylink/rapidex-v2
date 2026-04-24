@@ -226,7 +226,6 @@ func (r *PgRepository) ListUpdatedSince(ctx context.Context, since *time.Time, l
 	if onlyActive {
 		whereParts = append(whereParts, "is_active = TRUE")
 	}
-	whereParts = append(whereParts, "COALESCE(rapidpro_uuid, '') <> ''")
 	where := ""
 	if len(whereParts) > 0 {
 		where = "WHERE " + strings.Join(whereParts, " AND ")
