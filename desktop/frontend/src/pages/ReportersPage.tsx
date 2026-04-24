@@ -754,16 +754,16 @@ export function ReportersPage() {
           <Typography color="text.secondary">Manage local reporters, RapidPro contact sync, and outbound SMS.</Typography>
         </Box>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button variant="outlined" startIcon={<SyncRoundedIcon />} onClick={() => void syncSelected()} disabled={selectedCount === 0}>
+          <Button variant="outlined" size="small" startIcon={<SyncRoundedIcon />} onClick={() => void syncSelected()} disabled={selectedCount === 0}>
             Sync Selected
           </Button>
-          <Button variant="outlined" startIcon={<CampaignRoundedIcon />} onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
+          <Button variant="outlined" size="small" startIcon={<CampaignRoundedIcon />} onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
             Broadcast to Selected
           </Button>
-          <Button variant="outlined" startIcon={<MessageRoundedIcon />} onClick={openJurisdictionDialog}>
+          <Button variant="outlined" size="small" startIcon={<MessageRoundedIcon />} onClick={openJurisdictionDialog}>
             Send Message
           </Button>
-          <Button variant="contained" startIcon={<PersonAddRoundedIcon />} onClick={() => openDialog()}>
+          <Button variant="contained" size="small" startIcon={<PersonAddRoundedIcon />} onClick={() => openDialog()}>
             New Reporter
           </Button>
         </Stack>

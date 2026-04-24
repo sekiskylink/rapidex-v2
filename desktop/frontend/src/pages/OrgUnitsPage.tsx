@@ -268,7 +268,7 @@ export function OrgUnitsPage() {
           </Typography>
           <Typography color="text.secondary">Rapidex organisation units and facility hierarchy.</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddCircleRoundedIcon />} onClick={() => openDialog()}>
+        <Button variant="contained" size="small" startIcon={<AddCircleRoundedIcon />} onClick={() => openDialog()}>
           New Facility
         </Button>
       </Stack>

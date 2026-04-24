@@ -695,6 +695,7 @@ export function UsersPage() {
         {canWrite ? (
           <Button
             variant="contained"
+            size="small"
             startIcon={<PersonAddRoundedIcon />}
             onClick={() => void openCreateDialog()}
           >

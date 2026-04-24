@@ -220,7 +220,7 @@ export function SchedulerJobsPage() {
           </Typography>
         </Box>
         {canWrite ? (
-          <Button variant="contained" startIcon={<AddCircleRoundedIcon />} onClick={() => void navigate({ to: '/scheduler/new' })}>
+          <Button variant="contained" size="small" startIcon={<AddCircleRoundedIcon />} onClick={() => void navigate({ to: '/scheduler/new' })}>
             Create Scheduled Job
           </Button>
         ) : null}
