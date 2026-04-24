@@ -437,7 +437,7 @@ func validateHierarchy(levels []Level, orgUnits []OrgUnit, memberships map[strin
 		if !ok {
 			return fmt.Errorf("dhis2 organisation unit %s references missing parent %s", uid, parentUID)
 		}
-		if !strings.HasPrefix(unit.Path, parent.Path) {
+		if !pathWithinHierarchy(unit.Path, parent.Path) {
 			return fmt.Errorf("dhis2 organisation unit %s path does not match parent hierarchy", uid)
 		}
 	}
@@ -481,10 +481,22 @@ func normalizePath(path string, uid string) string {
 		trimmed = "/" + strings.TrimSpace(uid)
 	}
 	trimmed = strings.Trim(trimmed, "/")
-	if trimmed == "" {
-		return "/"
+	if trimmed == "" && strings.TrimSpace(uid) != "" {
+		trimmed = strings.Trim(strings.TrimSpace(uid), "/")
 	}
-	return "/" + trimmed + "/"
+	if trimmed == "" {
+		return ""
+	}
+	return "/" + trimmed
+}
+
+func pathWithinHierarchy(path string, prefix string) bool {
+	normalizedPath := normalizePath(path, "")
+	normalizedPrefix := normalizePath(prefix, "")
+	if normalizedPath == "" || normalizedPrefix == "" {
+		return false
+	}
+	return normalizedPath == normalizedPrefix || strings.HasPrefix(normalizedPath, normalizedPrefix+"/")
 }
 
 func (s *HierarchySyncService) fetchJSON(ctx context.Context, record server.Record, endpoint string, params map[string]string, dest any) error {

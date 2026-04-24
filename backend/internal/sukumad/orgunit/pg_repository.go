@@ -97,8 +97,8 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	if query.ScopeRestricted && len(query.ScopePaths) > 0 {
 		pathClauses := make([]string, 0, len(query.ScopePaths))
 		for _, path := range query.ScopePaths {
-			pathClauses = append(pathClauses, "org_units.path LIKE ?")
-			args = append(args, path+"%")
+			pathClauses = append(pathClauses, "(org_units.path = ? OR org_units.path LIKE ?)")
+			args = append(args, path, path+"/%")
 		}
 		where += " AND (" + strings.Join(pathClauses, " OR ") + ")"
 	}
@@ -301,9 +301,9 @@ func (r *PgRepository) Update(ctx context.Context, unit OrgUnit) (OrgUnit, error
 			UPDATE org_units
 			SET path = $1 || substring(path FROM $2),
 			    hierarchy_level = hierarchy_level + $3
-			WHERE path LIKE $4
-			  AND id <> $5
-		`, newPath, len(oldPath)+1, levelDelta, oldPath+"%", unit.ID); err != nil {
+			WHERE (path = $4 OR path LIKE $5)
+			  AND id <> $6
+		`, newPath, len(oldPath)+1, levelDelta, oldPath, oldPath+"/%", unit.ID); err != nil {
 			return OrgUnit{}, err
 		}
 	}
@@ -399,9 +399,9 @@ func (r *PgRepository) loadParentForMutation(ctx context.Context, tx *sqlx.Tx, p
 
 func buildPath(parent *OrgUnit, uid string) string {
 	if parent == nil {
-		return "/" + uid + "/"
+		return "/" + uid
 	}
-	return parent.Path + uid + "/"
+	return parent.Path + "/" + uid
 }
 
 func convertOrgUnitRows(rows []orgUnitRow) []OrgUnit {

@@ -97,8 +97,8 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	if query.ScopeRestricted && len(query.ScopePaths) > 0 {
 		pathClauses := make([]string, 0, len(query.ScopePaths))
 		for _, path := range query.ScopePaths {
-			pathClauses = append(pathClauses, "scope_org_unit.path LIKE ?")
-			args = append(args, path+"%")
+			pathClauses = append(pathClauses, "(scope_org_unit.path = ? OR scope_org_unit.path LIKE ?)")
+			args = append(args, path, path+"/%")
 		}
 		where += " AND (" + strings.Join(pathClauses, " OR ") + ")"
 	}
@@ -918,8 +918,8 @@ func buildBroadcastRecipientWhere(query BroadcastRecipientQuery) (string, []any)
 		if trimmed == "" {
 			continue
 		}
-		pathClauses = append(pathClauses, "scope_org_unit.path LIKE ?")
-		args = append(args, trimmed+"%")
+		pathClauses = append(pathClauses, "(scope_org_unit.path = ? OR scope_org_unit.path LIKE ?)")
+		args = append(args, trimmed, trimmed+"/%")
 	}
 	if len(pathClauses) == 0 {
 		return "", nil

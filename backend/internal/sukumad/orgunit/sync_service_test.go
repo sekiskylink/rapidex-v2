@@ -107,7 +107,7 @@ func TestHierarchySyncDryRunFetchesAndValidatesDHIS2Metadata(t *testing.T) {
 	if repo.input.ResolvedLevelName != "District" || repo.input.ResolvedLevelUID != "lvl2" {
 		t.Fatalf("expected resolved district level, got %+v", repo.input)
 	}
-	if repo.input.OrgUnits[1].Path != "/root1/dist1/" {
+	if repo.input.OrgUnits[1].Path != "/root1/dist1" {
 		t.Fatalf("expected normalized path, got %+v", repo.input.OrgUnits[1])
 	}
 }

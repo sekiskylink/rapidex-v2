@@ -77,16 +77,33 @@ func ScopeContainsPath(scope Scope, path string) bool {
 	if !scope.Restricted {
 		return true
 	}
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" || len(scope.PathPrefixes) == 0 {
+	normalizedPath := normalizeScopePath(path)
+	if normalizedPath == "" || len(scope.PathPrefixes) == 0 {
 		return false
 	}
 	for _, prefix := range scope.PathPrefixes {
-		if strings.HasPrefix(trimmed, prefix) {
+		if pathHasPrefix(normalizedPath, prefix) {
 			return true
 		}
 	}
 	return false
+}
+
+func pathHasPrefix(path string, prefix string) bool {
+	normalizedPath := normalizeScopePath(path)
+	normalizedPrefix := normalizeScopePath(prefix)
+	if normalizedPath == "" || normalizedPrefix == "" {
+		return false
+	}
+	return normalizedPath == normalizedPrefix || strings.HasPrefix(normalizedPath, normalizedPrefix+"/")
+}
+
+func normalizeScopePath(path string) string {
+	trimmed := strings.Trim(strings.TrimSpace(path), "/")
+	if trimmed == "" {
+		return ""
+	}
+	return "/" + trimmed
 }
 
 // Assign assigns a user to an organisation unit.
