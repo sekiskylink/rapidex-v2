@@ -248,6 +248,7 @@ describe('web auth routes', () => {
 
     const firstRender = renderWithRouter('/orgunits')
     expect(await screen.findByRole('heading', { name: 'Facilities', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Facility' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
     expect(screen.getByRole('button', { name: 'Facilities' })).toBeInTheDocument()
@@ -256,6 +257,7 @@ describe('web auth routes', () => {
     firstRender.unmount()
     renderWithRouter('/reporters')
     expect(await screen.findByRole('heading', { name: 'Reporters', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Reporter' })).toBeInTheDocument()
   })
 
   it('applies local navigation visibility and label preferences', async () => {

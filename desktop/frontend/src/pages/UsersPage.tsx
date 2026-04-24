@@ -1,4 +1,5 @@
 import React from 'react'
+import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded'
 import {
   Alert,
   Autocomplete,
@@ -735,6 +736,7 @@ export function UsersPage() {
         </Box>
         <Button
           variant="contained"
+          startIcon={<PersonAddRoundedIcon />}
           onClick={() => void openCreateDialog()}
           disabled={!canWrite}
         >

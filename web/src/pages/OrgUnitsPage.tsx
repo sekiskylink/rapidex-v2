@@ -18,6 +18,7 @@ import { DataGrid } from '@mui/x-data-grid'
 import { getAuthSnapshot } from '../auth/state'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { apiRequest } from '../lib/api'
+import { AddCircleRoundedIcon } from '../ui/icons'
 
 interface OrgUnit {
   id: number
@@ -266,7 +267,7 @@ export function OrgUnitsPage() {
           </Typography>
           <Typography color="text.secondary">Rapidex organisation units and facility hierarchy.</Typography>
         </Box>
-        <Button variant="contained" onClick={() => openDialog()}>
+        <Button variant="contained" startIcon={<AddCircleRoundedIcon />} onClick={() => openDialog()}>
           New Facility
         </Button>
       </Stack>

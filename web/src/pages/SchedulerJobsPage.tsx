@@ -10,6 +10,7 @@ import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
+import { AddCircleRoundedIcon } from '../ui/icons'
 import type { SchedulerRouteSearch } from './listRouteSearch'
 
 interface ScheduledJobRecord {
@@ -235,7 +236,7 @@ export function SchedulerJobsPage() {
           </Typography>
         </Box>
         {canWrite ? (
-          <Button variant="contained" onClick={() => void navigate({ to: '/scheduler/new' })}>
+          <Button variant="contained" startIcon={<AddCircleRoundedIcon />} onClick={() => void navigate({ to: '/scheduler/new' })}>
             Create Scheduled Job
           </Button>
         ) : null}

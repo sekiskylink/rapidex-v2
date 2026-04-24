@@ -385,6 +385,7 @@ describe('app shell routes', () => {
 
     const firstRender = renderWithRouter('/orgunits', store)
     expect(await screen.findByRole('heading', { name: 'Facilities', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Facility' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Toggle Sukumad menu' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Toggle Sukumad menu' }))
     expect(screen.getByRole('button', { name: 'Facilities' })).toBeInTheDocument()
@@ -393,6 +394,7 @@ describe('app shell routes', () => {
     firstRender.unmount()
     renderWithRouter('/reporters', store)
     expect(await screen.findByRole('heading', { name: 'Reporters', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Reporter' })).toBeInTheDocument()
   })
 
   it('renders Sukumad deliveries route and navigation when permission is granted', async () => {

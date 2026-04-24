@@ -23,6 +23,7 @@ import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
+import { PersonAddRoundedIcon } from '../ui/icons'
 
 interface UserRow {
   id: number
@@ -694,6 +695,7 @@ export function UsersPage() {
         {canWrite ? (
           <Button
             variant="contained"
+            startIcon={<PersonAddRoundedIcon />}
             onClick={() => void openCreateDialog()}
           >
             Create User

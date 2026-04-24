@@ -1,4 +1,5 @@
 import React from 'react'
+import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded'
 import { Alert, Box, Button, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -219,7 +220,7 @@ export function SchedulerJobsPage() {
           </Typography>
         </Box>
         {canWrite ? (
-          <Button variant="contained" onClick={() => void navigate({ to: '/scheduler/new' })}>
+          <Button variant="contained" startIcon={<AddCircleRoundedIcon />} onClick={() => void navigate({ to: '/scheduler/new' })}>
             Create Scheduled Job
           </Button>
         ) : null}

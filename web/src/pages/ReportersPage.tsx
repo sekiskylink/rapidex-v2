@@ -28,7 +28,7 @@ import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { handleAppError } from '../errors/handleAppError'
 import { apiRequest } from '../lib/api'
 import { useAppNotify } from '../notifications/facade'
-import { ChatBubbleOutlineRoundedIcon, GroupRoundedIcon, SyncRoundedIcon } from '../ui/icons'
+import { CampaignRoundedIcon, MessageRoundedIcon, PersonAddRoundedIcon, SyncRoundedIcon } from '../ui/icons'
 import {
   ChatHistoryDialog,
   RapidProDetailsDialog,
@@ -751,16 +751,16 @@ export function ReportersPage() {
           <Typography color="text.secondary">Manage local reporters, RapidPro contact sync, and outbound SMS.</Typography>
         </Box>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button variant="outlined" size="small" startIcon={<SyncRoundedIcon />} onClick={() => void syncSelected()} disabled={selectedCount === 0}>
+          <Button variant="outlined" startIcon={<SyncRoundedIcon />} onClick={() => void syncSelected()} disabled={selectedCount === 0}>
             Sync Selected
           </Button>
-          <Button variant="outlined" size="small" startIcon={<GroupRoundedIcon />} onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
+          <Button variant="outlined" startIcon={<CampaignRoundedIcon />} onClick={() => openMessageDialog('bulk')} disabled={selectedCount === 0}>
             Broadcast to Selected
           </Button>
-          <Button variant="outlined" size="small" startIcon={<ChatBubbleOutlineRoundedIcon />} onClick={openJurisdictionDialog}>
+          <Button variant="outlined" startIcon={<MessageRoundedIcon />} onClick={openJurisdictionDialog}>
             Send Message
           </Button>
-          <Button variant="contained" size="small" startIcon={<GroupRoundedIcon />} onClick={() => openDialog()}>
+          <Button variant="contained" startIcon={<PersonAddRoundedIcon />} onClick={() => openDialog()}>
             New Reporter
           </Button>
         </Stack>

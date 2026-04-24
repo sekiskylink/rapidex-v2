@@ -91,6 +91,18 @@ export const ChatBubbleOutlineRoundedIcon = makeIcon(
 export const SyncRoundedIcon = makeIcon(
   'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8m-6.76.74L3.78 6.2A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8z',
 )
+export const AddCircleRoundedIcon = makeIcon(
+  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z',
+)
+export const CampaignRoundedIcon = makeIcon(
+  'M3 10v4c0 .55.45 1 1 1h1l2.29 2.29c.63.63 1.71.18 1.71-.71V15h1l5 3V6L9 9H4c-.55 0-1 .45-1 1m15.5 2c0-1.77-1-3.29-2.5-4.03v8.05A4.49 4.49 0 0 0 18.5 12',
+)
+export const MessageRoundedIcon = makeIcon(
+  'M4 4h16c1.1 0 2 .9 2 2v12l-4-4H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2',
+)
+export const PersonAddRoundedIcon = makeIcon(
+  'M15 12c2.21 0 4-1.79 4-4S17.21 4 15 4s-4 1.79-4 4 1.79 4 4 4m-9 8v-1c0-2.67 5.33-4 8-4 .29 0 .62.02.97.05C13.13 15.88 12 17.34 12 19c0 .34.04.67.09 1zm13-7v-2h-2V9h-2v2h-2v2h2v2h2v-2z',
+)
 
 export const AccountBalanceWalletRoundedIcon = makeIcon(
   'M10 16V8c0-1.1.89-2 2-2h9V5c0-1.1-.9-2-2-2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-1h-9c-1.11 0-2-.9-2-2m3-8c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h9V8zm3 5.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5',

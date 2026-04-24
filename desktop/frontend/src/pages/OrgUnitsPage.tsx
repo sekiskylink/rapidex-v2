@@ -1,4 +1,5 @@
 import React from 'react'
+import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded'
 import {
   Alert,
   Box,
@@ -267,7 +268,7 @@ export function OrgUnitsPage() {
           </Typography>
           <Typography color="text.secondary">Rapidex organisation units and facility hierarchy.</Typography>
         </Box>
-        <Button variant="contained" onClick={() => openDialog()}>
+        <Button variant="contained" startIcon={<AddCircleRoundedIcon />} onClick={() => openDialog()}>
           New Facility
         </Button>
       </Stack>
