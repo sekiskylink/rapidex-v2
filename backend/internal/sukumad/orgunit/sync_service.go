@@ -10,6 +10,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -427,6 +428,32 @@ func validateHierarchy(levels []Level, orgUnits []OrgUnit, memberships map[strin
 			return fmt.Errorf("dhis2 organisation unit %s references unknown level %d", unit.UID, unit.HierarchyLevel)
 		}
 		unitSeen[unit.UID] = unit
+	}
+	duplicateCodes := map[string][]string{}
+	for _, unit := range orgUnits {
+		code := strings.TrimSpace(unit.Code)
+		if code == "" {
+			continue
+		}
+		duplicateCodes[code] = append(duplicateCodes[code], fmt.Sprintf("%s (%s)", unit.Name, unit.UID))
+	}
+	duplicateSummaries := make([]string, 0)
+	for code, refs := range duplicateCodes {
+		if len(refs) < 2 {
+			continue
+		}
+		sort.Strings(refs)
+		if len(refs) > 3 {
+			refs = append(refs[:3], fmt.Sprintf("+%d more", len(refs)-3))
+		}
+		duplicateSummaries = append(duplicateSummaries, fmt.Sprintf("%q used by %s", code, strings.Join(refs, ", ")))
+	}
+	if len(duplicateSummaries) > 0 {
+		sort.Strings(duplicateSummaries)
+		if len(duplicateSummaries) > 5 {
+			duplicateSummaries = append(duplicateSummaries[:5], fmt.Sprintf("+%d more duplicate codes", len(duplicateSummaries)-5))
+		}
+		return fmt.Errorf("dhis2 organisation units contain duplicate non-empty codes: %s", strings.Join(duplicateSummaries, "; "))
 	}
 	for uid, unit := range unitSeen {
 		parentUID, _ := unit.Extras["parentUid"].(string)

@@ -63,14 +63,15 @@ func (s *Service) Get(ctx context.Context, id int64) (OrgUnit, error) {
 // Create validates and persists a new OrgUnit.  It sets timestamps and generates a UID if
 // necessary.  Code must be unique across all units; this check is delegated to the repository.
 func (s *Service) Create(ctx context.Context, unit OrgUnit) (OrgUnit, error) {
-	if strings.TrimSpace(unit.Code) == "" || strings.TrimSpace(unit.Name) == "" {
-		return OrgUnit{}, errors.New("code and name are required")
+	if strings.TrimSpace(unit.Name) == "" {
+		return OrgUnit{}, errors.New("name is required")
 	}
 	uid, err := ensureDHIS2UID(unit.UID)
 	if err != nil {
 		return OrgUnit{}, err
 	}
 	unit.UID = uid
+	unit.Code = strings.TrimSpace(unit.Code)
 	if strings.TrimSpace(unit.ShortName) == "" {
 		unit.ShortName = unit.Name
 	}
@@ -111,12 +112,13 @@ func (s *Service) Update(ctx context.Context, unit OrgUnit) (OrgUnit, error) {
 	if unit.ID == 0 {
 		return OrgUnit{}, errors.New("id is required for update")
 	}
-	if strings.TrimSpace(unit.Code) == "" || strings.TrimSpace(unit.Name) == "" {
-		return OrgUnit{}, errors.New("code and name are required")
+	if strings.TrimSpace(unit.Name) == "" {
+		return OrgUnit{}, errors.New("name is required")
 	}
 	if _, err := ensureDHIS2UID(unit.UID); unit.UID != "" && err != nil {
 		return OrgUnit{}, err
 	}
+	unit.Code = strings.TrimSpace(unit.Code)
 	if strings.TrimSpace(unit.ShortName) == "" {
 		unit.ShortName = unit.Name
 	}

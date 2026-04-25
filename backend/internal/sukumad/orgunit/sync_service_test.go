@@ -138,3 +138,111 @@ func TestHierarchySyncPersistsFailureSummaryWithoutMutation(t *testing.T) {
 		t.Fatalf("expected failed sync result, got %+v", result)
 	}
 }
+
+func TestHierarchySyncAllowsBlankOrgUnitCodes(t *testing.T) {
+	repo := &fakeHierarchySyncRepo{}
+	service := NewHierarchySyncService(repo, fakeHierarchyServerLookup{record: sukumadserver.Record{Code: "dhis2", BaseURL: "https://dhis.test"}}, &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			var body string
+			switch req.URL.Path {
+			case "/api/organisationUnitLevels.json":
+				body = `{"organisationUnitLevels":[{"id":"lvl1","name":"Country","level":1},{"id":"lvl2","name":"District","level":2}]}`
+			case "/api/organisationUnitGroups.json":
+				body = `{"organisationUnitGroups":[]}`
+			case "/api/attributes.json":
+				body = `{"attributes":[]}`
+			case "/api/organisationUnits.json":
+				body = `{"organisationUnits":[
+					{"id":"root1","code":"","name":"Uganda","level":1,"path":"/root1"},
+					{"id":"dist1","name":"Kampala","level":2,"path":"/root1/dist1","parent":{"id":"root1"}}
+				]}`
+			default:
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`not found`)),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Request:    req,
+			}, nil
+		}),
+	})
+
+	result, err := service.Sync(context.Background(), SyncRequest{
+		ServerCode:        "dhis2",
+		FullRefresh:       true,
+		DryRun:            true,
+		DistrictLevelName: "District",
+	})
+	if err != nil {
+		t.Fatalf("sync hierarchy: %v", err)
+	}
+	if result.Status != syncStatusSucceeded {
+		t.Fatalf("expected sync success, got %+v", result)
+	}
+	if repo.input.OrgUnits[0].Code != "" || repo.input.OrgUnits[1].Code != "" {
+		t.Fatalf("expected blank codes to be preserved, got %+v", repo.input.OrgUnits)
+	}
+}
+
+func TestHierarchySyncRejectsDuplicateNonEmptyCodesBeforeMutation(t *testing.T) {
+	repo := &fakeHierarchySyncRepo{}
+	service := NewHierarchySyncService(repo, fakeHierarchyServerLookup{record: sukumadserver.Record{Code: "dhis2", BaseURL: "https://dhis.test"}}, &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			var body string
+			switch req.URL.Path {
+			case "/api/organisationUnitLevels.json":
+				body = `{"organisationUnitLevels":[{"id":"lvl1","name":"Country","level":1},{"id":"lvl2","name":"District","level":2}]}`
+			case "/api/organisationUnitGroups.json":
+				body = `{"organisationUnitGroups":[]}`
+			case "/api/attributes.json":
+				body = `{"attributes":[]}`
+			case "/api/organisationUnits.json":
+				body = `{"organisationUnits":[
+					{"id":"root1","code":"DUP-1","name":"Uganda","level":1,"path":"/root1"},
+					{"id":"dist1","code":"DUP-1","name":"Kampala","level":2,"path":"/root1/dist1","parent":{"id":"root1"}}
+				]}`
+			default:
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`not found`)),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Request:    req,
+			}, nil
+		}),
+	})
+
+	result, err := service.Sync(context.Background(), SyncRequest{
+		ServerCode:        "dhis2",
+		FullRefresh:       true,
+		DryRun:            false,
+		DistrictLevelName: "District",
+	})
+	if err == nil {
+		t.Fatal("expected sync failure")
+	}
+	if !strings.Contains(err.Error(), `duplicate non-empty codes`) || !strings.Contains(err.Error(), `DUP-1`) {
+		t.Fatalf("expected duplicate code details, got %v", err)
+	}
+	if repo.input.Status != syncStatusFailed {
+		t.Fatalf("expected failed sync state to be recorded, got %+v", repo.input)
+	}
+	if result.Status != syncStatusFailed || !strings.Contains(result.ErrorMessage, `DUP-1`) {
+		t.Fatalf("expected failed result summary with duplicate code details, got %+v", result)
+	}
+	if len(repo.input.OrgUnits) != 0 {
+		t.Fatalf("expected no mutation payload on failure, got %+v", repo.input.OrgUnits)
+	}
+}

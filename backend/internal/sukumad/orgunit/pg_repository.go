@@ -27,28 +27,28 @@ const orgUnitDisplayPathSQL = `
 	) AS display_path`
 
 type orgUnitRow struct {
-	ID              int64      `db:"id"`
-	UID             string     `db:"uid"`
-	Code            string     `db:"code"`
-	Name            string     `db:"name"`
-	ShortName       string     `db:"short_name"`
-	Description     string     `db:"description"`
-	ParentID        *int64     `db:"parent_id"`
-	HierarchyLevel  int        `db:"hierarchy_level"`
-	Path            string     `db:"path"`
-	DisplayPath     string     `db:"display_path"`
-	Address         string     `db:"address"`
-	Email           string     `db:"email"`
-	URL             string     `db:"url"`
-	PhoneNumber     string     `db:"phone_number"`
-	Extras          JSONMap    `db:"extras"`
-	AttributeValues JSONMap    `db:"attribute_values"`
-	OpeningDate     *time.Time `db:"opening_date"`
-	Deleted         bool       `db:"deleted"`
-	LastSyncDate    *time.Time `db:"last_sync_date"`
-	HasChildren     bool       `db:"has_children"`
-	CreatedAt       time.Time  `db:"created_at"`
-	UpdatedAt       time.Time  `db:"updated_at"`
+	ID              int64          `db:"id"`
+	UID             string         `db:"uid"`
+	Code            sql.NullString `db:"code"`
+	Name            string         `db:"name"`
+	ShortName       string         `db:"short_name"`
+	Description     string         `db:"description"`
+	ParentID        *int64         `db:"parent_id"`
+	HierarchyLevel  int            `db:"hierarchy_level"`
+	Path            string         `db:"path"`
+	DisplayPath     string         `db:"display_path"`
+	Address         string         `db:"address"`
+	Email           string         `db:"email"`
+	URL             string         `db:"url"`
+	PhoneNumber     string         `db:"phone_number"`
+	Extras          JSONMap        `db:"extras"`
+	AttributeValues JSONMap        `db:"attribute_values"`
+	OpeningDate     *time.Time     `db:"opening_date"`
+	Deleted         bool           `db:"deleted"`
+	LastSyncDate    *time.Time     `db:"last_sync_date"`
+	HasChildren     bool           `db:"has_children"`
+	CreatedAt       time.Time      `db:"created_at"`
+	UpdatedAt       time.Time      `db:"updated_at"`
 }
 
 func NewPgRepository(db *sqlx.DB) *PgRepository {
@@ -145,7 +145,11 @@ func (r *PgRepository) GetByUID(ctx context.Context, uid string) (OrgUnit, error
 }
 
 func (r *PgRepository) GetByCode(ctx context.Context, code string) (OrgUnit, error) {
-	return r.getByWhere(ctx, "code = $1", code)
+	normalized := strings.TrimSpace(code)
+	if normalized == "" {
+		return OrgUnit{}, sql.ErrNoRows
+	}
+	return r.getByWhere(ctx, "code = $1", normalized)
 }
 
 func (r *PgRepository) Create(ctx context.Context, unit OrgUnit) (OrgUnit, error) {
@@ -187,7 +191,7 @@ func (r *PgRepository) Create(ctx context.Context, unit OrgUnit) (OrgUnit, error
 		ctx,
 		query,
 		unit.UID,
-		unit.Code,
+		nullableText(unit.Code),
 		unit.Name,
 		unit.ShortName,
 		unit.Description,
@@ -266,7 +270,7 @@ func (r *PgRepository) Update(ctx context.Context, unit OrgUnit) (OrgUnit, error
 		    updated_at = $17
 		WHERE id = $18
 	`,
-		unit.Code,
+		nullableText(unit.Code),
 		unit.Name,
 		unit.ShortName,
 		unit.Description,
@@ -413,10 +417,14 @@ func convertOrgUnitRows(rows []orgUnitRow) []OrgUnit {
 }
 
 func (r orgUnitRow) toOrgUnit() OrgUnit {
+	code := ""
+	if r.Code.Valid {
+		code = r.Code.String
+	}
 	return OrgUnit{
 		ID:              r.ID,
 		UID:             r.UID,
-		Code:            r.Code,
+		Code:            code,
 		Name:            r.Name,
 		ShortName:       r.ShortName,
 		Description:     r.Description,
@@ -444,4 +452,12 @@ func defaultJSONMap(input JSONMap) JSONMap {
 		return JSONMap{}
 	}
 	return input
+}
+
+func nullableText(value string) any {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return trimmed
 }

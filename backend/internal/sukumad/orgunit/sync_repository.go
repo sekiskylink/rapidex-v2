@@ -301,7 +301,7 @@ func (r *PgRepository) insertHierarchy(ctx context.Context, tx *sqlx.Tx, input r
 			RETURNING id
 		`,
 			item.UID,
-			item.Code,
+			nullableText(item.Code),
 			item.Name,
 			item.ShortName,
 			item.Description,

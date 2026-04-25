@@ -1,5 +1,35 @@
 # Status
 
+## Milestone — DHIS2 Org Unit Code Nullability and Duplicate Validation (Complete)
+
+### What changed
+- Added a new backend migration to make `org_units.code` nullable and replace the old table-wide unique constraint with a uniqueness rule that only applies to non-empty trimmed codes.
+- Updated org-unit create/update service validation so facility name remains required but code is optional.
+- Updated org-unit repository persistence so blank codes are stored as `NULL` and `GetByCode` only resolves meaningful codes.
+- Hardened the DHIS2 hierarchy refresh validation path so duplicate non-empty org-unit codes are detected before any database mutation.
+- Scheduler-driven hierarchy refresh failures now return an actionable validation error that includes the offending duplicate code values instead of surfacing a late PostgreSQL `org_units_code_key` failure.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-25-dhis2-org-unit-code-nullability.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - org-unit service coverage for blank-code create behavior and name-only validation
+  - hierarchy sync coverage for blank-code imports and duplicate non-empty code rejection
+  - migration coverage for the new nullable/unique code migration pair
+
+### Verification summary
+- Backend focused suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/orgunit ./migrations`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Duplicate non-empty DHIS2 org-unit codes still require source-data cleanup upstream; RapidEx now fails fast with details instead of attempting to auto-resolve them.
+- Existing frontend test output still includes non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing Vite build warnings about ignored `'use client'` directives and chunk-size thresholds remain unchanged.
+
 ## Milestone — DHIS2 Reconcile Refresh and Reporter Facility Resync (Complete)
 
 ### What changed

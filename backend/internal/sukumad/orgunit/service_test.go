@@ -64,3 +64,29 @@ func TestServiceCreateRejectsMalformedUID(t *testing.T) {
 		t.Fatal("expected malformed DHIS2 uid to be rejected")
 	}
 }
+
+func TestServiceCreateAllowsBlankCode(t *testing.T) {
+	repo := &stubRepository{}
+	service := NewService(repo)
+
+	created, err := service.Create(context.Background(), OrgUnit{
+		Name: "Facility Without Code",
+	})
+	if err != nil {
+		t.Fatalf("create org unit: %v", err)
+	}
+	if created.Code != "" {
+		t.Fatalf("expected blank code, got %q", created.Code)
+	}
+	if repo.created.Code != "" {
+		t.Fatalf("expected repository create to receive blank code, got %q", repo.created.Code)
+	}
+}
+
+func TestServiceCreateRequiresName(t *testing.T) {
+	service := NewService(&stubRepository{})
+	_, err := service.Create(context.Background(), OrgUnit{Code: "FAC-003"})
+	if err == nil || err.Error() != "name is required" {
+		t.Fatalf("expected name is required error, got %v", err)
+	}
+}

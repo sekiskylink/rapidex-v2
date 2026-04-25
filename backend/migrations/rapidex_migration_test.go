@@ -8,7 +8,7 @@ import (
 )
 
 func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
-	files, err := filepath.Glob("0000{2[6-9],3[0-4]}_*.sql")
+	files, err := filepath.Glob("0000{2[6-9],3[0-5]}_*.sql")
 	if err != nil {
 		t.Fatalf("glob migrations: %v", err)
 	}
@@ -17,7 +17,7 @@ func TestRapidexMigrationsHaveUpAndDownPairs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("glob fallback migrations: %v", err)
 		}
-		extra, err := filepath.Glob("00003[0-4]_*.sql")
+		extra, err := filepath.Glob("00003[0-5]_*.sql")
 		if err != nil {
 			t.Fatalf("glob 00003x migrations: %v", err)
 		}
@@ -192,6 +192,31 @@ func TestRapidexMigrationDeclaresRequiredTablesAndRollback(t *testing.T) {
 	} {
 		if !strings.Contains(reporterOrphaningDown, fragment) {
 			t.Fatalf("expected reporter orphaning rollback to contain %q", fragment)
+		}
+	}
+
+	nullableCodesUp := readMigration(t, "000035_allow_null_org_unit_codes.up.sql")
+	for _, fragment := range []string{
+		"UPDATE org_units",
+		"DROP CONSTRAINT IF EXISTS org_units_code_key",
+		"ALTER COLUMN code DROP NOT NULL",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_org_units_code_unique",
+		"NULLIF(BTRIM(code), '')",
+	} {
+		if !strings.Contains(nullableCodesUp, fragment) {
+			t.Fatalf("expected nullable org unit code migration to contain %q", fragment)
+		}
+	}
+
+	nullableCodesDown := readMigration(t, "000035_allow_null_org_unit_codes.down.sql")
+	for _, fragment := range []string{
+		"DROP INDEX IF EXISTS idx_org_units_code_unique",
+		"SET code = uid",
+		"ALTER COLUMN code SET NOT NULL",
+		"ADD CONSTRAINT org_units_code_key UNIQUE (code)",
+	} {
+		if !strings.Contains(nullableCodesDown, fragment) {
+			t.Fatalf("expected nullable org unit code rollback to contain %q", fragment)
 		}
 	}
 }
