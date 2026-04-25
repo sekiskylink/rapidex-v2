@@ -2,13 +2,19 @@ import React from 'react'
 import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
+  Divider,
+  List,
+  ListItem,
   MenuItem,
   Stack,
   TextField,
@@ -30,6 +36,7 @@ interface OrgUnit {
   parentId?: number | null
   hierarchyLevel: number
   path: string
+  displayPath?: string
   address: string
   email: string
   url: string
@@ -39,6 +46,7 @@ interface OrgUnit {
   openingDate?: string | null
   deleted: boolean
   lastSyncDate?: string | null
+  hasChildren?: boolean
 }
 
 interface OrgUnitListResponse {
@@ -83,6 +91,11 @@ type OrgUnitFormState = {
   openingDate: string
   extrasText: string
   attributeValuesText: string
+}
+
+type FacilityBrowserEntry = {
+  unit?: OrgUnit
+  label: string
 }
 
 const emptyForm: OrgUnitFormState = {
@@ -155,6 +168,35 @@ function toForm(unit?: OrgUnit | null): OrgUnitFormState {
   }
 }
 
+function uniqOrgUnits(items: OrgUnit[]) {
+  const seen = new Set<number>()
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false
+    }
+    seen.add(item.id)
+    return true
+  })
+}
+
+function formatFacilityPath(unit: OrgUnit | null) {
+  if (unit?.displayPath) {
+    return unit.displayPath
+  }
+  if (!unit?.path) {
+    return ''
+  }
+  return unit.path
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' / ')
+}
+
+function sortOrgUnitsAlphabetically(items: OrgUnit[]) {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
+}
+
 export function OrgUnitsPage() {
   const apiClient = useApiClient()
   const principal = useSessionPrincipal()
@@ -171,6 +213,13 @@ export function OrgUnitsPage() {
   const [syncState, setSyncState] = React.useState<SyncState | null>(null)
   const [syncResult, setSyncResult] = React.useState<SyncResult | null>(null)
   const [syncForm, setSyncForm] = React.useState(defaultSyncForm)
+  const [searchInput, setSearchInput] = React.useState('')
+  const [searchOptions, setSearchOptions] = React.useState<OrgUnit[]>([])
+  const [searchLoading, setSearchLoading] = React.useState(false)
+  const [browserOpen, setBrowserOpen] = React.useState(false)
+  const [browserLoading, setBrowserLoading] = React.useState(false)
+  const [browserTrail, setBrowserTrail] = React.useState<FacilityBrowserEntry[]>([])
+  const [browserItems, setBrowserItems] = React.useState<OrgUnit[]>([])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -190,6 +239,63 @@ export function OrgUnitsPage() {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  const fetchSearchOptions = React.useCallback(async (search: string) => {
+    const response = await apiClient.request<OrgUnitListResponse>(`/api/v1/orgunits?page=0&pageSize=20&search=${encodeURIComponent(search)}`)
+    return response.items ?? []
+  }, [apiClient])
+
+  const loadBrowserLevel = React.useCallback(async (trail: FacilityBrowserEntry[]) => {
+    setBrowserLoading(true)
+    try {
+      const current = trail[trail.length - 1]?.unit
+      const query = current ? `parentId=${current.id}` : 'rootsOnly=true'
+      const response = await apiClient.request<OrgUnitListResponse>(`/api/v1/orgunits?page=0&pageSize=200&${query}`)
+      setBrowserTrail(trail)
+      setBrowserItems(sortOrgUnitsAlphabetically(response.items ?? []))
+    } catch (browserError) {
+      setError(browserError instanceof Error ? browserError.message : 'Unable to load facility hierarchy.')
+    } finally {
+      setBrowserLoading(false)
+    }
+  }, [apiClient])
+
+  React.useEffect(() => {
+    const search = searchInput.trim()
+    if (search === '') {
+      setSearchOptions([])
+      setSearchLoading(false)
+      return
+    }
+
+    let active = true
+    setSearchLoading(true)
+    const timeoutId = window.setTimeout(() => {
+      void fetchSearchOptions(search)
+        .then((results) => {
+          if (!active) {
+            return
+          }
+          setSearchOptions(sortOrgUnitsAlphabetically(uniqOrgUnits(results)))
+        })
+        .catch((searchError) => {
+          if (!active) {
+            return
+          }
+          setError(searchError instanceof Error ? searchError.message : 'Unable to search facilities.')
+        })
+        .finally(() => {
+          if (active) {
+            setSearchLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [fetchSearchOptions, searchInput])
 
   const columns = React.useMemo<GridColDef<OrgUnit>[]>(
     () => [
@@ -256,6 +362,35 @@ export function OrgUnitsPage() {
       return
     }
     setSyncDialogOpen(false)
+  }
+
+  function openFacilityDetails(unit: OrgUnit) {
+    setViewing(unit)
+    setItems((current) => uniqOrgUnits([unit, ...current]))
+  }
+
+  function openBrowser() {
+    setBrowserOpen(true)
+    void loadBrowserLevel([])
+  }
+
+  function closeBrowser() {
+    if (browserLoading) {
+      return
+    }
+    setBrowserOpen(false)
+    setBrowserTrail([])
+    setBrowserItems([])
+  }
+
+  function handleBrowserCrumb(index: number) {
+    const nextTrail = browserTrail.slice(0, index + 1)
+    void loadBrowserLevel(nextTrail)
+  }
+
+  function handleBrowseChildren(unit: OrgUnit) {
+    const nextTrail = [...browserTrail, { unit, label: unit.name }]
+    void loadBrowserLevel(nextTrail)
   }
 
   async function submitOrgUnit() {
@@ -336,6 +471,24 @@ export function OrgUnitsPage() {
     [editing?.id, items],
   )
 
+  const getParentName = React.useCallback((unit?: OrgUnit | null) => {
+    if (!unit?.parentId) {
+      return 'None'
+    }
+    const inList = items.find((item) => item.id === unit.parentId)?.name
+    if (inList) {
+      return inList
+    }
+    const displayParts = formatFacilityPath(unit)
+      .split(' / ')
+      .map((part) => part.trim())
+      .filter(Boolean)
+    if (displayParts.length > 0) {
+      return displayParts[displayParts.length - 1]
+    }
+    return String(unit.parentId)
+  }, [items])
+
   return (
     <Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
@@ -383,6 +536,63 @@ export function OrgUnitsPage() {
         </Alert>
       ) : null}
 
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} sx={{ mb: 2 }} alignItems={{ xs: 'stretch', lg: 'flex-start' }}>
+        <Autocomplete
+          autoHighlight
+          openOnFocus
+          disablePortal
+          options={searchOptions}
+          filterOptions={(options) => options}
+          loading={searchLoading}
+          value={null}
+          inputValue={searchInput}
+          onInputChange={(_event, value) => setSearchInput(value)}
+          onChange={(_event, value) => {
+            if (!value) {
+              return
+            }
+            openFacilityDetails(value)
+            setSearchInput(value.name)
+            setSearchOptions(uniqOrgUnits([value, ...searchOptions]))
+          }}
+          isOptionEqualToValue={(option, value) => option.id === value.id}
+          getOptionLabel={(option) => option.name ?? ''}
+          renderOption={(props, option) => (
+            <Box component="li" {...props}>
+              <Stack spacing={0.25}>
+                <Typography variant="body2">{option.name}</Typography>
+                {formatFacilityPath(option) ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {formatFacilityPath(option)}
+                  </Typography>
+                ) : null}
+              </Stack>
+            </Box>
+          )}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Find org unit"
+              placeholder="Search facilities or other org units"
+              helperText="Search for an org unit directly, or browse the hierarchy."
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {searchLoading ? <CircularProgress color="inherit" size={18} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+          sx={{ flex: 1, minWidth: 280 }}
+        />
+        <Button variant="outlined" onClick={openBrowser} sx={{ minWidth: { lg: 180 } }}>
+          Browse hierarchy
+        </Button>
+      </Stack>
+
       <DataGrid
         autoHeight
         rows={items}
@@ -419,7 +629,7 @@ export function OrgUnitsPage() {
             <TextField label="UID" value={viewing?.uid ?? ''} InputProps={{ readOnly: true }} />
             <TextField
               label="Parent"
-              value={viewing?.parentId ? items.find((item) => item.id === viewing.parentId)?.name ?? String(viewing.parentId) : 'None'}
+              value={getParentName(viewing)}
               InputProps={{ readOnly: true }}
             />
             <TextField label="Hierarchy Level" value={viewing?.hierarchyLevel ?? ''} InputProps={{ readOnly: true }} />
@@ -565,6 +775,71 @@ export function OrgUnitsPage() {
           <Button onClick={() => void runSync()} variant="contained" color={syncForm.dryRun ? 'primary' : 'warning'} disabled={syncing}>
             {syncing ? 'Running…' : syncForm.dryRun ? 'Run Dry Sync' : 'Run Full Refresh'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={browserOpen} onClose={closeBrowser} fullWidth maxWidth="md">
+        <DialogTitle>Browse Facility Hierarchy</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <DialogContentText>Select any org unit to open its details. Use Browse children to drill deeper into the hierarchy.</DialogContentText>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Button size="small" variant={browserTrail.length === 0 ? 'contained' : 'outlined'} onClick={() => void loadBrowserLevel([])}>
+                Root
+              </Button>
+              {browserTrail.map((entry, index) => (
+                <Button
+                  key={`${entry.label}-${index}`}
+                  size="small"
+                  variant={index === browserTrail.length - 1 ? 'contained' : 'outlined'}
+                  onClick={() => handleBrowserCrumb(index)}
+                >
+                  {entry.label}
+                </Button>
+              ))}
+            </Stack>
+            <Divider />
+            {browserLoading ? <CircularProgress size={24} /> : null}
+            {!browserLoading ? (
+              <List sx={{ py: 0 }}>
+                {browserItems.map((unit) => (
+                  <ListItem
+                    key={unit.id}
+                    disableGutters
+                    secondaryAction={
+                      unit.hasChildren ? (
+                        <Button size="small" onClick={() => handleBrowseChildren(unit)}>
+                          Browse children
+                        </Button>
+                      ) : null
+                    }
+                    sx={{ pr: unit.hasChildren ? 16 : 0 }}
+                  >
+                    <Button
+                      fullWidth
+                      variant="text"
+                      sx={{ justifyContent: 'flex-start', textTransform: 'none', py: 1.25 }}
+                      onClick={() => {
+                        openFacilityDetails(unit)
+                        setBrowserOpen(false)
+                      }}
+                    >
+                      <Stack spacing={0.25} alignItems="flex-start">
+                        <Typography variant="body2">{unit.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatFacilityPath(unit) || 'Open details'}
+                        </Typography>
+                      </Stack>
+                    </Button>
+                  </ListItem>
+                ))}
+                {browserItems.length === 0 ? <Typography color="text.secondary">No facilities found at this level.</Typography> : null}
+              </List>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeBrowser}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

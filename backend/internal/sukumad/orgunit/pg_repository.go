@@ -122,7 +122,7 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 		       last_sync_date, created_at, updated_at
 		FROM org_units
 		%s
-		ORDER BY path ASC, name ASC
+		ORDER BY hierarchy_level ASC, COALESCE(parent_id, 0) ASC, LOWER(name) ASC, id ASC
 		LIMIT %d OFFSET %d
 	`, orgUnitDisplayPathSQL, where, limit, offset)
 

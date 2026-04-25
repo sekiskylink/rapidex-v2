@@ -1,5 +1,40 @@
 # Status
 
+## Milestone — Alphabetical Org Unit Browsing and Facilities Lookup (Complete)
+
+### What changed
+- Tightened backend org-unit listing order so sibling org units are returned alphabetically at every hierarchy level, which makes hierarchy browsing deterministic for both Reporters and Facilities.
+- Added backend repository coverage for root-level and child-level org-unit ordering.
+- Added a Facilities page org-unit search flow in both web and desktop so operators can look up an org unit quickly and open its details directly.
+- Added a Facilities page `Browse hierarchy` dialog in both web and desktop so operators can traverse the hierarchy and open details from any org unit, while using an explicit child-browse action to move deeper.
+- Added client-side alphabetical safeguards in the shared hierarchy browser flows used by both Facilities and Reporters.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-25-facilities-search-and-hierarchy-browse.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - org-unit repository ordering coverage for alphabetically sorted root and child browse results
+- Web:
+  - Facilities page coverage for org-unit search, hierarchy detail opening, and alphabetical child browsing
+  - Reporters page coverage for alphabetical hierarchy browsing
+- Desktop:
+  - matching Facilities page coverage for search, hierarchy detail opening, and alphabetical child browsing
+  - matching Reporters page coverage for alphabetical hierarchy browsing
+
+### Verification summary
+- Backend focused suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/orgunit`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused page suites: PASS (`cd web && npm test -- --run src/pages/org-units-page.test.tsx src/pages/reporters-page.test.tsx`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused page suites: PASS (`cd desktop/frontend && npm test -- --run src/pages/org-units-page.test.tsx src/pages/reporters-page.test.tsx`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing frontend test runs still emit non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing Vite build warnings about ignored `'use client'` directives and chunk-size thresholds remain unchanged.
+
 ## Milestone — DHIS2 Org Unit Code Nullability and Duplicate Validation (Complete)
 
 ### What changed

@@ -364,6 +364,60 @@ describe('reporters page', () => {
     expect(createPayload).not.toHaveProperty('totalReports')
   })
 
+  it('renders browse hierarchy levels in alphabetical order', async () => {
+    authenticate(['reporters.read', 'reporters.write'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path.includes('/reporters?')) {
+        return { items: [], totalCount: 0, page: 1, pageSize: 25 }
+      }
+      if (path === '/reporters/broadcasts?page=0&pageSize=10') {
+        return { items: [], totalCount: 0, page: 0, pageSize: 10 }
+      }
+      if (path === '/reporter-groups/options') {
+        return { items: [] }
+      }
+      if (path === '/orgunits?page=0&pageSize=200') {
+        return { items: [], totalCount: 0, page: 0, pageSize: 200 }
+      }
+      if (path.includes('/orgunits?') && path.includes('rootsOnly=true')) {
+        return {
+          items: [
+            { id: 2, name: 'Beta District', hasChildren: true, path: '/UG/Beta', displayPath: 'Uganda' },
+            { id: 1, name: 'Alpha District', hasChildren: true, path: '/UG/Alpha', displayPath: 'Uganda' },
+          ],
+          totalCount: 2,
+          page: 0,
+          pageSize: 200,
+        }
+      }
+      if (path.includes('/orgunits?') && path.includes('parentId=1')) {
+        return {
+          items: [
+            { id: 4, name: 'Zulu Health Centre', hasChildren: false, path: '/UG/Alpha/Zulu', displayPath: 'Uganda / Alpha District' },
+            { id: 3, name: 'Alpha Health Centre', hasChildren: false, path: '/UG/Alpha/Alpha', displayPath: 'Uganda / Alpha District' },
+          ],
+          totalCount: 2,
+          page: 0,
+          pageSize: 200,
+        }
+      }
+      return {}
+    })
+
+    renderRoute('/reporters')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New Reporter' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New Reporter' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Browse hierarchy' }))
+    const browser = await screen.findByRole('dialog', { name: 'Browse Facility Hierarchy' })
+    const rootButtons = within(browser).getAllByRole('button', { name: /District Browse children$/ })
+    expect(rootButtons.map((button) => button.textContent)).toEqual(['Alpha DistrictBrowse children', 'Beta DistrictBrowse children'])
+
+    fireEvent.click(rootButtons[0])
+    const childButtons = await within(browser).findAllByRole('button', { name: /Health Centre Select facility$/ })
+    expect(childButtons.map((button) => button.textContent)).toEqual(['Alpha Health CentreUganda / Alpha District', 'Zulu Health CentreUganda / Alpha District'])
+  })
+
   it('edit reporter shows a facility summary and keeps backend-managed fields out of the payload', async () => {
     authenticate(['reporters.read', 'reporters.write'])
     let updatePayload: Record<string, unknown> | null = null

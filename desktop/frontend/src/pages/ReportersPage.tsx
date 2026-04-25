@@ -213,6 +213,10 @@ function formatFacilityPath(unit: OrgUnit | null) {
     .join(' / ')
 }
 
+function sortOrgUnitsAlphabetically(items: OrgUnit[]) {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
+}
+
 function formatTimestamp(value?: string | null) {
   if (!value) {
     return '-'
@@ -366,7 +370,7 @@ export function ReportersPage() {
       const query = current ? `parentId=${current.id}` : 'rootsOnly=true'
       const response = await apiClient.request<ListResponse<OrgUnit>>(`/api/v1/orgunits?page=0&pageSize=200&${query}`)
       setFacilityBrowserTrail(trail)
-      setFacilityBrowserItems(response.items ?? [])
+      setFacilityBrowserItems(sortOrgUnitsAlphabetically(response.items ?? []))
     } catch (browserError) {
       setError(browserError instanceof Error ? browserError.message : 'Unable to load facility hierarchy.')
     } finally {

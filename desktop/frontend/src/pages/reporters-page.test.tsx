@@ -599,6 +599,100 @@ describe('desktop reporters page', () => {
     })
   }, 20000)
 
+  it('renders browse hierarchy levels in alphabetical order', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/v1/auth/me')) {
+        return new Response(JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['reporters.read', 'reporters.write'] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/reporters?')) {
+        return new Response(JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 25 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporters/broadcasts?page=0&pageSize=10')) {
+        return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 10 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/reporter-groups/options')) {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/orgunits?page=0&pageSize=200')) {
+        return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 200 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/api/v1/orgunits?') && url.includes('rootsOnly=true')) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: 2, name: 'Beta District', hasChildren: true, path: '/UG/Beta', displayPath: 'Uganda' },
+              { id: 1, name: 'Alpha District', hasChildren: true, path: '/UG/Alpha', displayPath: 'Uganda' },
+            ],
+            totalCount: 2,
+            page: 0,
+            pageSize: 200,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/v1/orgunits?') && url.includes('parentId=1')) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: 4, name: 'Zulu Health Centre', hasChildren: false, path: '/UG/Alpha/Zulu', displayPath: 'Uganda / Alpha District' },
+              { id: 3, name: 'Alpha Health Centre', hasChildren: false, path: '/UG/Alpha/Alpha', displayPath: 'Uganda / Alpha District' },
+            ],
+            totalCount: 2,
+            page: 0,
+            pageSize: 200,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/v1/bootstrap')) {
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderRoute('/reporters', store)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New Reporter' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New Reporter' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Browse hierarchy' }))
+    const browser = await screen.findByRole('dialog', { name: 'Browse Facility Hierarchy' })
+    const rootButtons = within(browser).getAllByRole('button', { name: /District Browse children$/ })
+    expect(rootButtons.map((button) => button.textContent)).toEqual(['Alpha DistrictBrowse children', 'Beta DistrictBrowse children'])
+
+    fireEvent.click(rootButtons[0])
+    const childButtons = await within(browser).findAllByRole('button', { name: /Health Centre Select facility$/ })
+    expect(childButtons.map((button) => button.textContent)).toEqual(['Alpha Health CentreUganda / Alpha District', 'Zulu Health CentreUganda / Alpha District'])
+  })
+
   it('queues jurisdiction broadcasts from the top send message dialog', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,
