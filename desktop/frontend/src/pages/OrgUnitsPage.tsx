@@ -25,6 +25,7 @@ import { DataGrid } from '@mui/x-data-grid'
 import { useSessionPrincipal } from '../auth/hooks'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { useApiClient } from '../api/useApiClient'
+import { OrgUnitDetailsDialog } from './reporter-dialogs'
 
 interface OrgUnit {
   id: number
@@ -612,58 +613,12 @@ export function OrgUnitsPage() {
         sx={dataGridSx}
       />
 
-      <Dialog open={Boolean(viewing)} onClose={() => setViewing(null)} fullWidth maxWidth="md">
-        <DialogTitle>Facility Details</DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              pt: 1,
-              display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-            }}
-          >
-            <TextField label="Name" value={viewing?.name ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Short Name" value={viewing?.shortName ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Code" value={viewing?.code ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="UID" value={viewing?.uid ?? ''} InputProps={{ readOnly: true }} />
-            <TextField
-              label="Parent"
-              value={getParentName(viewing)}
-              InputProps={{ readOnly: true }}
-            />
-            <TextField label="Hierarchy Level" value={viewing?.hierarchyLevel ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Phone Number" value={viewing?.phoneNumber ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Email" value={viewing?.email ?? ''} InputProps={{ readOnly: true }} />
-            <TextField label="Website URL" value={viewing?.url ?? ''} InputProps={{ readOnly: true }} />
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Chip label={viewing?.deleted ? 'Deleted' : 'Active'} color={viewing?.deleted ? 'warning' : 'success'} size="small" />
-            </Box>
-            <TextField label="Address" value={viewing?.address ?? ''} InputProps={{ readOnly: true }} sx={{ gridColumn: '1 / -1' }} />
-            <TextField label="Description" value={viewing?.description ?? ''} InputProps={{ readOnly: true }} multiline minRows={2} sx={{ gridColumn: '1 / -1' }} />
-            <TextField label="UID Path" value={viewing?.path ?? ''} InputProps={{ readOnly: true }} sx={{ gridColumn: '1 / -1' }} />
-            <TextField label="Opening Date" value={toDateInput(viewing?.openingDate)} InputProps={{ readOnly: true }} />
-            <TextField label="Last Sync Date" value={viewing?.lastSyncDate ? new Date(viewing.lastSyncDate).toLocaleString() : ''} InputProps={{ readOnly: true }} />
-            <TextField
-              label="Extras JSON"
-              value={JSON.stringify(viewing?.extras ?? {}, null, 2)}
-              InputProps={{ readOnly: true }}
-              multiline
-              minRows={4}
-            />
-            <TextField
-              label="Attribute Values JSON"
-              value={JSON.stringify(viewing?.attributeValues ?? {}, null, 2)}
-              InputProps={{ readOnly: true }}
-              multiline
-              minRows={4}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewing(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <OrgUnitDetailsDialog
+        open={Boolean(viewing)}
+        orgUnit={viewing}
+        parentName={getParentName(viewing)}
+        onClose={() => setViewing(null)}
+      />
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="lg">
         <DialogTitle>{editing ? 'Edit Facility' : 'New Facility'}</DialogTitle>

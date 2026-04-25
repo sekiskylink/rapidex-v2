@@ -1,5 +1,34 @@
 # Status
 
+## Milestone — Org Unit Summary Details Dialog (Complete)
+
+### What changed
+- Replaced the Facilities org-unit details dialog in both web and desktop so it now uses a summary-style presentation like the Reporters details dialog instead of read-only form fields.
+- Grouped org-unit details into labeled sections for overview, hierarchy, contacts, metadata, and extended JSON data while preserving the same underlying information.
+- Routed all Facilities detail openings through the new summary dialog, including hierarchy browse and direct lookup flows.
+- Reused the shared details-dialog rendering pattern already used on the Reporters page so the presentation stays visually consistent across the app.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-25-orgunit-summary-details-dialog.md` (gitignored).
+
+### Added or updated tests
+- Web:
+  - Facilities page coverage updated to assert the new summary dialog sections and status chips when opening org-unit details
+- Desktop:
+  - matching Facilities page coverage updated for the summary dialog presentation
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused Facilities suite: PASS (`cd web && npm test -- --run src/pages/org-units-page.test.tsx`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused Facilities suite: PASS (`cd desktop/frontend && npm test -- --run src/pages/org-units-page.test.tsx`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing frontend test runs still emit non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing Vite build warnings about ignored `'use client'` directives and chunk-size thresholds remain unchanged.
+
 ## Milestone — Alphabetical Org Unit Browsing and Facilities Lookup (Complete)
 
 ### What changed

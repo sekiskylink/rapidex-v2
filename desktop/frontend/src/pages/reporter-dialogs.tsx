@@ -24,6 +24,27 @@ interface ReporterLike {
   groups: string[]
 }
 
+interface OrgUnitLike {
+  id: number
+  uid: string
+  code: string
+  name: string
+  shortName: string
+  description: string
+  hierarchyLevel: number
+  path: string
+  displayPath?: string
+  address: string
+  email: string
+  url: string
+  phoneNumber: string
+  extras: Record<string, unknown>
+  attributeValues: Record<string, unknown>
+  openingDate?: string | null
+  deleted: boolean
+  lastSyncDate?: string | null
+}
+
 export interface RapidProContactDetailsResponse {
   reporter: ReporterLike
   found: boolean
@@ -121,14 +142,19 @@ function chipColor(status: string): 'default' | 'success' | 'warning' | 'error' 
 }
 
 function renderDetail(label: string, value: React.ReactNode) {
+  const isPlainValue = typeof value === 'string' || typeof value === 'number'
   return (
     <Stack spacing={0.5} sx={{ minWidth: 0 }}>
       <Typography variant="caption" color="text.secondary">
         {label}
       </Typography>
-      <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-        {value || '-'}
-      </Typography>
+      {isPlainValue ? (
+        <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+          {value || '-'}
+        </Typography>
+      ) : (
+        <Box sx={{ minWidth: 0 }}>{value || '-'}</Box>
+      )}
     </Stack>
   )
 }
@@ -226,6 +252,122 @@ export function ReporterDetailsDialog({ open, reporter, facilityName, districtNa
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                 {renderDetail('Created', formatDateTime(reporter.createdAt))}
                 {renderDetail('Updated', formatDateTime(reporter.updatedAt))}
+              </Stack>
+            </Section>
+          </Stack>
+        ) : null}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+interface OrgUnitDetailsDialogProps {
+  open: boolean
+  orgUnit: OrgUnitLike | null
+  parentName: string
+  onClose: () => void
+}
+
+export function OrgUnitDetailsDialog({ open, orgUnit, parentName, onClose }: OrgUnitDetailsDialogProps) {
+  const formattedDisplayPath = orgUnit?.displayPath || '-'
+  const formattedPath = orgUnit?.path || '-'
+  const extras = formatPrettyJSON(JSON.stringify(orgUnit?.extras ?? {}, null, 2)) || '{}'
+  const attributeValues = formatPrettyJSON(JSON.stringify(orgUnit?.attributeValues ?? {}, null, 2)) || '{}'
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+      <DialogTitle>Facility Details</DialogTitle>
+      <DialogContent>
+        {orgUnit ? (
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', md: 'center' }}>
+              <Typography variant="h6">{orgUnit.name}</Typography>
+              <Chip label={orgUnit.deleted ? 'Deleted' : 'Active'} color={orgUnit.deleted ? 'warning' : 'success'} size="small" />
+              <Chip label={`Level ${orgUnit.hierarchyLevel}`} size="small" variant="outlined" />
+              {parentName ? <Chip label={`Parent: ${parentName}`} size="small" variant="outlined" /> : null}
+            </Stack>
+            <Section title="Overview">
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('Name', orgUnit.name)}
+                {renderDetail('Short Name', orgUnit.shortName || '-')}
+                {renderDetail('Code', orgUnit.code || '-')}
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('UID', orgUnit.uid)}
+                {renderDetail('Opening Date', formatDateTime(orgUnit.openingDate))}
+                {renderDetail('Last Sync Date', formatDateTime(orgUnit.lastSyncDate))}
+              </Stack>
+            </Section>
+            <Divider />
+            <Section title="Hierarchy">
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('Parent', parentName || '-')}
+                {renderDetail('Hierarchy Level', String(orgUnit.hierarchyLevel))}
+                {renderDetail('Display Path', formattedDisplayPath)}
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('UID Path', formattedPath)}
+              </Stack>
+            </Section>
+            <Divider />
+            <Section title="Contacts">
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('Phone Number', orgUnit.phoneNumber || '-')}
+                {renderDetail('Email', orgUnit.email || '-')}
+                {renderDetail('Website URL', orgUnit.url || '-')}
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('Address', orgUnit.address || '-')}
+              </Stack>
+            </Section>
+            <Divider />
+            <Section title="Metadata">
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                {renderDetail('Description', orgUnit.description || '-')}
+              </Stack>
+            </Section>
+            <Divider />
+            <Section title="Extended Data">
+              <Stack spacing={1}>
+                {renderDetail(
+                  'Extras JSON',
+                  <Box
+                    component="pre"
+                    sx={{
+                      m: 0,
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      bgcolor: alpha('#0f172a', 0.04),
+                      overflowX: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'monospace',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {extras}
+                  </Box>,
+                )}
+                {renderDetail(
+                  'Attribute Values JSON',
+                  <Box
+                    component="pre"
+                    sx={{
+                      m: 0,
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      bgcolor: alpha('#0f172a', 0.04),
+                      overflowX: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'monospace',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {attributeValues}
+                  </Box>,
+                )}
               </Stack>
             </Section>
           </Stack>

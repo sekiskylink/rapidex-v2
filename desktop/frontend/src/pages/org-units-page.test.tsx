@@ -231,7 +231,11 @@ describe('desktop org units page', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Beta District Uganda' }))
     const details = await screen.findByRole('dialog', { name: 'Facility Details' })
-    expect(within(details).getByDisplayValue('Beta District')).toBeInTheDocument()
+    expect(within(details).getAllByText('Beta District').length).toBeGreaterThan(0)
+    expect(within(details).getByText('Overview')).toBeInTheDocument()
+    expect(within(details).getByText('Hierarchy')).toBeInTheDocument()
+    expect(within(details).getByText('Active')).toBeInTheDocument()
+    expect(within(details).getByText('Level 1')).toBeInTheDocument()
   })
 
   it('shows child hierarchy entries alphabetically when browsing deeper', async () => {
