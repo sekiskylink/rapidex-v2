@@ -26,12 +26,16 @@ type RapidexWebhookMappingsValidation struct {
 type RapidexWebhookMappingConfig = rapidex.MappingConfig
 
 type RapidexWebhookMappingsSettings struct {
-	Mappings   []rapidex.MappingConfig          `json:"mappings"`
-	Validation RapidexWebhookMappingsValidation `json:"validation"`
+	RapidProServerCode string                           `json:"rapidProServerCode"`
+	Dhis2ServerCode    string                           `json:"dhis2ServerCode"`
+	Mappings           []rapidex.MappingConfig          `json:"mappings"`
+	Validation         RapidexWebhookMappingsValidation `json:"validation"`
 }
 
 type RapidexWebhookMappingsUpdateInput struct {
-	Mappings []rapidex.MappingConfig `json:"mappings"`
+	RapidProServerCode string                  `json:"rapidProServerCode"`
+	Dhis2ServerCode    string                  `json:"dhis2ServerCode"`
+	Mappings           []rapidex.MappingConfig `json:"mappings"`
 }
 
 type RapidexWebhookMappingsImportInput struct {
@@ -43,7 +47,9 @@ type RapidexWebhookMappingsExport struct {
 }
 
 type rapidexWebhookMappingsStored struct {
-	Mappings []rapidex.MappingConfig `json:"mappings"`
+	RapidProServerCode string                  `json:"rapidProServerCode"`
+	Dhis2ServerCode    string                  `json:"dhis2ServerCode"`
+	Mappings           []rapidex.MappingConfig `json:"mappings"`
 }
 
 type RapidexWebhookMappingProvider struct {
@@ -80,6 +86,8 @@ func (p *RapidexWebhookMappingProvider) getStored(ctx context.Context) (rapidexW
 	if unmarshalErr := json.Unmarshal(raw, &stored); unmarshalErr != nil {
 		return rapidexWebhookMappingsStored{}, nil
 	}
+	stored.RapidProServerCode = normalizeRapidProServerCode(stored.RapidProServerCode)
+	stored.Dhis2ServerCode = normalizeRapidexDHIS2ServerCode(stored.Dhis2ServerCode)
 	stored.Mappings = normalizeRapidexWebhookMappings(stored.Mappings)
 	return stored, nil
 }
@@ -97,7 +105,11 @@ func (s *Service) UpdateRapidexWebhookMappings(ctx context.Context, input Rapide
 	if err != nil {
 		return RapidexWebhookMappingsSettings{}, err
 	}
-	stored := rapidexWebhookMappingsStored{Mappings: mappings}
+	stored := rapidexWebhookMappingsStored{
+		RapidProServerCode: normalizeRapidProServerCode(input.RapidProServerCode),
+		Dhis2ServerCode:    normalizeRapidexDHIS2ServerCode(input.Dhis2ServerCode),
+		Mappings:           mappings,
+	}
 	if err := s.saveRapidexWebhookMappingsStored(ctx, stored, actorUserID); err != nil {
 		return RapidexWebhookMappingsSettings{}, err
 	}
@@ -126,7 +138,15 @@ func (s *Service) ImportRapidexWebhookMappingsYAML(ctx context.Context, input Ra
 			"yaml": []string{fmt.Sprintf("invalid RapidEx mapping YAML: %v", err)},
 		})
 	}
-	return s.UpdateRapidexWebhookMappings(ctx, RapidexWebhookMappingsUpdateInput{Mappings: mappings}, actorUserID)
+	stored, err := s.getRapidexWebhookMappingsStored(ctx)
+	if err != nil {
+		return RapidexWebhookMappingsSettings{}, err
+	}
+	return s.UpdateRapidexWebhookMappings(ctx, RapidexWebhookMappingsUpdateInput{
+		RapidProServerCode: stored.RapidProServerCode,
+		Dhis2ServerCode:    stored.Dhis2ServerCode,
+		Mappings:           mappings,
+	}, actorUserID)
 }
 
 func (s *Service) ExportRapidexWebhookMappingsYAML(ctx context.Context) (RapidexWebhookMappingsExport, error) {
@@ -155,7 +175,9 @@ func (s *Service) saveRapidexWebhookMappingsStored(ctx context.Context, stored r
 
 func materializeRapidexWebhookMappings(stored rapidexWebhookMappingsStored) RapidexWebhookMappingsSettings {
 	result := RapidexWebhookMappingsSettings{
-		Mappings: normalizeRapidexWebhookMappings(stored.Mappings),
+		RapidProServerCode: normalizeRapidProServerCode(stored.RapidProServerCode),
+		Dhis2ServerCode:    normalizeRapidexDHIS2ServerCode(stored.Dhis2ServerCode),
+		Mappings:           normalizeRapidexWebhookMappings(stored.Mappings),
 	}
 	result.Validation = validateRapidexWebhookMappingsForResponse(result.Mappings)
 	return result

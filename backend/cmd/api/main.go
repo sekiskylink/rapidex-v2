@@ -33,6 +33,7 @@ import (
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/rapidex"
+	dhis2metadata "basepro/backend/internal/sukumad/rapidex/dhis2metadata"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	"basepro/backend/internal/sukumad/reporter"
@@ -172,8 +173,10 @@ func run() error {
 	sukumadOrgUnitSyncService := orgunit.NewHierarchySyncService(sukumadOrgUnitRepo, sukumadServerService, nil)
 	sukumadOrgUnitService := orgunit.NewService(sukumadOrgUnitRepo).WithScopeResolver(sukumadUserOrgUnitService).WithSyncService(sukumadOrgUnitSyncService)
 	sukumadRapidProClient := rapidpro.NewClient(nil)
+	sukumadRapidexDHIS2MetadataClient := dhis2metadata.NewClient(nil)
 	settingsService := settings.NewService(settingsRepo, auditService).
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
+		WithRapidexMetadataIntegration(sukumadServerService, sukumadRapidProClient, sukumadRapidexDHIS2MetadataClient).
 		WithRuntimeConfigProvider(func() map[string]any {
 			cfg := config.Get()
 			payload, err := json.Marshal(cfg)

@@ -252,12 +252,86 @@ export interface RapidexWebhookMappingsValidation {
 }
 
 export interface RapidexWebhookMappingsSettingsResponse {
+  rapidProServerCode: string
+  dhis2ServerCode: string
   mappings: RapidexWebhookMappingConfig[]
   validation: RapidexWebhookMappingsValidation
 }
 
 export interface RapidexWebhookMappingsExportResponse {
   yaml: string
+}
+
+export interface RapidexIntegrationServerOption {
+  code: string
+  name: string
+  systemType: string
+  suspended: boolean
+}
+
+export interface RapidexRapidProFlowResultOption {
+  key: string
+  name: string
+  categories: string[]
+}
+
+export interface RapidexRapidProFlowOption {
+  uuid: string
+  name: string
+  type?: string
+  archived: boolean
+  parentRefs?: string[]
+  modifiedOn?: string
+  results: RapidexRapidProFlowResultOption[]
+}
+
+export interface RapidexDhis2DataElementRef {
+  id: string
+  name: string
+}
+
+export interface RapidexDhis2DatasetOption {
+  id: string
+  name: string
+  periodType?: string
+  dataElements: RapidexDhis2DataElementRef[]
+}
+
+export interface RapidexDhis2DataElementOption {
+  id: string
+  name: string
+  valueType?: string
+}
+
+export interface RapidexDhis2CategoryOptionComboOption {
+  id: string
+  name: string
+}
+
+export interface RapidexDhis2AttributeOptionComboOption {
+  id: string
+  name: string
+}
+
+export interface RapidexWebhookMetadataSnapshot {
+  rapidProServerCode: string
+  dhis2ServerCode: string
+  lastRefreshedAt?: string | null
+  rapidProFlows: RapidexRapidProFlowOption[]
+  rapidProContactFields: RapidProContactField[]
+  dhis2Datasets: RapidexDhis2DatasetOption[]
+  dhis2DataElements: RapidexDhis2DataElementOption[]
+  dhis2CategoryOptionCombos: RapidexDhis2CategoryOptionComboOption[]
+  dhis2AttributeOptionCombos: RapidexDhis2AttributeOptionComboOption[]
+}
+
+export interface RapidexWebhookMetadataResponse {
+  rapidProServerCode: string
+  dhis2ServerCode: string
+  rapidProServers: RapidexIntegrationServerOption[]
+  dhis2Servers: RapidexIntegrationServerOption[]
+  snapshot: RapidexWebhookMetadataSnapshot
+  warnings: string[]
 }
 
 export interface RapidProReporterOption {
@@ -332,11 +406,18 @@ export interface RapidProReporterSyncUpdateRequest {
 }
 
 export interface RapidexWebhookMappingsUpdateRequest {
+  rapidProServerCode: string
+  dhis2ServerCode: string
   mappings: RapidexWebhookMappingConfig[]
 }
 
 export interface RapidexWebhookMappingsImportRequest {
   yaml: string
+}
+
+export interface RapidexWebhookMetadataRefreshRequest {
+  rapidProServerCode: string
+  dhis2ServerCode: string
 }
 
 export interface ModuleEnablementUpdateRequest {
@@ -735,6 +816,19 @@ export function createApiClient(deps: ApiClientDeps) {
     async getRapidexWebhookMappingsSettings() {
       return authorizedRequest<RapidexWebhookMappingsSettingsResponse>('/api/v1/settings/rapidex-webhook-mappings', {
         method: 'GET',
+      })
+    },
+
+    async getRapidexWebhookMetadata() {
+      return authorizedRequest<RapidexWebhookMetadataResponse>('/api/v1/settings/rapidex-webhook-mappings/metadata', {
+        method: 'GET',
+      })
+    },
+
+    async refreshRapidexWebhookMetadata(payload: RapidexWebhookMetadataRefreshRequest) {
+      return authorizedRequest<RapidexWebhookMetadataResponse>('/api/v1/settings/rapidex-webhook-mappings/metadata/refresh', {
+        method: 'POST',
+        body: JSON.stringify(payload),
       })
     },
 

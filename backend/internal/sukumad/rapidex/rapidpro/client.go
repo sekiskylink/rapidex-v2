@@ -36,8 +36,20 @@ type Group struct {
 }
 
 type Flow struct {
-	UUID string `json:"uuid"`
-	Name string `json:"name"`
+	UUID       string       `json:"uuid"`
+	Name       string       `json:"name"`
+	Type       string       `json:"type,omitempty"`
+	Archived   bool         `json:"archived,omitempty"`
+	Results    []FlowResult `json:"results,omitempty"`
+	ParentRefs []string     `json:"parent_refs,omitempty"`
+	ModifiedOn string       `json:"modified_on,omitempty"`
+}
+
+type FlowResult struct {
+	Key        string   `json:"key"`
+	Name       string   `json:"name"`
+	Categories []string `json:"categories"`
+	NodeUUIDs  []string `json:"node_uuids"`
 }
 
 type Channel struct {
@@ -188,6 +200,14 @@ func (c *Client) UpsertContact(ctx context.Context, conn Connection, input Upser
 func (c *Client) ListContactFields(ctx context.Context, conn Connection) ([]ContactField, error) {
 	var response listResponse[ContactField]
 	if err := c.doJSON(ctx, conn, http.MethodGet, "/fields.json", nil, nil, &response); err != nil {
+		return nil, err
+	}
+	return response.Results, nil
+}
+
+func (c *Client) ListFlows(ctx context.Context, conn Connection) ([]Flow, error) {
+	var response paginatedResponse[Flow]
+	if err := c.doJSON(ctx, conn, http.MethodGet, "/flows.json", map[string]string{"archived": "false"}, nil, &response); err != nil {
 		return nil, err
 	}
 	return response.Results, nil

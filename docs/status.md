@@ -1,5 +1,44 @@
 # Status
 
+## Milestone — RapidEx Mapping Metadata Discovery (Complete)
+
+### What changed
+- Added a DB-persisted RapidEx metadata snapshot alongside the saved webhook mappings so admins can refresh and cache upstream metadata from the configured RapidPro and DHIS2 integration servers.
+- Extended the backend settings APIs with:
+  - `GET /api/v1/settings/rapidex-webhook-mappings/metadata`
+  - `POST /api/v1/settings/rapidex-webhook-mappings/metadata/refresh`
+- Extended the saved RapidEx mapping settings model so it now persists the selected `rapidProServerCode` and `dhis2ServerCode` with the mappings.
+- Added RapidPro flow discovery using the flows endpoint plus contact-field discovery, and added DHIS2 metadata discovery for datasets, data elements, category option combos, and attribute option combos.
+- Upgraded both web and desktop `Settings > Integrations` RapidEx editors so admins can:
+  - select RapidPro and DHIS2 source servers
+  - refresh cached metadata on demand
+  - choose discovered flows
+  - use metadata suggestions for source variables and DHIS2 targets while still typing overrides manually
+  - see warnings when saved mappings no longer match the latest metadata snapshot
+- Updated the public API spec to document the new metadata endpoints and expanded RapidEx settings payloads.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-26-rapidex-mapping-metadata-discovery.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - settings package and API router compilation/verification with the new RapidEx metadata endpoints and expanded mapping payloads
+- Web:
+  - settings route coverage updated for the expanded RapidEx mapping payloads and metadata fetch path
+- Desktop:
+  - matching settings route coverage updated for the expanded RapidEx mapping payloads and metadata fetch path
+
+### Verification summary
+- Backend settings + API package tests: PASS, except for an existing sandbox-only IPv6 listener failure in `TestDashboardOperationsEventsRequiresObservabilityRead` when running the full `./cmd/api` suite (`cd backend && GOCACHE=/tmp/go-build go test ./internal/settings ./cmd/api`)
+- Backend API build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api`)
+- Web route smoke/settings suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke/settings suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- The metadata-assisted editor improves authoring, but the downstream webhook-to-exchange-request execution handoff is still the existing placeholder and needs a separate milestone.
+- Existing frontend test runs still emit non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing frontend builds still emit third-party `'use client'` and chunk-size warnings unrelated to this change.
+
 ## Milestone — RapidEx Webhook Mapping Settings Migration (Complete)
 
 ### What changed

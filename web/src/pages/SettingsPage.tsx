@@ -126,12 +126,86 @@ interface RapidexWebhookMappingsValidation {
 }
 
 interface RapidexWebhookMappingsSettingsResponse {
+  rapidProServerCode: string
+  dhis2ServerCode: string
   mappings: RapidexWebhookMappingConfig[]
   validation: RapidexWebhookMappingsValidation
 }
 
 interface RapidexWebhookMappingsExportResponse {
   yaml: string
+}
+
+interface RapidexIntegrationServerOption {
+  code: string
+  name: string
+  systemType: string
+  suspended: boolean
+}
+
+interface RapidexRapidProFlowResultOption {
+  key: string
+  name: string
+  categories: string[]
+}
+
+interface RapidexRapidProFlowOption {
+  uuid: string
+  name: string
+  type?: string
+  archived: boolean
+  parentRefs?: string[]
+  modifiedOn?: string
+  results: RapidexRapidProFlowResultOption[]
+}
+
+interface RapidexDhis2DataElementRef {
+  id: string
+  name: string
+}
+
+interface RapidexDhis2DatasetOption {
+  id: string
+  name: string
+  periodType?: string
+  dataElements: RapidexDhis2DataElementRef[]
+}
+
+interface RapidexDhis2DataElementOption {
+  id: string
+  name: string
+  valueType?: string
+}
+
+interface RapidexDhis2CategoryOptionComboOption {
+  id: string
+  name: string
+}
+
+interface RapidexDhis2AttributeOptionComboOption {
+  id: string
+  name: string
+}
+
+interface RapidexWebhookMetadataSnapshot {
+  rapidProServerCode: string
+  dhis2ServerCode: string
+  lastRefreshedAt?: string | null
+  rapidProFlows: RapidexRapidProFlowOption[]
+  rapidProContactFields: RapidProContactField[]
+  dhis2Datasets: RapidexDhis2DatasetOption[]
+  dhis2DataElements: RapidexDhis2DataElementOption[]
+  dhis2CategoryOptionCombos: RapidexDhis2CategoryOptionComboOption[]
+  dhis2AttributeOptionCombos: RapidexDhis2AttributeOptionComboOption[]
+}
+
+interface RapidexWebhookMetadataResponse {
+  rapidProServerCode: string
+  dhis2ServerCode: string
+  rapidProServers: RapidexIntegrationServerOption[]
+  dhis2Servers: RapidexIntegrationServerOption[]
+  snapshot: RapidexWebhookMetadataSnapshot
+  warnings: string[]
 }
 
 interface ReporterGroupRecord {
@@ -212,6 +286,20 @@ function createEmptyRapidexWebhookMapping(): RapidexWebhookMappingConfig {
     periodVar: '',
     payloadAoc: '',
     mappings: [createEmptyRapidexDataValueMapping()],
+  }
+}
+
+function createEmptyRapidexMetadataSnapshot(): RapidexWebhookMetadataSnapshot {
+  return {
+    rapidProServerCode: 'rapidpro',
+    dhis2ServerCode: 'dhis2',
+    lastRefreshedAt: null,
+    rapidProFlows: [],
+    rapidProContactFields: [],
+    dhis2Datasets: [],
+    dhis2DataElements: [],
+    dhis2CategoryOptionCombos: [],
+    dhis2AttributeOptionCombos: [],
   }
 }
 
@@ -326,6 +414,13 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [rapidexExporting, setRapidexExporting] = React.useState(false)
   const [rapidexError, setRapidexError] = React.useState('')
   const [rapidexYamlText, setRapidexYamlText] = React.useState('')
+  const [rapidexMetadata, setRapidexMetadata] = React.useState<RapidexWebhookMetadataSnapshot>(createEmptyRapidexMetadataSnapshot())
+  const [rapidexMetadataWarnings, setRapidexMetadataWarnings] = React.useState<string[]>([])
+  const [rapidexRapidProServers, setRapidexRapidProServers] = React.useState<RapidexIntegrationServerOption[]>([])
+  const [rapidexDhis2Servers, setRapidexDhis2Servers] = React.useState<RapidexIntegrationServerOption[]>([])
+  const [rapidexRapidProServerCode, setRapidexRapidProServerCode] = React.useState('rapidpro')
+  const [rapidexDhis2ServerCode, setRapidexDhis2ServerCode] = React.useState('dhis2')
+  const [rapidexMetadataRefreshing, setRapidexMetadataRefreshing] = React.useState(false)
   const [reporterGroups, setReporterGroups] = React.useState<ReporterGroupRecord[]>([])
   const [reporterGroupsLoading, setReporterGroupsLoading] = React.useState(true)
   const [reporterGroupsSavingId, setReporterGroupsSavingId] = React.useState<number | null>(null)
@@ -344,9 +439,24 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     setRapidProValidation(payload.validation ?? { isValid: true })
   }, [])
   const applyRapidexPayload = React.useCallback((payload: RapidexWebhookMappingsSettingsResponse) => {
+    setRapidexRapidProServerCode((payload.rapidProServerCode ?? '').trim() || 'rapidpro')
+    setRapidexDhis2ServerCode((payload.dhis2ServerCode ?? '').trim() || 'dhis2')
     setRapidexMappings(payload.mappings ?? [])
     setRapidexValidation(payload.validation ?? { isValid: true })
   }, [])
+  const applyRapidexMetadataPayload = React.useCallback((payload: RapidexWebhookMetadataResponse) => {
+    setRapidexRapidProServerCode((payload.rapidProServerCode ?? '').trim() || 'rapidpro')
+    setRapidexDhis2ServerCode((payload.dhis2ServerCode ?? '').trim() || 'dhis2')
+    setRapidexRapidProServers(payload.rapidProServers ?? [])
+    setRapidexDhis2Servers(payload.dhis2Servers ?? [])
+    setRapidexMetadata(payload.snapshot ?? createEmptyRapidexMetadataSnapshot())
+    setRapidexMetadataWarnings(payload.warnings ?? [])
+  }, [])
+  const rapidexFlowOptions = React.useMemo(() => rapidexMetadata.rapidProFlows ?? [], [rapidexMetadata])
+  const rapidexDatasetOptions = React.useMemo(() => rapidexMetadata.dhis2Datasets ?? [], [rapidexMetadata])
+  const rapidexDataElementOptions = React.useMemo(() => rapidexMetadata.dhis2DataElements ?? [], [rapidexMetadata])
+  const rapidexCOCOptions = React.useMemo(() => rapidexMetadata.dhis2CategoryOptionCombos ?? [], [rapidexMetadata])
+  const rapidexAOCOptions = React.useMemo(() => rapidexMetadata.dhis2AttributeOptionCombos ?? [], [rapidexMetadata])
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -501,6 +611,10 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidexMappings([])
       setRapidexValidation({ isValid: true })
       setRapidexYamlText('')
+      setRapidexMetadata(createEmptyRapidexMetadataSnapshot())
+      setRapidexMetadataWarnings([])
+      setRapidexRapidProServers([])
+      setRapidexDhis2Servers([])
       setReporterGroups([])
       setReporterGroupsError('')
       return
@@ -518,6 +632,10 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidexMappings([])
       setRapidexValidation({ isValid: true })
       setRapidexYamlText('')
+      setRapidexMetadata(createEmptyRapidexMetadataSnapshot())
+      setRapidexMetadataWarnings([])
+      setRapidexRapidProServers([])
+      setRapidexDhis2Servers([])
       setReporterGroups([])
       setReporterGroupsError('')
       return
@@ -530,14 +648,16 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       apiRequest<RapidProReporterSyncSettingsResponse>('/settings/rapidpro-reporter-sync', { method: 'GET' }),
       apiRequest<{ items: RapidProReporterOption[] }>('/settings/rapidpro-reporter-sync/preview-reporters', { method: 'GET' }),
       apiRequest<RapidexWebhookMappingsSettingsResponse>('/settings/rapidex-webhook-mappings', { method: 'GET' }),
+      apiRequest<RapidexWebhookMetadataResponse>('/settings/rapidex-webhook-mappings/metadata', { method: 'GET' }),
       apiRequest<{ items: ReporterGroupRecord[] }>('/reporter-groups?page=0&pageSize=200', { method: 'GET' }),
     ])
-      .then(([payload, reporterPayload, rapidexPayload, groupPayload]) => {
+      .then(([payload, reporterPayload, rapidexPayload, rapidexMetadataPayload, groupPayload]) => {
         if (!active) {
           return
         }
         applyRapidProSyncPayload(payload)
         applyRapidexPayload(rapidexPayload)
+        applyRapidexMetadataPayload(rapidexMetadataPayload)
         const items = reporterPayload.items ?? []
         setRapidProPreviewReporters(items)
         setReporterGroups(groupPayload.items ?? [])
@@ -566,7 +686,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     return () => {
       active = false
     }
-  }, [applyRapidProSyncPayload, applyRapidexPayload, canReadModuleEnablement, isIntegrationsSection, notify])
+  }, [applyRapidProSyncPayload, applyRapidexMetadataPayload, applyRapidexPayload, canReadModuleEnablement, isIntegrationsSection, notify])
 
   React.useEffect(() => {
     if (!isIntegrationsSection || !canReadModuleEnablement || !rapidProPreviewReporterId) {
@@ -780,6 +900,83 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     [],
   )
 
+  const handleRapidexFlowSelection = React.useCallback(
+    (mappingIndex: number, flowUUID: string) => {
+      const selectedFlow = rapidexFlowOptions.find((item) => item.uuid === flowUUID)
+      if (!selectedFlow) {
+        return
+      }
+      setRapidexMappings((current) =>
+        current.map((item, index) =>
+          index === mappingIndex
+            ? {
+                ...item,
+                flowUuid: selectedFlow.uuid,
+                flowName: selectedFlow.name,
+              }
+            : item,
+        ),
+      )
+    },
+    [rapidexFlowOptions],
+  )
+
+  const rapidexSourceSuggestionsForMapping = React.useCallback(
+    (mapping: RapidexWebhookMappingConfig) => {
+      const selectedFlow = rapidexFlowOptions.find((item) => item.uuid === mapping.flowUuid)
+      const resultKeys = (selectedFlow?.results ?? []).map((item) => item.key)
+      const contactFieldKeys = (rapidexMetadata.rapidProContactFields ?? []).map((item) => item.key)
+      return Array.from(new Set([...resultKeys, ...contactFieldKeys].filter((item) => item.trim()))).sort((left, right) =>
+        left.localeCompare(right),
+      )
+    },
+    [rapidexFlowOptions, rapidexMetadata.rapidProContactFields],
+  )
+
+  const rapidexDataElementSuggestionsForDataset = React.useCallback(
+    (datasetID: string) => {
+      const selectedDataset = rapidexDatasetOptions.find((item) => item.id === datasetID)
+      if (!selectedDataset || selectedDataset.dataElements.length === 0) {
+        return rapidexDataElementOptions
+      }
+      const allowed = new Set(selectedDataset.dataElements.map((item) => item.id))
+      return rapidexDataElementOptions.filter((item) => allowed.has(item.id))
+    },
+    [rapidexDataElementOptions, rapidexDatasetOptions],
+  )
+
+  const handleRefreshRapidexMetadata = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setRapidexMetadataRefreshing(true)
+    setRapidexError('')
+    try {
+      const payload = await apiRequest<RapidexWebhookMetadataResponse>(
+        '/settings/rapidex-webhook-mappings/metadata/refresh',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            rapidProServerCode: rapidexRapidProServerCode,
+            dhis2ServerCode: rapidexDhis2ServerCode,
+          }),
+        },
+      )
+      applyRapidexMetadataPayload(payload)
+      notify.success('RapidEx mapping metadata refreshed.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to refresh RapidEx mapping metadata.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidexError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidexMetadataRefreshing(false)
+    }
+  }
+
   const handleRapidexDataValueChange = React.useCallback(
     (mappingIndex: number, rowIndex: number, field: keyof RapidexWebhookDataValueMapping, value: string) => {
       setRapidexMappings((current) =>
@@ -835,7 +1032,11 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         '/settings/rapidex-webhook-mappings',
         {
           method: 'PUT',
-          body: JSON.stringify({ mappings: rapidexMappings }),
+          body: JSON.stringify({
+            rapidProServerCode: rapidexRapidProServerCode,
+            dhis2ServerCode: rapidexDhis2ServerCode,
+            mappings: rapidexMappings,
+          }),
         },
       )
       applyRapidexPayload(payload)
@@ -1720,6 +1921,43 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                         <Typography color="text.secondary">Loading RapidEx webhook mappings...</Typography>
                       ) : (
                         <>
+                          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25}>
+                            <TextField
+                              select
+                              label="RapidPro Server"
+                              value={rapidexRapidProServerCode}
+                              onChange={(event) => setRapidexRapidProServerCode(event.target.value)}
+                              fullWidth
+                            >
+                              {(rapidexRapidProServers.length > 0 ? rapidexRapidProServers : [{ code: rapidexRapidProServerCode, name: rapidexRapidProServerCode, systemType: 'rapidpro', suspended: false }]).map((item) => (
+                                <MenuItem key={item.code} value={item.code}>
+                                  {item.name} ({item.code}){item.suspended ? ' [Suspended]' : ''}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                            <TextField
+                              select
+                              label="DHIS2 Server"
+                              value={rapidexDhis2ServerCode}
+                              onChange={(event) => setRapidexDhis2ServerCode(event.target.value)}
+                              fullWidth
+                            >
+                              {(rapidexDhis2Servers.length > 0 ? rapidexDhis2Servers : [{ code: rapidexDhis2ServerCode, name: rapidexDhis2ServerCode, systemType: 'dhis2', suspended: false }]).map((item) => (
+                                <MenuItem key={item.code} value={item.code}>
+                                  {item.name} ({item.code}){item.suspended ? ' [Suspended]' : ''}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          </Stack>
+                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+                            <Button variant="outlined" onClick={() => void handleRefreshRapidexMetadata()} disabled={!canWriteBranding || rapidexMetadataRefreshing}>
+                              {rapidexMetadataRefreshing ? 'Refreshing...' : 'Refresh Metadata'}
+                            </Button>
+                            <Typography color="text.secondary" variant="body2">
+                              Last refreshed: {rapidexMetadata.lastRefreshedAt ? new Date(rapidexMetadata.lastRefreshedAt).toLocaleString() : 'Not yet refreshed'}
+                            </Typography>
+                          </Stack>
+                          {rapidexMetadataWarnings.length > 0 ? <Alert severity="warning">{rapidexMetadataWarnings.join(' ')}</Alert> : null}
                           <TextField
                             label="RapidEx Mapping YAML"
                             value={rapidexYamlText}
@@ -1764,6 +2002,22 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                     </Stack>
                                     <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25}>
                                       <TextField
+                                        select
+                                        label="Discovered Flow"
+                                        value={mapping.flowUuid}
+                                        onChange={(event) => handleRapidexFlowSelection(mappingIndex, event.target.value)}
+                                        fullWidth
+                                      >
+                                        <MenuItem value="">Select a discovered flow</MenuItem>
+                                        {rapidexFlowOptions.map((item) => (
+                                          <MenuItem key={item.uuid} value={item.uuid}>
+                                            {item.name} ({item.uuid})
+                                          </MenuItem>
+                                        ))}
+                                      </TextField>
+                                    </Stack>
+                                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25}>
+                                      <TextField
                                         label="Flow UUID"
                                         value={mapping.flowUuid}
                                         onChange={(event) => handleRapidexMappingChange(mappingIndex, 'flowUuid', event.target.value)}
@@ -1781,26 +2035,50 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                         label="Dataset"
                                         value={mapping.dataset}
                                         onChange={(event) => handleRapidexMappingChange(mappingIndex, 'dataset', event.target.value)}
+                                        inputProps={{ list: `rapidex-datasets-${mappingIndex}` }}
                                         fullWidth
                                       />
+                                      <datalist id={`rapidex-datasets-${mappingIndex}`}>
+                                        {rapidexDatasetOptions.map((item) => (
+                                          <option key={item.id} value={item.id}>{item.name}</option>
+                                        ))}
+                                      </datalist>
                                       <TextField
                                         label="Org Unit Variable"
                                         value={mapping.orgUnitVar}
                                         onChange={(event) => handleRapidexMappingChange(mappingIndex, 'orgUnitVar', event.target.value)}
+                                        inputProps={{ list: `rapidex-source-fields-org-${mappingIndex}` }}
                                         fullWidth
                                       />
                                       <TextField
                                         label="Period Variable"
                                         value={mapping.periodVar}
                                         onChange={(event) => handleRapidexMappingChange(mappingIndex, 'periodVar', event.target.value)}
+                                        inputProps={{ list: `rapidex-source-fields-period-${mappingIndex}` }}
                                         fullWidth
                                       />
                                       <TextField
                                         label="Payload AOC"
                                         value={mapping.payloadAoc ?? ''}
                                         onChange={(event) => handleRapidexMappingChange(mappingIndex, 'payloadAoc', event.target.value)}
+                                        inputProps={{ list: `rapidex-aoc-${mappingIndex}` }}
                                         fullWidth
                                       />
+                                      <datalist id={`rapidex-source-fields-org-${mappingIndex}`}>
+                                        {rapidexSourceSuggestionsForMapping(mapping).map((item) => (
+                                          <option key={item} value={item} />
+                                        ))}
+                                      </datalist>
+                                      <datalist id={`rapidex-source-fields-period-${mappingIndex}`}>
+                                        {rapidexSourceSuggestionsForMapping(mapping).map((item) => (
+                                          <option key={item} value={item} />
+                                        ))}
+                                      </datalist>
+                                      <datalist id={`rapidex-aoc-${mappingIndex}`}>
+                                        {rapidexAOCOptions.map((item) => (
+                                          <option key={item.id} value={item.id}>{item.name}</option>
+                                        ))}
+                                      </datalist>
                                     </Stack>
                                     <Divider />
                                     <Typography variant="body2" color="text.secondary">
@@ -1814,6 +2092,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                               label="Field"
                                               value={item.field}
                                               onChange={(event) => handleRapidexDataValueChange(mappingIndex, rowIndex, 'field', event.target.value)}
+                                              inputProps={{ list: `rapidex-source-fields-row-${mappingIndex}-${rowIndex}` }}
                                               fullWidth
                                             />
                                             <TextField
@@ -1822,6 +2101,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                               onChange={(event) =>
                                                 handleRapidexDataValueChange(mappingIndex, rowIndex, 'dataElement', event.target.value)
                                               }
+                                              inputProps={{ list: `rapidex-data-elements-${mappingIndex}-${rowIndex}` }}
                                               fullWidth
                                             />
                                             <TextField
@@ -1830,6 +2110,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                               onChange={(event) =>
                                                 handleRapidexDataValueChange(mappingIndex, rowIndex, 'categoryOptionCombo', event.target.value)
                                               }
+                                              inputProps={{ list: `rapidex-coc-${mappingIndex}-${rowIndex}` }}
                                               fullWidth
                                             />
                                             <TextField
@@ -1838,8 +2119,29 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                               onChange={(event) =>
                                                 handleRapidexDataValueChange(mappingIndex, rowIndex, 'attributeOptionCombo', event.target.value)
                                               }
+                                              inputProps={{ list: `rapidex-aoc-row-${mappingIndex}-${rowIndex}` }}
                                               fullWidth
                                             />
+                                            <datalist id={`rapidex-source-fields-row-${mappingIndex}-${rowIndex}`}>
+                                              {rapidexSourceSuggestionsForMapping(mapping).map((value) => (
+                                                <option key={value} value={value} />
+                                              ))}
+                                            </datalist>
+                                            <datalist id={`rapidex-data-elements-${mappingIndex}-${rowIndex}`}>
+                                              {rapidexDataElementSuggestionsForDataset(mapping.dataset).map((value) => (
+                                                <option key={value.id} value={value.id}>{value.name}</option>
+                                              ))}
+                                            </datalist>
+                                            <datalist id={`rapidex-coc-${mappingIndex}-${rowIndex}`}>
+                                              {rapidexCOCOptions.map((value) => (
+                                                <option key={value.id} value={value.id}>{value.name}</option>
+                                              ))}
+                                            </datalist>
+                                            <datalist id={`rapidex-aoc-row-${mappingIndex}-${rowIndex}`}>
+                                              {rapidexAOCOptions.map((value) => (
+                                                <option key={value.id} value={value.id}>{value.name}</option>
+                                              ))}
+                                            </datalist>
                                           </Stack>
                                           <Stack direction="row" justifyContent="flex-end">
                                             <Button

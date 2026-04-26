@@ -29,11 +29,18 @@ type updateRapidProReporterSyncRequest struct {
 }
 
 type updateRapidexWebhookMappingsRequest struct {
-	Mappings []RapidexWebhookMappingConfig `json:"mappings"`
+	RapidProServerCode string                        `json:"rapidProServerCode"`
+	Dhis2ServerCode    string                        `json:"dhis2ServerCode"`
+	Mappings           []RapidexWebhookMappingConfig `json:"mappings"`
 }
 
 type importRapidexWebhookMappingsRequest struct {
 	YAML string `json:"yaml"`
+}
+
+type refreshRapidexWebhookMetadataRequest struct {
+	RapidProServerCode string `json:"rapidProServerCode"`
+	Dhis2ServerCode    string `json:"dhis2ServerCode"`
 }
 
 func (h *Handler) GetPublicLoginBranding(c *gin.Context) {
@@ -165,13 +172,50 @@ func (h *Handler) UpdateRapidexWebhookMappings(c *gin.Context) {
 	}
 
 	settings, err := h.service.UpdateRapidexWebhookMappings(c.Request.Context(), RapidexWebhookMappingsUpdateInput{
-		Mappings: req.Mappings,
+		RapidProServerCode: req.RapidProServerCode,
+		Dhis2ServerCode:    req.Dhis2ServerCode,
+		Mappings:           req.Mappings,
 	}, actorUserID(principal))
 	if err != nil {
 		apperror.Write(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) GetRapidexWebhookMetadata(c *gin.Context) {
+	payload, err := h.service.GetRapidexWebhookMetadata(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *Handler) RefreshRapidexWebhookMetadata(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	var req refreshRapidexWebhookMetadataRequest
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"body": []string{"invalid JSON payload"},
+		}))
+		return
+	}
+
+	payload, err := h.service.RefreshRapidexWebhookMetadata(c.Request.Context(), RapidexWebhookMetadataRefreshInput{
+		RapidProServerCode: req.RapidProServerCode,
+		Dhis2ServerCode:    req.Dhis2ServerCode,
+	}, actorUserID(principal))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 func (h *Handler) ImportRapidexWebhookMappingsYAML(c *gin.Context) {

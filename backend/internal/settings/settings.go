@@ -86,12 +86,15 @@ type loginBrandingStored struct {
 }
 
 type Service struct {
-	repo                  Repository
-	auditService          *audit.Service
-	runtimeConfigProvider func() map[string]any
-	rapidProServerLookup  rapidProServerLookup
-	rapidProFieldClient   rapidProFieldClient
-	rapidProPreview       rapidProReporterSyncPreviewProvider
+	repo                         Repository
+	auditService                 *audit.Service
+	runtimeConfigProvider        func() map[string]any
+	rapidProServerLookup         rapidProServerLookup
+	rapidProFieldClient          rapidProFieldClient
+	rapidProPreview              rapidProReporterSyncPreviewProvider
+	rapidexMetadataServerCatalog rapidexMetadataServerCatalog
+	rapidexRapidProClient        rapidexRapidProMetadataClient
+	rapidexDHIS2Client           rapidexDHIS2MetadataClient
 }
 
 func NewService(repo Repository, auditService *audit.Service) *Service {
@@ -105,6 +108,13 @@ func (s *Service) WithRuntimeConfigProvider(provider func() map[string]any) *Ser
 
 func (s *Service) WithRapidProPreviewProvider(provider rapidProReporterSyncPreviewProvider) *Service {
 	s.rapidProPreview = provider
+	return s
+}
+
+func (s *Service) WithRapidexMetadataIntegration(catalog rapidexMetadataServerCatalog, rapidProClient rapidexRapidProMetadataClient, dhis2Client rapidexDHIS2MetadataClient) *Service {
+	s.rapidexMetadataServerCatalog = catalog
+	s.rapidexRapidProClient = rapidProClient
+	s.rapidexDHIS2Client = dhis2Client
 	return s
 }
 

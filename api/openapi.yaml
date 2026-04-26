@@ -504,6 +504,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RapidexWebhookMappingsSettings'
+  /settings/rapidex-webhook-mappings/metadata:
+    get:
+      tags: [Settings]
+      operationId: getRapidexWebhookMetadata
+      summary: Get cached RapidEx webhook mapping metadata and eligible integration servers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RapidEx webhook metadata snapshot and server options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidexWebhookMetadataResponse'
+  /settings/rapidex-webhook-mappings/metadata/refresh:
+    post:
+      tags: [Settings]
+      operationId: refreshRapidexWebhookMetadata
+      summary: Refresh cached RapidEx webhook mapping metadata from RapidPro and DHIS2
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RapidexWebhookMetadataRefreshRequest'
+      responses:
+        '200':
+          description: Refreshed RapidEx webhook metadata snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidexWebhookMetadataResponse'
   /settings/rapidex-webhook-mappings/import-yaml:
     post:
       tags: [Settings]
@@ -1392,8 +1426,12 @@ components:
             type: string
     RapidexWebhookMappingsSettings:
       type: object
-      required: [mappings, validation]
+      required: [rapidProServerCode, dhis2ServerCode, mappings, validation]
       properties:
+        rapidProServerCode:
+          type: string
+        dhis2ServerCode:
+          type: string
         mappings:
           type: array
           items:
@@ -1402,12 +1440,175 @@ components:
           $ref: '#/components/schemas/RapidexWebhookMappingsValidation'
     RapidexWebhookMappingsUpdateRequest:
       type: object
-      required: [mappings]
+      required: [rapidProServerCode, dhis2ServerCode, mappings]
       properties:
+        rapidProServerCode:
+          type: string
+        dhis2ServerCode:
+          type: string
         mappings:
           type: array
           items:
             $ref: '#/components/schemas/RapidexWebhookMappingConfig'
+    RapidexIntegrationServerOption:
+      type: object
+      required: [code, name, systemType, suspended]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        systemType:
+          type: string
+        suspended:
+          type: boolean
+    RapidexRapidProFlowResultOption:
+      type: object
+      required: [key, name, categories]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+    RapidexRapidProFlowOption:
+      type: object
+      required: [uuid, name, archived, results]
+      properties:
+        uuid:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        archived:
+          type: boolean
+        parentRefs:
+          type: array
+          items:
+            type: string
+        modifiedOn:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexRapidProFlowResultOption'
+    RapidexDhis2DataElementRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    RapidexDhis2DatasetOption:
+      type: object
+      required: [id, name, dataElements]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        periodType:
+          type: string
+        dataElements:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2DataElementRef'
+    RapidexDhis2DataElementOption:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        valueType:
+          type: string
+    RapidexDhis2CategoryOptionComboOption:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    RapidexDhis2AttributeOptionComboOption:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    RapidexWebhookMetadataSnapshot:
+      type: object
+      required: [rapidProServerCode, dhis2ServerCode, rapidProFlows, rapidProContactFields, dhis2Datasets, dhis2DataElements, dhis2CategoryOptionCombos, dhis2AttributeOptionCombos]
+      properties:
+        rapidProServerCode:
+          type: string
+        dhis2ServerCode:
+          type: string
+        lastRefreshedAt:
+          type: string
+          format: date-time
+        rapidProFlows:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexRapidProFlowOption'
+        rapidProContactFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidProContactField'
+        dhis2Datasets:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2DatasetOption'
+        dhis2DataElements:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2DataElementOption'
+        dhis2CategoryOptionCombos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2CategoryOptionComboOption'
+        dhis2AttributeOptionCombos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2AttributeOptionComboOption'
+    RapidexWebhookMetadataResponse:
+      type: object
+      required: [rapidProServerCode, dhis2ServerCode, rapidProServers, dhis2Servers, snapshot, warnings]
+      properties:
+        rapidProServerCode:
+          type: string
+        dhis2ServerCode:
+          type: string
+        rapidProServers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexIntegrationServerOption'
+        dhis2Servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexIntegrationServerOption'
+        snapshot:
+          $ref: '#/components/schemas/RapidexWebhookMetadataSnapshot'
+        warnings:
+          type: array
+          items:
+            type: string
+    RapidexWebhookMetadataRefreshRequest:
+      type: object
+      required: [rapidProServerCode, dhis2ServerCode]
+      properties:
+        rapidProServerCode:
+          type: string
+        dhis2ServerCode:
+          type: string
     RapidexWebhookMappingsImportRequest:
       type: object
       required: [yaml]

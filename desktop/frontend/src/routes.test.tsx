@@ -2175,6 +2175,8 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/settings/rapidex-webhook-mappings') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              dhis2ServerCode: 'dhis2',
               mappings: [
                 {
                   flowUuid: '11111111-2222-3333-4444-555555555555',
@@ -2191,10 +2193,35 @@ describe('app shell routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.endsWith('/api/v1/settings/rapidex-webhook-mappings/metadata') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              dhis2ServerCode: 'dhis2',
+              rapidProServers: [{ code: 'rapidpro', name: 'RapidPro', systemType: 'rapidpro', suspended: false }],
+              dhis2Servers: [{ code: 'dhis2', name: 'DHIS2', systemType: 'dhis2', suspended: false }],
+              snapshot: {
+                rapidProServerCode: 'rapidpro',
+                dhis2ServerCode: 'dhis2',
+                lastRefreshedAt: '2026-04-26T10:00:00Z',
+                rapidProFlows: [{ uuid: '11111111-2222-3333-4444-555555555555', name: 'Weekly Report', archived: false, results: [{ key: 'indicator_one', name: 'Indicator One', categories: [] }] }],
+                rapidProContactFields: [{ key: 'facility_code', label: 'Facility Code' }, { key: 'reporting_period', label: 'Reporting Period' }],
+                dhis2Datasets: [{ id: 'DATASET_A', name: 'Dataset A', dataElements: [{ id: 'DE_1', name: 'DE 1' }] }],
+                dhis2DataElements: [{ id: 'DE_1', name: 'DE 1' }, { id: 'DE_2', name: 'DE 2' }],
+                dhis2CategoryOptionCombos: [{ id: 'COC_1', name: 'COC 1' }, { id: 'COC_2', name: 'COC 2' }],
+                dhis2AttributeOptionCombos: [{ id: 'AOC_1', name: 'AOC 1' }, { id: 'AOC_2', name: 'AOC 2' }],
+              },
+              warnings: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         if (url.endsWith('/api/v1/settings/rapidex-webhook-mappings') && init?.method === 'PUT') {
           rapidexUpdatePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
           return new Response(
             JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              dhis2ServerCode: 'dhis2',
               mappings: [
                 {
                   flowUuid: '11111111-2222-3333-4444-555555555555',
@@ -2231,6 +2258,8 @@ describe('app shell routes', () => {
 
     await waitFor(() => {
       expect(rapidexUpdatePayload).toEqual({
+        rapidProServerCode: 'rapidpro',
+        dhis2ServerCode: 'dhis2',
         mappings: [
           {
             flowUuid: '11111111-2222-3333-4444-555555555555',
