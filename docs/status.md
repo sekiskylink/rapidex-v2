@@ -1,5 +1,41 @@
 # Status
 
+## Milestone — RapidEx Webhook Mapping Settings Migration (Complete)
+
+### What changed
+- Replaced the old file-directory mapping source for RapidEx webhook flow mappings with DB-persisted settings stored in `app_settings`.
+- Added backend settings APIs for RapidEx webhook mappings, including read/update plus YAML import and export support for migration and backup workflows.
+- Added a settings-backed RapidEx mapping provider and wired the API startup path so the RapidEx webhook integration now reads flow mappings from the database-backed settings source instead of a filesystem directory.
+- Extended both web and desktop `Settings > Integrations` screens with a RapidEx webhook mappings editor that supports:
+  - editing flow metadata
+  - editing data-value rows
+  - adding/removing mappings
+  - YAML import/export
+- Updated the public API spec to document the new RapidEx webhook mapping settings endpoints and payloads.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-26-rapidex-webhook-mapping-settings-db-ui.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - settings service coverage for RapidEx webhook mapping normalization, duplicate-flow validation, YAML import/export, and settings-backed provider lookup
+  - router settings coverage for RapidEx webhook mapping read/write endpoints
+- Web:
+  - settings route coverage for saving RapidEx webhook mappings through the backend API
+- Desktop:
+  - matching settings route coverage for saving RapidEx webhook mappings through the backend API
+
+### Verification summary
+- Backend focused settings and router checks: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/settings ./cmd/api -run "TestRapidexWebhookMappings|TestRapidProReporterSync|TestRuntimeConfig|TestLoginBranding"`)
+- Backend API build: PASS (`cd backend && GOCACHE=/tmp/go-build go build ./cmd/api`)
+- Web route smoke/settings suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke/settings suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- The RapidEx webhook integration now resolves mappings from DB-backed settings, but the downstream exchange-request creation handoff remains the existing placeholder and still needs a dedicated milestone.
+- Existing frontend test runs still emit non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing frontend builds still emit third-party `'use client'` and large-chunk warnings unrelated to this change.
+
 ## Milestone — Org Unit Summary Details Dialog (Complete)
 
 ### What changed

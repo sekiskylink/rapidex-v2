@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"basepro/backend/internal/audit"
+	"basepro/backend/internal/sukumad/rapidex"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
@@ -274,5 +275,127 @@ func TestUpdateRapidProReporterSyncAcceptsBuiltInTarget(t *testing.T) {
 	}
 	if len(got.Mappings) != 1 || got.Mappings[0].RapidProFieldKey != "urn.tel" {
 		t.Fatalf("expected built-in mapping to persist, got %#v", got.Mappings)
+	}
+}
+
+func TestUpdateRapidexWebhookMappingsNormalizesAndSortsMappings(t *testing.T) {
+	repo := newFakeRepo()
+	service := NewService(repo, nil)
+
+	got, err := service.UpdateRapidexWebhookMappings(context.Background(), RapidexWebhookMappingsUpdateInput{
+		Mappings: []rapidex.MappingConfig{
+			{
+				FlowUUID:   " flow-b ",
+				FlowName:   " Beta ",
+				Dataset:    " DATASET_B ",
+				OrgUnitVar: " facility_b ",
+				PeriodVar:  " period_b ",
+				Mappings: []rapidex.DataValueMapping{
+					{Field: " indicator_b ", DataElement: " DE_B "},
+				},
+			},
+			{
+				FlowUUID:   "flow-a",
+				FlowName:   "Alpha",
+				Dataset:    "DATASET_A",
+				OrgUnitVar: "facility_a",
+				PeriodVar:  "period_a",
+				Mappings: []rapidex.DataValueMapping{
+					{Field: "indicator_a", DataElement: "DE_A"},
+				},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("update rapidex webhook mappings: %v", err)
+	}
+	if len(got.Mappings) != 2 {
+		t.Fatalf("expected 2 mappings, got %#v", got.Mappings)
+	}
+	if got.Mappings[0].FlowUUID != "flow-a" || got.Mappings[1].FlowUUID != "flow-b" {
+		t.Fatalf("expected mappings sorted by name/uuid, got %#v", got.Mappings)
+	}
+	if got.Mappings[1].Dataset != "DATASET_B" || got.Mappings[1].Mappings[0].Field != "indicator_b" {
+		t.Fatalf("expected trimmed mapping values, got %#v", got.Mappings[1])
+	}
+	if !got.Validation.IsValid {
+		t.Fatalf("expected valid settings, got %#v", got.Validation)
+	}
+}
+
+func TestUpdateRapidexWebhookMappingsRejectsDuplicateFlowUUID(t *testing.T) {
+	service := NewService(newFakeRepo(), nil)
+
+	_, err := service.UpdateRapidexWebhookMappings(context.Background(), RapidexWebhookMappingsUpdateInput{
+		Mappings: []rapidex.MappingConfig{
+			{FlowUUID: "flow-a", Dataset: "dataset-a", OrgUnitVar: "facility", PeriodVar: "period", Mappings: []rapidex.DataValueMapping{{Field: "one", DataElement: "DE1"}}},
+			{FlowUUID: "flow-a", Dataset: "dataset-b", OrgUnitVar: "facility", PeriodVar: "period", Mappings: []rapidex.DataValueMapping{{Field: "two", DataElement: "DE2"}}},
+		},
+	}, nil)
+	if err == nil {
+		t.Fatal("expected duplicate flow uuid validation error")
+	}
+}
+
+func TestImportAndExportRapidexWebhookMappingsYAML(t *testing.T) {
+	repo := newFakeRepo()
+	service := NewService(repo, nil)
+
+	_, err := service.ImportRapidexWebhookMappingsYAML(context.Background(), RapidexWebhookMappingsImportInput{
+		YAML: `flow_uuid: 11111111-2222-3333-4444-555555555555
+flow_name: Weekly Report
+dataset: DATASET_A
+org_unit_var: facility_code
+period_var: reporting_period
+mappings:
+  - field: indicator_one
+    data_element: DE_1
+---
+flow_uuid: 66666666-7777-8888-9999-000000000000
+flow_name: Monthly Report
+dataset: DATASET_B
+org_unit_var: facility_uid
+period_var: reporting_month
+mappings:
+  - field: indicator_two
+    data_element: DE_2
+`,
+	}, nil)
+	if err != nil {
+		t.Fatalf("import rapidex webhook mappings: %v", err)
+	}
+
+	exported, err := service.ExportRapidexWebhookMappingsYAML(context.Background())
+	if err != nil {
+		t.Fatalf("export rapidex webhook mappings: %v", err)
+	}
+	if !strings.Contains(exported.YAML, "flow_uuid: 11111111-2222-3333-4444-555555555555") || !strings.Contains(exported.YAML, "---") {
+		t.Fatalf("expected exported yaml to include both mapping docs, got %q", exported.YAML)
+	}
+}
+
+func TestRapidexWebhookMappingProviderReturnsMappingByFlowUUID(t *testing.T) {
+	repo := newFakeRepo()
+	payload := rapidexWebhookMappingsStored{
+		Mappings: []rapidex.MappingConfig{
+			{FlowUUID: "flow-a", Dataset: "dataset-a", OrgUnitVar: "facility", PeriodVar: "period", Mappings: []rapidex.DataValueMapping{{Field: "one", DataElement: "DE1"}}},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal test payload: %v", err)
+	}
+	repo.items["rapidex::webhook_mappings"] = raw
+
+	provider := NewRapidexWebhookMappingProvider(repo)
+	got, ok, err := provider.GetByFlowUUID(context.Background(), "flow-a")
+	if err != nil {
+		t.Fatalf("get by flow uuid: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected mapping to be found")
+	}
+	if got.FlowUUID != "flow-a" || got.Dataset != "dataset-a" {
+		t.Fatalf("unexpected mapping %#v", got)
 	}
 }

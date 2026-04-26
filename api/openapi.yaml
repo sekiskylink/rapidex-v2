@@ -471,6 +471,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RapidProReporterSyncSettings'
+  /settings/rapidex-webhook-mappings:
+    get:
+      tags: [Settings]
+      operationId: getRapidexWebhookMappings
+      summary: Get RapidEx webhook flow mapping settings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RapidEx webhook mapping settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidexWebhookMappingsSettings'
+    put:
+      tags: [Settings]
+      operationId: updateRapidexWebhookMappings
+      summary: Update RapidEx webhook flow mapping settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RapidexWebhookMappingsUpdateRequest'
+      responses:
+        '200':
+          description: RapidEx webhook mapping settings updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidexWebhookMappingsSettings'
+  /settings/rapidex-webhook-mappings/import-yaml:
+    post:
+      tags: [Settings]
+      operationId: importRapidexWebhookMappingsYAML
+      summary: Import RapidEx webhook mappings from YAML
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RapidexWebhookMappingsImportRequest'
+      responses:
+        '200':
+          description: RapidEx webhook mapping settings imported from YAML.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidexWebhookMappingsSettings'
+  /settings/rapidex-webhook-mappings/export-yaml:
+    get:
+      tags: [Settings]
+      operationId: exportRapidexWebhookMappingsYAML
+      summary: Export RapidEx webhook mappings as YAML
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RapidEx webhook mappings YAML export.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RapidexWebhookMappingsExportResponse'
   /settings/module-enablement:
     get:
       tags: [Module Enablement]
@@ -1281,6 +1348,78 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RapidProReporterFieldMapping'
+    RapidexWebhookDataValueMapping:
+      type: object
+      required: [field, dataElement]
+      properties:
+        field:
+          type: string
+        dataElement:
+          type: string
+        categoryOptionCombo:
+          type: string
+        attributeOptionCombo:
+          type: string
+    RapidexWebhookMappingConfig:
+      type: object
+      required: [flowUuid, dataset, orgUnitVar, periodVar, mappings]
+      properties:
+        flowUuid:
+          type: string
+        flowName:
+          type: string
+        dataset:
+          type: string
+        orgUnitVar:
+          type: string
+        periodVar:
+          type: string
+        payloadAoc:
+          type: string
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexWebhookDataValueMapping'
+    RapidexWebhookMappingsValidation:
+      type: object
+      required: [isValid]
+      properties:
+        isValid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+    RapidexWebhookMappingsSettings:
+      type: object
+      required: [mappings, validation]
+      properties:
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexWebhookMappingConfig'
+        validation:
+          $ref: '#/components/schemas/RapidexWebhookMappingsValidation'
+    RapidexWebhookMappingsUpdateRequest:
+      type: object
+      required: [mappings]
+      properties:
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexWebhookMappingConfig'
+    RapidexWebhookMappingsImportRequest:
+      type: object
+      required: [yaml]
+      properties:
+        yaml:
+          type: string
+    RapidexWebhookMappingsExportResponse:
+      type: object
+      required: [yaml]
+      properties:
+        yaml:
+          type: string
     ExternalRequestSummaryServer:
       type: object
       required: [uid, code, name]

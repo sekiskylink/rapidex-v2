@@ -103,6 +103,37 @@ interface RapidProReporterSyncPreviewResponse {
   resolvedGroups: RapidProResolvedGroup[]
 }
 
+interface RapidexWebhookDataValueMapping {
+  field: string
+  dataElement: string
+  categoryOptionCombo?: string
+  attributeOptionCombo?: string
+}
+
+interface RapidexWebhookMappingConfig {
+  flowUuid: string
+  flowName?: string
+  dataset: string
+  orgUnitVar: string
+  periodVar: string
+  payloadAoc?: string
+  mappings: RapidexWebhookDataValueMapping[]
+}
+
+interface RapidexWebhookMappingsValidation {
+  isValid: boolean
+  errors?: string[]
+}
+
+interface RapidexWebhookMappingsSettingsResponse {
+  mappings: RapidexWebhookMappingConfig[]
+  validation: RapidexWebhookMappingsValidation
+}
+
+interface RapidexWebhookMappingsExportResponse {
+  yaml: string
+}
+
 interface ReporterGroupRecord {
   id: number
   name: string
@@ -161,6 +192,27 @@ function formatRapidProPreviewJSON(preview: RapidProReporterSyncPreviewResponse 
     return ''
   }
   return JSON.stringify(preview.requestBody ?? {}, null, 2)
+}
+
+function createEmptyRapidexDataValueMapping(): RapidexWebhookDataValueMapping {
+  return {
+    field: '',
+    dataElement: '',
+    categoryOptionCombo: '',
+    attributeOptionCombo: '',
+  }
+}
+
+function createEmptyRapidexWebhookMapping(): RapidexWebhookMappingConfig {
+  return {
+    flowUuid: '',
+    flowName: '',
+    dataset: '',
+    orgUnitVar: '',
+    periodVar: '',
+    payloadAoc: '',
+    mappings: [createEmptyRapidexDataValueMapping()],
+  }
 }
 
 export type SettingsSection = 'general' | 'branding' | 'modules' | 'integrations' | 'about'
@@ -266,6 +318,14 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [rapidProPreview, setRapidProPreview] = React.useState<RapidProReporterSyncPreviewResponse | null>(null)
   const [rapidProPreviewLoading, setRapidProPreviewLoading] = React.useState(false)
   const [rapidProPreviewError, setRapidProPreviewError] = React.useState('')
+  const [rapidexMappings, setRapidexMappings] = React.useState<RapidexWebhookMappingConfig[]>([])
+  const [rapidexValidation, setRapidexValidation] = React.useState<RapidexWebhookMappingsValidation>({ isValid: true })
+  const [rapidexLoading, setRapidexLoading] = React.useState(true)
+  const [rapidexSaving, setRapidexSaving] = React.useState(false)
+  const [rapidexImporting, setRapidexImporting] = React.useState(false)
+  const [rapidexExporting, setRapidexExporting] = React.useState(false)
+  const [rapidexError, setRapidexError] = React.useState('')
+  const [rapidexYamlText, setRapidexYamlText] = React.useState('')
   const [reporterGroups, setReporterGroups] = React.useState<ReporterGroupRecord[]>([])
   const [reporterGroupsLoading, setReporterGroupsLoading] = React.useState(true)
   const [reporterGroupsSavingId, setReporterGroupsSavingId] = React.useState<number | null>(null)
@@ -282,6 +342,10 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     setRapidProMappings(payload.mappings ?? [])
     setRapidProLastFetchedAt(payload.lastFetchedAt ?? null)
     setRapidProValidation(payload.validation ?? { isValid: true })
+  }, [])
+  const applyRapidexPayload = React.useCallback((payload: RapidexWebhookMappingsSettingsResponse) => {
+    setRapidexMappings(payload.mappings ?? [])
+    setRapidexValidation(payload.validation ?? { isValid: true })
   }, [])
 
   const runtimeToggleModules = React.useMemo(() => {
@@ -434,6 +498,9 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProPreviewReporterId('')
       setRapidProPreview(null)
       setRapidProPreviewError('')
+      setRapidexMappings([])
+      setRapidexValidation({ isValid: true })
+      setRapidexYamlText('')
       setReporterGroups([])
       setReporterGroupsError('')
       return
@@ -448,23 +515,29 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProPreviewReporterId('')
       setRapidProPreview(null)
       setRapidProPreviewError('')
+      setRapidexMappings([])
+      setRapidexValidation({ isValid: true })
+      setRapidexYamlText('')
       setReporterGroups([])
       setReporterGroupsError('')
       return
     }
     let active = true
     setRapidProSyncLoading(true)
+    setRapidexLoading(true)
     setReporterGroupsLoading(true)
     Promise.all([
       apiRequest<RapidProReporterSyncSettingsResponse>('/settings/rapidpro-reporter-sync', { method: 'GET' }),
       apiRequest<{ items: RapidProReporterOption[] }>('/settings/rapidpro-reporter-sync/preview-reporters', { method: 'GET' }),
+      apiRequest<RapidexWebhookMappingsSettingsResponse>('/settings/rapidex-webhook-mappings', { method: 'GET' }),
       apiRequest<{ items: ReporterGroupRecord[] }>('/reporter-groups?page=0&pageSize=200', { method: 'GET' }),
     ])
-      .then(([payload, reporterPayload, groupPayload]) => {
+      .then(([payload, reporterPayload, rapidexPayload, groupPayload]) => {
         if (!active) {
           return
         }
         applyRapidProSyncPayload(payload)
+        applyRapidexPayload(rapidexPayload)
         const items = reporterPayload.items ?? []
         setRapidProPreviewReporters(items)
         setReporterGroups(groupPayload.items ?? [])
@@ -486,13 +559,14 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       .finally(() => {
         if (active) {
           setRapidProSyncLoading(false)
+          setRapidexLoading(false)
           setReporterGroupsLoading(false)
         }
       })
     return () => {
       active = false
     }
-  }, [applyRapidProSyncPayload, canReadModuleEnablement, isIntegrationsSection, notify])
+  }, [applyRapidProSyncPayload, applyRapidexPayload, canReadModuleEnablement, isIntegrationsSection, notify])
 
   React.useEffect(() => {
     if (!isIntegrationsSection || !canReadModuleEnablement || !rapidProPreviewReporterId) {
@@ -694,6 +768,140 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidProSyncError(`${normalized.message}${requestId}`)
     } finally {
       setRapidProSyncSaving(false)
+    }
+  }
+
+  const handleRapidexMappingChange = React.useCallback(
+    (mappingIndex: number, field: keyof RapidexWebhookMappingConfig, value: string) => {
+      setRapidexMappings((current) =>
+        current.map((item, index) => (index === mappingIndex ? { ...item, [field]: value } : item)),
+      )
+    },
+    [],
+  )
+
+  const handleRapidexDataValueChange = React.useCallback(
+    (mappingIndex: number, rowIndex: number, field: keyof RapidexWebhookDataValueMapping, value: string) => {
+      setRapidexMappings((current) =>
+        current.map((item, index) =>
+          index === mappingIndex
+            ? {
+                ...item,
+                mappings: item.mappings.map((row, currentRowIndex) =>
+                  currentRowIndex === rowIndex ? { ...row, [field]: value } : row,
+                ),
+              }
+            : item,
+        ),
+      )
+    },
+    [],
+  )
+
+  const addRapidexMapping = React.useCallback(() => {
+    setRapidexMappings((current) => [...current, createEmptyRapidexWebhookMapping()])
+  }, [])
+
+  const removeRapidexMapping = React.useCallback((mappingIndex: number) => {
+    setRapidexMappings((current) => current.filter((_, index) => index !== mappingIndex))
+  }, [])
+
+  const addRapidexDataValueRow = React.useCallback((mappingIndex: number) => {
+    setRapidexMappings((current) =>
+      current.map((item, index) =>
+        index === mappingIndex ? { ...item, mappings: [...item.mappings, createEmptyRapidexDataValueMapping()] } : item,
+      ),
+    )
+  }, [])
+
+  const removeRapidexDataValueRow = React.useCallback((mappingIndex: number, rowIndex: number) => {
+    setRapidexMappings((current) =>
+      current.map((item, index) =>
+        index === mappingIndex
+          ? { ...item, mappings: item.mappings.filter((_, currentRowIndex) => currentRowIndex !== rowIndex) }
+          : item,
+      ),
+    )
+  }, [])
+
+  const handleSaveRapidexMappings = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setRapidexSaving(true)
+    setRapidexError('')
+    try {
+      const payload = await apiRequest<RapidexWebhookMappingsSettingsResponse>(
+        '/settings/rapidex-webhook-mappings',
+        {
+          method: 'PUT',
+          body: JSON.stringify({ mappings: rapidexMappings }),
+        },
+      )
+      applyRapidexPayload(payload)
+      notify.success('RapidEx webhook mappings saved.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to save RapidEx webhook mappings.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidexError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidexSaving(false)
+    }
+  }
+
+  const handleImportRapidexYaml = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setRapidexImporting(true)
+    setRapidexError('')
+    try {
+      const payload = await apiRequest<RapidexWebhookMappingsSettingsResponse>(
+        '/settings/rapidex-webhook-mappings/import-yaml',
+        {
+          method: 'POST',
+          body: JSON.stringify({ yaml: rapidexYamlText }),
+        },
+      )
+      applyRapidexPayload(payload)
+      notify.success('RapidEx webhook mappings imported.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to import RapidEx webhook mappings YAML.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidexError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidexImporting(false)
+    }
+  }
+
+  const handleExportRapidexYaml = async () => {
+    setRapidexExporting(true)
+    setRapidexError('')
+    try {
+      const payload = await apiRequest<RapidexWebhookMappingsExportResponse>(
+        '/settings/rapidex-webhook-mappings/export-yaml',
+        { method: 'GET' },
+      )
+      setRapidexYamlText(payload.yaml ?? '')
+      notify.success('RapidEx webhook mappings YAML exported.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to export RapidEx webhook mappings YAML.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidexError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidexExporting(false)
     }
   }
 
@@ -1501,15 +1709,181 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                         </Stack>
                       )}
                     </Stack>
+                    <Divider />
+                    <Stack spacing={1.5}>
+                      <Typography variant="subtitle1">RapidEx Webhook Mappings</Typography>
+                      <Typography color="text.secondary">
+                        Manage RapidPro flow-to-DHIS2 aggregate mappings from the UI. The database is the live source of truth.
+                      </Typography>
+                      {rapidexError ? <Alert severity="error">{rapidexError}</Alert> : null}
+                      {rapidexLoading ? (
+                        <Typography color="text.secondary">Loading RapidEx webhook mappings...</Typography>
+                      ) : (
+                        <>
+                          <TextField
+                            label="RapidEx Mapping YAML"
+                            value={rapidexYamlText}
+                            onChange={(event) => setRapidexYamlText(event.target.value)}
+                            multiline
+                            minRows={8}
+                            fullWidth
+                            InputProps={{ sx: { fontFamily: 'monospace' } }}
+                          />
+                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                            <Button variant="outlined" onClick={() => void handleExportRapidexYaml()} disabled={rapidexExporting}>
+                              {rapidexExporting ? 'Exporting...' : 'Export YAML'}
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              onClick={() => void handleImportRapidexYaml()}
+                              disabled={!canWriteBranding || rapidexImporting || !rapidexYamlText.trim()}
+                            >
+                              {rapidexImporting ? 'Importing...' : 'Import YAML'}
+                            </Button>
+                            <Button variant="text" onClick={addRapidexMapping} disabled={!canWriteBranding}>
+                              Add Flow Mapping
+                            </Button>
+                          </Stack>
+                          {rapidexMappings.length === 0 ? (
+                            <Alert severity="info">No RapidEx webhook mappings have been saved yet.</Alert>
+                          ) : (
+                            <Stack spacing={2}>
+                              {rapidexMappings.map((mapping, mappingIndex) => (
+                                <Paper key={`${mapping.flowUuid || 'new'}-${mappingIndex}`} variant="outlined" sx={{ p: 2 }}>
+                                  <Stack spacing={1.25}>
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center" useFlexGap flexWrap="wrap">
+                                      <Typography variant="subtitle2">Flow Mapping {mappingIndex + 1}</Typography>
+                                      <Button
+                                        variant="text"
+                                        color="error"
+                                        onClick={() => removeRapidexMapping(mappingIndex)}
+                                        disabled={!canWriteBranding}
+                                      >
+                                        Remove Flow
+                                      </Button>
+                                    </Stack>
+                                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25}>
+                                      <TextField
+                                        label="Flow UUID"
+                                        value={mapping.flowUuid}
+                                        onChange={(event) => handleRapidexMappingChange(mappingIndex, 'flowUuid', event.target.value)}
+                                        fullWidth
+                                      />
+                                      <TextField
+                                        label="Flow Name"
+                                        value={mapping.flowName ?? ''}
+                                        onChange={(event) => handleRapidexMappingChange(mappingIndex, 'flowName', event.target.value)}
+                                        fullWidth
+                                      />
+                                    </Stack>
+                                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25}>
+                                      <TextField
+                                        label="Dataset"
+                                        value={mapping.dataset}
+                                        onChange={(event) => handleRapidexMappingChange(mappingIndex, 'dataset', event.target.value)}
+                                        fullWidth
+                                      />
+                                      <TextField
+                                        label="Org Unit Variable"
+                                        value={mapping.orgUnitVar}
+                                        onChange={(event) => handleRapidexMappingChange(mappingIndex, 'orgUnitVar', event.target.value)}
+                                        fullWidth
+                                      />
+                                      <TextField
+                                        label="Period Variable"
+                                        value={mapping.periodVar}
+                                        onChange={(event) => handleRapidexMappingChange(mappingIndex, 'periodVar', event.target.value)}
+                                        fullWidth
+                                      />
+                                      <TextField
+                                        label="Payload AOC"
+                                        value={mapping.payloadAoc ?? ''}
+                                        onChange={(event) => handleRapidexMappingChange(mappingIndex, 'payloadAoc', event.target.value)}
+                                        fullWidth
+                                      />
+                                    </Stack>
+                                    <Divider />
+                                    <Typography variant="body2" color="text.secondary">
+                                      Data value mappings
+                                    </Typography>
+                                    <Stack spacing={1.25}>
+                                      {mapping.mappings.map((item, rowIndex) => (
+                                        <Stack key={`${mappingIndex}-${rowIndex}`} spacing={1}>
+                                          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
+                                            <TextField
+                                              label="Field"
+                                              value={item.field}
+                                              onChange={(event) => handleRapidexDataValueChange(mappingIndex, rowIndex, 'field', event.target.value)}
+                                              fullWidth
+                                            />
+                                            <TextField
+                                              label="Data Element"
+                                              value={item.dataElement}
+                                              onChange={(event) =>
+                                                handleRapidexDataValueChange(mappingIndex, rowIndex, 'dataElement', event.target.value)
+                                              }
+                                              fullWidth
+                                            />
+                                            <TextField
+                                              label="Category Option Combo"
+                                              value={item.categoryOptionCombo ?? ''}
+                                              onChange={(event) =>
+                                                handleRapidexDataValueChange(mappingIndex, rowIndex, 'categoryOptionCombo', event.target.value)
+                                              }
+                                              fullWidth
+                                            />
+                                            <TextField
+                                              label="Attribute Option Combo"
+                                              value={item.attributeOptionCombo ?? ''}
+                                              onChange={(event) =>
+                                                handleRapidexDataValueChange(mappingIndex, rowIndex, 'attributeOptionCombo', event.target.value)
+                                              }
+                                              fullWidth
+                                            />
+                                          </Stack>
+                                          <Stack direction="row" justifyContent="flex-end">
+                                            <Button
+                                              variant="text"
+                                              color="error"
+                                              onClick={() => removeRapidexDataValueRow(mappingIndex, rowIndex)}
+                                              disabled={!canWriteBranding || mapping.mappings.length <= 1}
+                                            >
+                                              Remove Row
+                                            </Button>
+                                          </Stack>
+                                        </Stack>
+                                      ))}
+                                      <Stack direction="row" justifyContent="flex-end">
+                                        <Button variant="text" onClick={() => addRapidexDataValueRow(mappingIndex)} disabled={!canWriteBranding}>
+                                          Add Data Value Row
+                                        </Button>
+                                      </Stack>
+                                    </Stack>
+                                  </Stack>
+                                </Paper>
+                              ))}
+                            </Stack>
+                          )}
+                        </>
+                      )}
+                    </Stack>
                     {!rapidProValidation.isValid ? (
                       <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
                     ) : (
                       <Alert severity="success">Saved RapidPro mappings are valid and ready for sync.</Alert>
                     )}
+                    {!rapidexValidation.isValid ? (
+                      <Alert severity="warning">{(rapidexValidation.errors ?? []).join(' ')}</Alert>
+                    ) : (
+                      <Alert severity="success">Saved RapidEx webhook mappings are valid and ready for webhook processing.</Alert>
+                    )}
                     {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidPro sync settings.</Alert> : null}
                     <Stack direction="row" justifyContent="flex-end">
-                      <Button variant="contained" onClick={() => void handleSaveRapidProSync()} disabled={!canWriteBranding || rapidProSyncSaving}>
+                      <Button variant="outlined" onClick={() => void handleSaveRapidProSync()} disabled={!canWriteBranding || rapidProSyncSaving}>
                         {rapidProSyncSaving ? 'Saving...' : 'Save RapidPro Sync Settings'}
+                      </Button>
+                      <Button variant="contained" onClick={() => void handleSaveRapidexMappings()} disabled={!canWriteBranding || rapidexSaving}>
+                        {rapidexSaving ? 'Saving...' : 'Save RapidEx Webhook Mappings'}
                       </Button>
                     </Stack>
                   </>

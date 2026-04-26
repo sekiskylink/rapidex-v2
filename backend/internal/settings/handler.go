@@ -28,6 +28,14 @@ type updateRapidProReporterSyncRequest struct {
 	Mappings           []RapidProReporterFieldMapping `json:"mappings"`
 }
 
+type updateRapidexWebhookMappingsRequest struct {
+	Mappings []RapidexWebhookMappingConfig `json:"mappings"`
+}
+
+type importRapidexWebhookMappingsRequest struct {
+	YAML string `json:"yaml"`
+}
+
 func (h *Handler) GetPublicLoginBranding(c *gin.Context) {
 	branding, err := h.service.GetLoginBranding(c.Request.Context())
 	if err != nil {
@@ -130,6 +138,74 @@ func (h *Handler) UpdateRapidProReporterSync(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) GetRapidexWebhookMappings(c *gin.Context) {
+	settings, err := h.service.GetRapidexWebhookMappings(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) UpdateRapidexWebhookMappings(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	var req updateRapidexWebhookMappingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"body": []string{"invalid JSON payload"},
+		}))
+		return
+	}
+
+	settings, err := h.service.UpdateRapidexWebhookMappings(c.Request.Context(), RapidexWebhookMappingsUpdateInput{
+		Mappings: req.Mappings,
+	}, actorUserID(principal))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) ImportRapidexWebhookMappingsYAML(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	var req importRapidexWebhookMappingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"body": []string{"invalid JSON payload"},
+		}))
+		return
+	}
+
+	settings, err := h.service.ImportRapidexWebhookMappingsYAML(c.Request.Context(), RapidexWebhookMappingsImportInput{
+		YAML: req.YAML,
+	}, actorUserID(principal))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) ExportRapidexWebhookMappingsYAML(c *gin.Context) {
+	payload, err := h.service.ExportRapidexWebhookMappingsYAML(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 func (h *Handler) ListRapidProReporterSyncPreviewReporters(c *gin.Context) {

@@ -2132,6 +2132,120 @@ describe('app shell routes', () => {
     })
   })
 
+  it('updates RapidEx webhook mappings from settings page', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let rapidexUpdatePayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(JSON.stringify({ id: 1, username: 'admin', roles: ['Admin'], permissions: ['settings.read', 'settings.write'] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/version')) {
+          return new Response(JSON.stringify({ version: '1.0.0', commit: 'abc123', buildDate: '2026-03-06T00:00:00Z' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ applicationDisplayName: 'RapidEx', loginImageUrl: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ modules: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ config: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/rapidpro-reporter-sync') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ rapidProServerCode: 'rapidpro', availableFields: [], mappings: [], validation: { isValid: true, errors: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/rapidpro-reporter-sync/preview-reporters') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/api/v1/settings/rapidex-webhook-mappings') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              mappings: [
+                {
+                  flowUuid: '11111111-2222-3333-4444-555555555555',
+                  flowName: 'Weekly Report',
+                  dataset: 'DATASET_A',
+                  orgUnitVar: 'facility_code',
+                  periodVar: 'reporting_period',
+                  payloadAoc: 'AOC_1',
+                  mappings: [{ field: 'indicator_one', dataElement: 'DE_1', categoryOptionCombo: 'COC_1', attributeOptionCombo: '' }],
+                },
+              ],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/settings/rapidex-webhook-mappings') && init?.method === 'PUT') {
+          rapidexUpdatePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              mappings: [
+                {
+                  flowUuid: '11111111-2222-3333-4444-555555555555',
+                  flowName: 'Updated Weekly Report',
+                  dataset: 'DATASET_B',
+                  orgUnitVar: 'facility_uid',
+                  periodVar: 'reporting_week',
+                  payloadAoc: 'AOC_2',
+                  mappings: [{ field: 'indicator_two', dataElement: 'DE_2', categoryOptionCombo: 'COC_2', attributeOptionCombo: 'AOC_2' }],
+                },
+              ],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings/integrations', store)
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+
+    fireEvent.change(await screen.findByLabelText('Flow Name'), { target: { value: 'Updated Weekly Report' } })
+    fireEvent.change(screen.getByLabelText('Dataset'), { target: { value: 'DATASET_B' } })
+    fireEvent.change(screen.getByLabelText('Org Unit Variable'), { target: { value: 'facility_uid' } })
+    fireEvent.change(screen.getByLabelText('Period Variable'), { target: { value: 'reporting_week' } })
+    fireEvent.change(screen.getByLabelText('Payload AOC'), { target: { value: 'AOC_2' } })
+    fireEvent.change(screen.getByLabelText('Field'), { target: { value: 'indicator_two' } })
+    fireEvent.change(screen.getByLabelText('Data Element'), { target: { value: 'DE_2' } })
+    fireEvent.change(screen.getByLabelText('Category Option Combo'), { target: { value: 'COC_2' } })
+    fireEvent.change(screen.getByLabelText('Attribute Option Combo'), { target: { value: 'AOC_2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save RapidEx Webhook Mappings' }))
+
+    await waitFor(() => {
+      expect(rapidexUpdatePayload).toEqual({
+        mappings: [
+          {
+            flowUuid: '11111111-2222-3333-4444-555555555555',
+            flowName: 'Updated Weekly Report',
+            dataset: 'DATASET_B',
+            orgUnitVar: 'facility_uid',
+            periodVar: 'reporting_week',
+            payloadAoc: 'AOC_2',
+            mappings: [{ field: 'indicator_two', dataElement: 'DE_2', categoryOptionCombo: 'COC_2', attributeOptionCombo: 'AOC_2' }],
+          },
+        ],
+      })
+    })
+  })
+
   it('creates and reveals an API token from settings page', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

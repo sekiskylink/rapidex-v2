@@ -32,6 +32,7 @@ import (
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/orgunit"
+	"basepro/backend/internal/sukumad/rapidex"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadratelimit "basepro/backend/internal/sukumad/ratelimit"
 	"basepro/backend/internal/sukumad/reporter"
@@ -124,7 +125,8 @@ func run() error {
 	sukumadUserOrgUnitService := userorg.NewService(userorg.NewPgRepository(database)).WithRoleLookup(rbacService)
 	authService = authService.WithUserOrgScope(sukumadUserOrgUnitService)
 	usersService := users.NewService(users.NewSQLRepository(database), rbacService, auditService, cfg.Auth.PasswordHashCost)
-	moduleEnablementService := moduleenablement.NewService(settings.NewSQLRepository(database), auditService)
+	settingsRepo := settings.NewSQLRepository(database)
+	moduleEnablementService := moduleenablement.NewService(settingsRepo, auditService)
 	if err := moduleEnablementService.LoadRuntimeOverrides(ctx); err != nil {
 		return fmt.Errorf("load module runtime overrides: %w", err)
 	}
@@ -170,7 +172,7 @@ func run() error {
 	sukumadOrgUnitSyncService := orgunit.NewHierarchySyncService(sukumadOrgUnitRepo, sukumadServerService, nil)
 	sukumadOrgUnitService := orgunit.NewService(sukumadOrgUnitRepo).WithScopeResolver(sukumadUserOrgUnitService).WithSyncService(sukumadOrgUnitSyncService)
 	sukumadRapidProClient := rapidpro.NewClient(nil)
-	settingsService := settings.NewService(settings.NewSQLRepository(database), auditService).
+	settingsService := settings.NewService(settingsRepo, auditService).
 		WithRapidProIntegration(sukumadServerService, sukumadRapidProClient).
 		WithRuntimeConfigProvider(func() map[string]any {
 			cfg := config.Get()
@@ -195,6 +197,7 @@ func run() error {
 		WithRecentReportsLookup(requests.NewRepository(database)).
 		WithScopeResolver(sukumadUserOrgUnitService)
 	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
+	rapidexIntegrationService := rapidex.NewIntegrationService(settings.NewRapidexWebhookMappingProvider(settingsRepo), sukumadReporterService, nil)
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()
 		files := make([]documentation.SourceFile, 0, len(cfg.Documentation.Files))
@@ -336,6 +339,7 @@ func run() error {
 			ReporterService:      sukumadReporterService,
 			ReporterGroupHandler: reportergroup.NewHandler(sukumadReporterGroupService),
 			UserOrgUnitService:   sukumadUserOrgUnitService,
+			RapidexService:       rapidexIntegrationService,
 		}),
 	}
 

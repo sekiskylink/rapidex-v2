@@ -269,6 +269,64 @@ func TestRapidProReporterSyncPreviewRoutesAcceptSettingsReader(t *testing.T) {
 	}
 }
 
+func TestRapidexWebhookMappingsReadRouteAcceptsSettingsReader(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(203, "reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		203: {"settings.read"},
+	})
+	repo := &fakeSettingsRepo{
+		values: map[string][]byte{
+			"rapidex::webhook_mappings": []byte(`{"mappings":[{"flowUuid":"flow-a","dataset":"DATASET_A","orgUnitVar":"facility_code","periodVar":"reporting_period","mappings":[{"field":"indicator_one","dataElement":"DE_1"}]}]}`),
+		},
+	}
+	handler := settings.NewHandler(settings.NewService(repo, nil))
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/rapidex-webhook-mappings", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "flow-a") {
+		t.Fatalf("expected rapidex mapping payload, got %s", w.Body.String())
+	}
+}
+
+func TestRapidexWebhookMappingsUpdateRouteAcceptsSettingsWriter(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(204, "writer", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		204: {"settings.write"},
+	})
+	handler := settings.NewHandler(settings.NewService(&fakeSettingsRepo{}, nil))
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/rapidex-webhook-mappings", strings.NewReader(`{"mappings":[{"flowUuid":"flow-a","flowName":"Weekly Report","dataset":"DATASET_A","orgUnitVar":"facility_code","periodVar":"reporting_period","mappings":[{"field":"indicator_one","dataElement":"DE_1"}]}]}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Weekly Report") {
+		t.Fatalf("expected updated rapidex mapping payload, got %s", w.Body.String())
+	}
+}
+
 func rbacServiceWithPermissions(perms map[int64][]string) *rbac.Service {
 	roleMap := map[int64][]rbac.Role{}
 	permMap := map[int64][]rbac.Permission{}

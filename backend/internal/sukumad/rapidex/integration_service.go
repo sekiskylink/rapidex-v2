@@ -13,7 +13,7 @@ import (
 // optional and can be nil; if provided they can be used to resolve
 // organisation units via reporter assignments.
 type IntegrationService struct {
-	mappingManager *Manager
+	mappingProvider MappingProvider
 	// reporterSvc may be nil if reporter lookup is not available yet.
 	// It is expected to implement a GetByRapidProUUID(ctx, uuid string) method.
 	reporterSvc interface{}
@@ -22,13 +22,17 @@ type IntegrationService struct {
 	requestSvc interface{}
 }
 
+type MappingProvider interface {
+	GetByFlowUUID(context.Context, string) (MappingConfig, bool, error)
+}
+
 // NewIntegrationService constructs a new service.  Passing nil for
 // reporterSvc or requestSvc is allowed but will limit functionality.
-func NewIntegrationService(mgr *Manager, reporterSvc interface{}, requestSvc interface{}) *IntegrationService {
+func NewIntegrationService(provider MappingProvider, reporterSvc interface{}, requestSvc interface{}) *IntegrationService {
 	return &IntegrationService{
-		mappingManager: mgr,
-		reporterSvc:    reporterSvc,
-		requestSvc:     requestSvc,
+		mappingProvider: provider,
+		reporterSvc:     reporterSvc,
+		requestSvc:      requestSvc,
 	}
 }
 
@@ -37,7 +41,10 @@ func NewIntegrationService(mgr *Manager, reporterSvc interface{}, requestSvc int
 // AggregatePayload, and (if configured) forwards the payload to the
 // request service.  If no mapping exists, an error is returned.
 func (s *IntegrationService) ProcessWebhook(ctx context.Context, webhook RapidProWebhook) error {
-	cfg, ok := s.mappingManager.Get(webhook.FlowUUID)
+	cfg, ok, err := s.mappingProvider.GetByFlowUUID(ctx, webhook.FlowUUID)
+	if err != nil {
+		return fmt.Errorf("load mapping: %w", err)
+	}
 	if !ok {
 		return fmt.Errorf("no mapping configured for flow %s", webhook.FlowUUID)
 	}

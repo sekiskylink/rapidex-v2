@@ -20,6 +20,7 @@ import (
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
 	"basepro/backend/internal/sukumad/orgunit"
+	"basepro/backend/internal/sukumad/rapidex"
 	"basepro/backend/internal/sukumad/reporter"
 	"basepro/backend/internal/sukumad/reportergroup"
 	requests "basepro/backend/internal/sukumad/request"
@@ -63,6 +64,7 @@ type AppDeps struct {
 	ReporterService      *reporter.Service
 	ReporterGroupHandler *reportergroup.Handler
 	UserOrgUnitService   *userorg.Service
+	RapidexService       *rapidex.IntegrationService
 }
 
 func newRouter(deps AppDeps) *gin.Engine {
@@ -202,14 +204,29 @@ func newRouter(deps AppDeps) *gin.Engine {
 		settingsGroup.GET("/rapidpro-reporter-sync", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidProReporterSync)
 		settingsGroup.GET("/rapidpro-reporter-sync/preview-reporters", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.ListRapidProReporterSyncPreviewReporters)
 		settingsGroup.GET("/rapidpro-reporter-sync/preview", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidProReporterSyncPreview)
+		settingsGroup.GET("/rapidex-webhook-mappings", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidexWebhookMappings)
+		settingsGroup.GET("/rapidex-webhook-mappings/export-yaml", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.ExportRapidexWebhookMappingsYAML)
 		settingsGroup.GET("/runtime-config", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRuntimeConfig)
 		settingsGroup.PUT("/login-branding", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateLoginBranding)
 		settingsGroup.POST("/rapidpro-reporter-sync/refresh-fields", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.RefreshRapidProReporterSyncFields)
+		settingsGroup.POST("/rapidex-webhook-mappings/import-yaml", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.ImportRapidexWebhookMappingsYAML)
 		settingsGroup.PUT("/rapidpro-reporter-sync", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateRapidProReporterSync)
+		settingsGroup.PUT("/rapidex-webhook-mappings", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateRapidexWebhookMappings)
 		if deps.ModuleFlagsHandler != nil {
 			settingsGroup.GET("/module-enablement", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.ModuleFlagsHandler.GetEffective)
 			settingsGroup.PUT("/module-enablement", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.ModuleFlagsHandler.UpdateRuntimeOverrides)
 		}
+	}
+
+	if deps.RapidexService != nil {
+		rapidexGroup := api.Group("/rapidex")
+		rapidexGroup.Use(
+			middleware.RequireModuleEnabled(deps.ModuleFlagsProvider, "requests"),
+			middleware.ResolveJWTPrincipal(deps.JWTManager),
+			middleware.RequireAuth(),
+		)
+		rapidexGroup.Use(middleware.RequirePermission(deps.RBACService, rbac.PermissionRequestsWrite))
+		rapidex.RegisterRoutes(rapidexGroup, deps.RapidexService)
 	}
 
 	sukumad.RegisterRoutes(api, sukumad.RouteDeps{

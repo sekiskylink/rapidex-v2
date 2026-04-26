@@ -229,6 +229,37 @@ export interface RapidProReporterSyncSettingsResponse {
   validation: RapidProReporterSyncValidation
 }
 
+export interface RapidexWebhookDataValueMapping {
+  field: string
+  dataElement: string
+  categoryOptionCombo?: string
+  attributeOptionCombo?: string
+}
+
+export interface RapidexWebhookMappingConfig {
+  flowUuid: string
+  flowName?: string
+  dataset: string
+  orgUnitVar: string
+  periodVar: string
+  payloadAoc?: string
+  mappings: RapidexWebhookDataValueMapping[]
+}
+
+export interface RapidexWebhookMappingsValidation {
+  isValid: boolean
+  errors?: string[]
+}
+
+export interface RapidexWebhookMappingsSettingsResponse {
+  mappings: RapidexWebhookMappingConfig[]
+  validation: RapidexWebhookMappingsValidation
+}
+
+export interface RapidexWebhookMappingsExportResponse {
+  yaml: string
+}
+
 export interface RapidProReporterOption {
   id: number
   name: string
@@ -298,6 +329,14 @@ export interface LoginBrandingUpdateRequest {
 export interface RapidProReporterSyncUpdateRequest {
   rapidProServerCode: string
   mappings: RapidProReporterFieldMapping[]
+}
+
+export interface RapidexWebhookMappingsUpdateRequest {
+  mappings: RapidexWebhookMappingConfig[]
+}
+
+export interface RapidexWebhookMappingsImportRequest {
+  yaml: string
 }
 
 export interface ModuleEnablementUpdateRequest {
@@ -690,6 +729,32 @@ export function createApiClient(deps: ApiClientDeps) {
       return authorizedRequest<RapidProReporterSyncSettingsResponse>('/api/v1/settings/rapidpro-reporter-sync', {
         method: 'PUT',
         body: JSON.stringify(payload),
+      })
+    },
+
+    async getRapidexWebhookMappingsSettings() {
+      return authorizedRequest<RapidexWebhookMappingsSettingsResponse>('/api/v1/settings/rapidex-webhook-mappings', {
+        method: 'GET',
+      })
+    },
+
+    async updateRapidexWebhookMappingsSettings(payload: RapidexWebhookMappingsUpdateRequest) {
+      return authorizedRequest<RapidexWebhookMappingsSettingsResponse>('/api/v1/settings/rapidex-webhook-mappings', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+    },
+
+    async importRapidexWebhookMappingsYAML(payload: RapidexWebhookMappingsImportRequest) {
+      return authorizedRequest<RapidexWebhookMappingsSettingsResponse>('/api/v1/settings/rapidex-webhook-mappings/import-yaml', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    },
+
+    async exportRapidexWebhookMappingsYAML() {
+      return authorizedRequest<RapidexWebhookMappingsExportResponse>('/api/v1/settings/rapidex-webhook-mappings/export-yaml', {
+        method: 'GET',
       })
     },
 
