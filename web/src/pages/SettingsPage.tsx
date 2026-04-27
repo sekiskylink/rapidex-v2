@@ -159,16 +159,10 @@ interface RapidexRapidProFlowOption {
   results: RapidexRapidProFlowResultOption[]
 }
 
-interface RapidexDhis2DataElementRef {
-  id: string
-  name: string
-}
-
 interface RapidexDhis2DatasetOption {
   id: string
   name: string
   periodType?: string
-  dataElements: RapidexDhis2DataElementRef[]
 }
 
 interface RapidexDhis2DataElementOption {
@@ -194,9 +188,19 @@ interface RapidexWebhookMetadataSnapshot {
   rapidProFlows: RapidexRapidProFlowOption[]
   rapidProContactFields: RapidProContactField[]
   dhis2Datasets: RapidexDhis2DatasetOption[]
-  dhis2DataElements: RapidexDhis2DataElementOption[]
-  dhis2CategoryOptionCombos: RapidexDhis2CategoryOptionComboOption[]
-  dhis2AttributeOptionCombos: RapidexDhis2AttributeOptionComboOption[]
+  dhis2LoadedDatasetIds: string[]
+  dhis2DatasetMetadataById: Record<
+    string,
+    {
+      id: string
+      name: string
+      periodType?: string
+      lastRefreshedAt?: string | null
+      dataElements: RapidexDhis2DataElementOption[]
+      categoryOptionCombos: RapidexDhis2CategoryOptionComboOption[]
+      attributeOptionCombos: RapidexDhis2AttributeOptionComboOption[]
+    }
+  >
 }
 
 interface RapidexWebhookMetadataResponse {
@@ -297,9 +301,8 @@ function createEmptyRapidexMetadataSnapshot(): RapidexWebhookMetadataSnapshot {
     rapidProFlows: [],
     rapidProContactFields: [],
     dhis2Datasets: [],
-    dhis2DataElements: [],
-    dhis2CategoryOptionCombos: [],
-    dhis2AttributeOptionCombos: [],
+    dhis2LoadedDatasetIds: [],
+    dhis2DatasetMetadataById: {},
   }
 }
 
@@ -421,6 +424,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [rapidexRapidProServerCode, setRapidexRapidProServerCode] = React.useState('rapidpro')
   const [rapidexDhis2ServerCode, setRapidexDhis2ServerCode] = React.useState('dhis2')
   const [rapidexMetadataRefreshing, setRapidexMetadataRefreshing] = React.useState(false)
+  const [rapidexDatasetMetadataLoading, setRapidexDatasetMetadataLoading] = React.useState(false)
   const [reporterGroups, setReporterGroups] = React.useState<ReporterGroupRecord[]>([])
   const [reporterGroupsLoading, setReporterGroupsLoading] = React.useState(true)
   const [reporterGroupsSavingId, setReporterGroupsSavingId] = React.useState<number | null>(null)
@@ -454,9 +458,18 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   }, [])
   const rapidexFlowOptions = React.useMemo(() => rapidexMetadata.rapidProFlows ?? [], [rapidexMetadata])
   const rapidexDatasetOptions = React.useMemo(() => rapidexMetadata.dhis2Datasets ?? [], [rapidexMetadata])
-  const rapidexDataElementOptions = React.useMemo(() => rapidexMetadata.dhis2DataElements ?? [], [rapidexMetadata])
-  const rapidexCOCOptions = React.useMemo(() => rapidexMetadata.dhis2CategoryOptionCombos ?? [], [rapidexMetadata])
-  const rapidexAOCOptions = React.useMemo(() => rapidexMetadata.dhis2AttributeOptionCombos ?? [], [rapidexMetadata])
+  const rapidexLoadedDatasetIDs = React.useMemo(() => rapidexMetadata.dhis2LoadedDatasetIds ?? [], [rapidexMetadata])
+  const rapidexSelectedDatasetIDs = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rapidexMappings
+            .map((item) => (item.dataset ?? '').trim())
+            .filter((item) => item.length > 0),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [rapidexMappings],
+  )
 
   const runtimeToggleModules = React.useMemo(() => {
     const definitionsById = new Map(moduleRegistry.map((module) => [module.id, module]))
@@ -935,14 +948,19 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
 
   const rapidexDataElementSuggestionsForDataset = React.useCallback(
     (datasetID: string) => {
-      const selectedDataset = rapidexDatasetOptions.find((item) => item.id === datasetID)
-      if (!selectedDataset || selectedDataset.dataElements.length === 0) {
-        return rapidexDataElementOptions
-      }
-      const allowed = new Set(selectedDataset.dataElements.map((item) => item.id))
-      return rapidexDataElementOptions.filter((item) => allowed.has(item.id))
+      return rapidexMetadata.dhis2DatasetMetadataById[datasetID]?.dataElements ?? []
     },
-    [rapidexDataElementOptions, rapidexDatasetOptions],
+    [rapidexMetadata.dhis2DatasetMetadataById],
+  )
+
+  const rapidexCOCOptionsForDataset = React.useCallback(
+    (datasetID: string) => rapidexMetadata.dhis2DatasetMetadataById[datasetID]?.categoryOptionCombos ?? [],
+    [rapidexMetadata.dhis2DatasetMetadataById],
+  )
+
+  const rapidexAOCOptionsForDataset = React.useCallback(
+    (datasetID: string) => rapidexMetadata.dhis2DatasetMetadataById[datasetID]?.attributeOptionCombos ?? [],
+    [rapidexMetadata.dhis2DatasetMetadataById],
   )
 
   const handleRefreshRapidexMetadata = async () => {
@@ -959,11 +977,12 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
           body: JSON.stringify({
             rapidProServerCode: rapidexRapidProServerCode,
             dhis2ServerCode: rapidexDhis2ServerCode,
+            scope: 'catalog',
           }),
         },
       )
       applyRapidexMetadataPayload(payload)
-      notify.success('RapidEx mapping metadata refreshed.')
+      notify.success('RapidEx metadata catalog refreshed.')
     } catch (error) {
       const { error: normalized } = await handleAppError(error, {
         fallbackMessage: 'Unable to refresh RapidEx mapping metadata.',
@@ -974,6 +993,40 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidexError(`${normalized.message}${requestId}`)
     } finally {
       setRapidexMetadataRefreshing(false)
+    }
+  }
+
+  const handleLoadRapidexDatasetMetadata = async () => {
+    if (!canWriteBranding || rapidexSelectedDatasetIDs.length === 0) {
+      return
+    }
+    setRapidexDatasetMetadataLoading(true)
+    setRapidexError('')
+    try {
+      const payload = await apiRequest<RapidexWebhookMetadataResponse>(
+        '/settings/rapidex-webhook-mappings/metadata/refresh',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            rapidProServerCode: rapidexRapidProServerCode,
+            dhis2ServerCode: rapidexDhis2ServerCode,
+            scope: 'datasets',
+            datasetIds: rapidexSelectedDatasetIDs,
+          }),
+        },
+      )
+      applyRapidexMetadataPayload(payload)
+      notify.success('RapidEx dataset metadata loaded.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to load RapidEx dataset metadata.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidexError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidexDatasetMetadataLoading(false)
     }
   }
 
@@ -1953,10 +2006,20 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                             <Button variant="outlined" onClick={() => void handleRefreshRapidexMetadata()} disabled={!canWriteBranding || rapidexMetadataRefreshing}>
                               {rapidexMetadataRefreshing ? 'Refreshing...' : 'Refresh Metadata'}
                             </Button>
+                            <Button
+                              variant="outlined"
+                              onClick={() => void handleLoadRapidexDatasetMetadata()}
+                              disabled={!canWriteBranding || rapidexDatasetMetadataLoading || rapidexSelectedDatasetIDs.length === 0}
+                            >
+                              {rapidexDatasetMetadataLoading ? 'Loading...' : 'Load Dataset Metadata'}
+                            </Button>
                             <Typography color="text.secondary" variant="body2">
                               Last refreshed: {rapidexMetadata.lastRefreshedAt ? new Date(rapidexMetadata.lastRefreshedAt).toLocaleString() : 'Not yet refreshed'}
                             </Typography>
                           </Stack>
+                          <Typography color="text.secondary" variant="body2">
+                            Loaded dataset metadata: {rapidexLoadedDatasetIDs.length > 0 ? rapidexLoadedDatasetIDs.join(', ') : 'None'}
+                          </Typography>
                           {rapidexMetadataWarnings.length > 0 ? <Alert severity="warning">{rapidexMetadataWarnings.join(' ')}</Alert> : null}
                           <TextField
                             label="RapidEx Mapping YAML"
@@ -2075,11 +2138,14 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                         ))}
                                       </datalist>
                                       <datalist id={`rapidex-aoc-${mappingIndex}`}>
-                                        {rapidexAOCOptions.map((item) => (
+                                        {rapidexAOCOptionsForDataset(mapping.dataset).map((item) => (
                                           <option key={item.id} value={item.id}>{item.name}</option>
                                         ))}
                                       </datalist>
                                     </Stack>
+                                    {mapping.dataset.trim() && !rapidexLoadedDatasetIDs.includes(mapping.dataset.trim()) ? (
+                                      <Alert severity="info">Load dataset metadata for {mapping.dataset} to populate DHIS2 mapping suggestions.</Alert>
+                                    ) : null}
                                     <Divider />
                                     <Typography variant="body2" color="text.secondary">
                                       Data value mappings
@@ -2133,12 +2199,12 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                               ))}
                                             </datalist>
                                             <datalist id={`rapidex-coc-${mappingIndex}-${rowIndex}`}>
-                                              {rapidexCOCOptions.map((value) => (
+                                              {rapidexCOCOptionsForDataset(mapping.dataset).map((value) => (
                                                 <option key={value.id} value={value.id}>{value.name}</option>
                                               ))}
                                             </datalist>
                                             <datalist id={`rapidex-aoc-row-${mappingIndex}-${rowIndex}`}>
-                                              {rapidexAOCOptions.map((value) => (
+                                              {rapidexAOCOptionsForDataset(mapping.dataset).map((value) => (
                                                 <option key={value.id} value={value.id}>{value.name}</option>
                                               ))}
                                             </datalist>

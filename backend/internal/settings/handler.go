@@ -39,8 +39,10 @@ type importRapidexWebhookMappingsRequest struct {
 }
 
 type refreshRapidexWebhookMetadataRequest struct {
-	RapidProServerCode string `json:"rapidProServerCode"`
-	Dhis2ServerCode    string `json:"dhis2ServerCode"`
+	RapidProServerCode string   `json:"rapidProServerCode"`
+	Dhis2ServerCode    string   `json:"dhis2ServerCode"`
+	Scope              string   `json:"scope"`
+	DatasetIDs         []string `json:"datasetIds"`
 }
 
 func (h *Handler) GetPublicLoginBranding(c *gin.Context) {
@@ -210,6 +212,8 @@ func (h *Handler) RefreshRapidexWebhookMetadata(c *gin.Context) {
 	payload, err := h.service.RefreshRapidexWebhookMetadata(c.Request.Context(), RapidexWebhookMetadataRefreshInput{
 		RapidProServerCode: req.RapidProServerCode,
 		Dhis2ServerCode:    req.Dhis2ServerCode,
+		Scope:              req.Scope,
+		DatasetIDs:         req.DatasetIDs,
 	}, actorUserID(principal))
 	if err != nil {
 		apperror.Write(c, err)

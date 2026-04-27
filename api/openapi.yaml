@@ -1514,10 +1514,31 @@ components:
           type: string
         periodType:
           type: string
+    RapidexDhis2DatasetMetadata:
+      type: object
+      required: [id, name, dataElements, categoryOptionCombos, attributeOptionCombos]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        periodType:
+          type: string
+        lastRefreshedAt:
+          type: string
+          format: date-time
         dataElements:
           type: array
           items:
-            $ref: '#/components/schemas/RapidexDhis2DataElementRef'
+            $ref: '#/components/schemas/RapidexDhis2DataElementOption'
+        categoryOptionCombos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2CategoryOptionComboOption'
+        attributeOptionCombos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RapidexDhis2AttributeOptionComboOption'
     RapidexDhis2DataElementOption:
       type: object
       required: [id, name]
@@ -1546,7 +1567,7 @@ components:
           type: string
     RapidexWebhookMetadataSnapshot:
       type: object
-      required: [rapidProServerCode, dhis2ServerCode, rapidProFlows, rapidProContactFields, dhis2Datasets, dhis2DataElements, dhis2CategoryOptionCombos, dhis2AttributeOptionCombos]
+      required: [rapidProServerCode, dhis2ServerCode, rapidProFlows, rapidProContactFields, dhis2Datasets, dhis2LoadedDatasetIds, dhis2DatasetMetadataById]
       properties:
         rapidProServerCode:
           type: string
@@ -1567,18 +1588,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RapidexDhis2DatasetOption'
-        dhis2DataElements:
+        dhis2LoadedDatasetIds:
           type: array
           items:
-            $ref: '#/components/schemas/RapidexDhis2DataElementOption'
-        dhis2CategoryOptionCombos:
-          type: array
-          items:
-            $ref: '#/components/schemas/RapidexDhis2CategoryOptionComboOption'
-        dhis2AttributeOptionCombos:
-          type: array
-          items:
-            $ref: '#/components/schemas/RapidexDhis2AttributeOptionComboOption'
+            type: string
+        dhis2DatasetMetadataById:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/RapidexDhis2DatasetMetadata'
     RapidexWebhookMetadataResponse:
       type: object
       required: [rapidProServerCode, dhis2ServerCode, rapidProServers, dhis2Servers, snapshot, warnings]
@@ -1587,6 +1604,13 @@ components:
           type: string
         dhis2ServerCode:
           type: string
+        scope:
+          type: string
+          enum: [catalog, datasets]
+        datasetIds:
+          type: array
+          items:
+            type: string
         rapidProServers:
           type: array
           items:

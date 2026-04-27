@@ -285,16 +285,10 @@ export interface RapidexRapidProFlowOption {
   results: RapidexRapidProFlowResultOption[]
 }
 
-export interface RapidexDhis2DataElementRef {
-  id: string
-  name: string
-}
-
 export interface RapidexDhis2DatasetOption {
   id: string
   name: string
   periodType?: string
-  dataElements: RapidexDhis2DataElementRef[]
 }
 
 export interface RapidexDhis2DataElementOption {
@@ -320,9 +314,19 @@ export interface RapidexWebhookMetadataSnapshot {
   rapidProFlows: RapidexRapidProFlowOption[]
   rapidProContactFields: RapidProContactField[]
   dhis2Datasets: RapidexDhis2DatasetOption[]
-  dhis2DataElements: RapidexDhis2DataElementOption[]
-  dhis2CategoryOptionCombos: RapidexDhis2CategoryOptionComboOption[]
-  dhis2AttributeOptionCombos: RapidexDhis2AttributeOptionComboOption[]
+  dhis2LoadedDatasetIds: string[]
+  dhis2DatasetMetadataById: Record<
+    string,
+    {
+      id: string
+      name: string
+      periodType?: string
+      lastRefreshedAt?: string | null
+      dataElements: RapidexDhis2DataElementOption[]
+      categoryOptionCombos: RapidexDhis2CategoryOptionComboOption[]
+      attributeOptionCombos: RapidexDhis2AttributeOptionComboOption[]
+    }
+  >
 }
 
 export interface RapidexWebhookMetadataResponse {
@@ -418,6 +422,8 @@ export interface RapidexWebhookMappingsImportRequest {
 export interface RapidexWebhookMetadataRefreshRequest {
   rapidProServerCode: string
   dhis2ServerCode: string
+  scope: 'catalog' | 'datasets'
+  datasetIds?: string[]
 }
 
 export interface ModuleEnablementUpdateRequest {

@@ -17,9 +17,11 @@ import (
 )
 
 const (
-	rapidexWebhookMetadataCategory = "rapidex"
-	rapidexWebhookMetadataKey      = "webhook_metadata"
-	defaultDHIS2ServerCode         = "dhis2"
+	rapidexWebhookMetadataCategory      = "rapidex"
+	rapidexWebhookMetadataKey           = "webhook_metadata"
+	defaultDHIS2ServerCode              = "dhis2"
+	rapidexMetadataRefreshScopeCatalog  = "catalog"
+	rapidexMetadataRefreshScopeDatasets = "datasets"
 )
 
 type rapidexMetadataServerCatalog interface {
@@ -34,9 +36,7 @@ type rapidexRapidProMetadataClient interface {
 
 type rapidexDHIS2MetadataClient interface {
 	ListDataSets(context.Context, dhis2metadata.Connection) ([]dhis2metadata.DataSet, error)
-	ListDataElements(context.Context, dhis2metadata.Connection) ([]dhis2metadata.DataElement, error)
-	ListCategoryOptionCombos(context.Context, dhis2metadata.Connection) ([]dhis2metadata.CategoryOptionCombo, error)
-	ListAttributeOptionCombos(context.Context, dhis2metadata.Connection) ([]dhis2metadata.AttributeOptionCombo, error)
+	GetDataSet(context.Context, dhis2metadata.Connection, string) (dhis2metadata.DataSet, error)
 }
 
 type RapidexIntegrationServerOption struct {
@@ -62,16 +62,10 @@ type RapidexRapidProFlowOption struct {
 	Results    []RapidexRapidProFlowResultOption `json:"results"`
 }
 
-type RapidexDhis2DataElementRef struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 type RapidexDhis2DatasetOption struct {
-	ID           string                       `json:"id"`
-	Name         string                       `json:"name"`
-	PeriodType   string                       `json:"periodType,omitempty"`
-	DataElements []RapidexDhis2DataElementRef `json:"dataElements"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	PeriodType string `json:"periodType,omitempty"`
 }
 
 type RapidexDhis2DataElementOption struct {
@@ -90,16 +84,25 @@ type RapidexDhis2AttributeOptionComboOption struct {
 	Name string `json:"name"`
 }
 
+type RapidexDhis2DatasetMetadata struct {
+	ID                    string                                   `json:"id"`
+	Name                  string                                   `json:"name"`
+	PeriodType            string                                   `json:"periodType,omitempty"`
+	LastRefreshedAt       *time.Time                               `json:"lastRefreshedAt,omitempty"`
+	DataElements          []RapidexDhis2DataElementOption          `json:"dataElements"`
+	CategoryOptionCombos  []RapidexDhis2CategoryOptionComboOption  `json:"categoryOptionCombos"`
+	AttributeOptionCombos []RapidexDhis2AttributeOptionComboOption `json:"attributeOptionCombos"`
+}
+
 type RapidexWebhookMetadataSnapshot struct {
-	RapidProServerCode         string                                   `json:"rapidProServerCode"`
-	Dhis2ServerCode            string                                   `json:"dhis2ServerCode"`
-	LastRefreshedAt            *time.Time                               `json:"lastRefreshedAt,omitempty"`
-	RapidProFlows              []RapidexRapidProFlowOption              `json:"rapidProFlows"`
-	RapidProContactFields      []rapidpro.ContactField                  `json:"rapidProContactFields"`
-	Dhis2Datasets              []RapidexDhis2DatasetOption              `json:"dhis2Datasets"`
-	Dhis2DataElements          []RapidexDhis2DataElementOption          `json:"dhis2DataElements"`
-	Dhis2CategoryOptionCombos  []RapidexDhis2CategoryOptionComboOption  `json:"dhis2CategoryOptionCombos"`
-	Dhis2AttributeOptionCombos []RapidexDhis2AttributeOptionComboOption `json:"dhis2AttributeOptionCombos"`
+	RapidProServerCode       string                                 `json:"rapidProServerCode"`
+	Dhis2ServerCode          string                                 `json:"dhis2ServerCode"`
+	LastRefreshedAt          *time.Time                             `json:"lastRefreshedAt,omitempty"`
+	RapidProFlows            []RapidexRapidProFlowOption            `json:"rapidProFlows"`
+	RapidProContactFields    []rapidpro.ContactField                `json:"rapidProContactFields"`
+	Dhis2Datasets            []RapidexDhis2DatasetOption            `json:"dhis2Datasets"`
+	Dhis2LoadedDatasetIDs    []string                               `json:"dhis2LoadedDatasetIds"`
+	Dhis2DatasetMetadataByID map[string]RapidexDhis2DatasetMetadata `json:"dhis2DatasetMetadataById"`
 }
 
 type RapidexWebhookMetadataResponse struct {
@@ -112,8 +115,10 @@ type RapidexWebhookMetadataResponse struct {
 }
 
 type RapidexWebhookMetadataRefreshInput struct {
-	RapidProServerCode string `json:"rapidProServerCode"`
-	Dhis2ServerCode    string `json:"dhis2ServerCode"`
+	RapidProServerCode string   `json:"rapidProServerCode"`
+	Dhis2ServerCode    string   `json:"dhis2ServerCode"`
+	Scope              string   `json:"scope"`
+	DatasetIDs         []string `json:"datasetIds"`
 }
 
 type rapidexWebhookMetadataStored struct {
@@ -191,42 +196,71 @@ func (s *Service) RefreshRapidexWebhookMetadata(ctx context.Context, input Rapid
 	if dhis2Record.Suspended {
 		return RapidexWebhookMetadataResponse{}, apperror.ValidationWithDetails("validation failed", map[string]any{"dhis2ServerCode": []string{"selected DHIS2 server is suspended"}})
 	}
-	flows, err := s.rapidexRapidProClient.ListFlows(ctx, rapidpro.Connection{BaseURL: rapidProRecord.BaseURL, Headers: rapidProRecord.Headers})
+	scope := normalizeRapidexMetadataRefreshScope(input.Scope)
+	dhis2Conn := dhis2metadata.Connection{
+		BaseURL:   dhis2Record.BaseURL,
+		Headers:   dhis2Record.Headers,
+		URLParams: dhis2Record.URLParams,
+	}
+	storedMetadata, err := s.getRapidexWebhookMetadataStored(ctx)
 	if err != nil {
 		return RapidexWebhookMetadataResponse{}, err
 	}
-	fields, err := s.rapidexRapidProClient.ListContactFields(ctx, rapidpro.Connection{BaseURL: rapidProRecord.BaseURL, Headers: rapidProRecord.Headers})
-	if err != nil {
-		return RapidexWebhookMetadataResponse{}, err
-	}
-	dataSets, err := s.rapidexDHIS2Client.ListDataSets(ctx, dhis2metadata.Connection{BaseURL: dhis2Record.BaseURL, Headers: dhis2Record.Headers})
-	if err != nil {
-		return RapidexWebhookMetadataResponse{}, err
-	}
-	dataElements, err := s.rapidexDHIS2Client.ListDataElements(ctx, dhis2metadata.Connection{BaseURL: dhis2Record.BaseURL, Headers: dhis2Record.Headers})
-	if err != nil {
-		return RapidexWebhookMetadataResponse{}, err
-	}
-	cocs, err := s.rapidexDHIS2Client.ListCategoryOptionCombos(ctx, dhis2metadata.Connection{BaseURL: dhis2Record.BaseURL, Headers: dhis2Record.Headers})
-	if err != nil {
-		return RapidexWebhookMetadataResponse{}, err
-	}
-	aocs, err := s.rapidexDHIS2Client.ListAttributeOptionCombos(ctx, dhis2metadata.Connection{BaseURL: dhis2Record.BaseURL, Headers: dhis2Record.Headers})
-	if err != nil {
-		return RapidexWebhookMetadataResponse{}, err
+	snapshot := normalizeRapidexWebhookMetadataSnapshot(storedMetadata.Snapshot)
+	if (snapshot.RapidProServerCode != "" && snapshot.RapidProServerCode != rapidProCode) || (snapshot.Dhis2ServerCode != "" && snapshot.Dhis2ServerCode != dhis2Code) {
+		snapshot = normalizeRapidexWebhookMetadataSnapshot(RapidexWebhookMetadataSnapshot{})
 	}
 	now := time.Now().UTC()
-	snapshot := normalizeRapidexWebhookMetadataSnapshot(RapidexWebhookMetadataSnapshot{
-		RapidProServerCode:         rapidProCode,
-		Dhis2ServerCode:            dhis2Code,
-		LastRefreshedAt:            &now,
-		RapidProFlows:              normalizeRapidexRapidProFlows(flows),
-		RapidProContactFields:      normalizeRapidProFields(fields),
-		Dhis2Datasets:              normalizeRapidexDhis2Datasets(dataSets),
-		Dhis2DataElements:          normalizeRapidexDhis2DataElements(dataElements),
-		Dhis2CategoryOptionCombos:  normalizeRapidexDhis2COCs(cocs),
-		Dhis2AttributeOptionCombos: normalizeRapidexDhis2AOCs(aocs),
-	})
+	snapshot.RapidProServerCode = rapidProCode
+	snapshot.Dhis2ServerCode = dhis2Code
+	snapshot.LastRefreshedAt = &now
+
+	switch scope {
+	case rapidexMetadataRefreshScopeCatalog:
+		flows, flowErr := s.rapidexRapidProClient.ListFlows(ctx, rapidpro.Connection{BaseURL: rapidProRecord.BaseURL, Headers: rapidProRecord.Headers})
+		if flowErr != nil {
+			return RapidexWebhookMetadataResponse{}, flowErr
+		}
+		fields, fieldErr := s.rapidexRapidProClient.ListContactFields(ctx, rapidpro.Connection{BaseURL: rapidProRecord.BaseURL, Headers: rapidProRecord.Headers})
+		if fieldErr != nil {
+			return RapidexWebhookMetadataResponse{}, fieldErr
+		}
+		dataSets, dataSetErr := s.rapidexDHIS2Client.ListDataSets(ctx, dhis2Conn)
+		if dataSetErr != nil {
+			return RapidexWebhookMetadataResponse{}, dataSetErr
+		}
+		snapshot.RapidProFlows = normalizeRapidexRapidProFlows(flows)
+		snapshot.RapidProContactFields = normalizeRapidProFields(fields)
+		snapshot.Dhis2Datasets = normalizeRapidexDhis2Datasets(dataSets)
+	case rapidexMetadataRefreshScopeDatasets:
+		datasetIDs := normalizeStringSlice(input.DatasetIDs)
+		if len(datasetIDs) == 0 {
+			return RapidexWebhookMetadataResponse{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"datasetIds": []string{"at least one dataset id is required when scope is datasets"},
+			})
+		}
+		if len(snapshot.Dhis2Datasets) == 0 {
+			dataSets, dataSetErr := s.rapidexDHIS2Client.ListDataSets(ctx, dhis2Conn)
+			if dataSetErr != nil {
+				return RapidexWebhookMetadataResponse{}, dataSetErr
+			}
+			snapshot.Dhis2Datasets = normalizeRapidexDhis2Datasets(dataSets)
+		}
+		for _, datasetID := range datasetIDs {
+			dataSet, dataSetErr := s.rapidexDHIS2Client.GetDataSet(ctx, dhis2Conn, datasetID)
+			if dataSetErr != nil {
+				return RapidexWebhookMetadataResponse{}, dataSetErr
+			}
+			metadata := normalizeRapidexDhis2DatasetMetadata(dataSet, &now)
+			snapshot.Dhis2DatasetMetadataByID[datasetID] = metadata
+		}
+		snapshot.Dhis2LoadedDatasetIDs = normalizeStringSlice(append(snapshot.Dhis2LoadedDatasetIDs, datasetIDs...))
+	default:
+		return RapidexWebhookMetadataResponse{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"scope": []string{"must be one of: catalog, datasets"},
+		})
+	}
+	snapshot = normalizeRapidexWebhookMetadataSnapshot(snapshot)
 	if err := s.saveRapidexWebhookMetadataStored(ctx, rapidexWebhookMetadataStored{Snapshot: snapshot}, actorUserID); err != nil {
 		return RapidexWebhookMetadataResponse{}, err
 	}
@@ -247,8 +281,10 @@ func (s *Service) RefreshRapidexWebhookMetadata(ctx context.Context, input Rapid
 		Metadata: map[string]any{
 			"rapidProServerCode": rapidProCode,
 			"dhis2ServerCode":    dhis2Code,
+			"scope":              scope,
 			"flowCount":          len(snapshot.RapidProFlows),
 			"datasetCount":       len(snapshot.Dhis2Datasets),
+			"loadedDatasetCount": len(snapshot.Dhis2LoadedDatasetIDs),
 		},
 	})
 	return RapidexWebhookMetadataResponse{
@@ -311,16 +347,23 @@ func (s *Service) listRapidexMetadataServers(ctx context.Context) ([]RapidexInte
 }
 
 func normalizeRapidexWebhookMetadataSnapshot(input RapidexWebhookMetadataSnapshot) RapidexWebhookMetadataSnapshot {
+	datasetMetadataByID := map[string]RapidexDhis2DatasetMetadata{}
+	for key, value := range input.Dhis2DatasetMetadataByID {
+		datasetID := strings.TrimSpace(key)
+		if datasetID == "" {
+			continue
+		}
+		datasetMetadataByID[datasetID] = normalizeRapidexDhis2DatasetMetadataOption(value, datasetID)
+	}
 	return RapidexWebhookMetadataSnapshot{
-		RapidProServerCode:         normalizeRapidProServerCode(input.RapidProServerCode),
-		Dhis2ServerCode:            normalizeRapidexDHIS2ServerCode(input.Dhis2ServerCode),
-		LastRefreshedAt:            input.LastRefreshedAt,
-		RapidProFlows:              normalizeRapidexRapidProFlowsOptions(input.RapidProFlows),
-		RapidProContactFields:      normalizeRapidProFields(input.RapidProContactFields),
-		Dhis2Datasets:              normalizeRapidexDhis2DatasetOptions(input.Dhis2Datasets),
-		Dhis2DataElements:          normalizeRapidexDhis2DataElementOptions(input.Dhis2DataElements),
-		Dhis2CategoryOptionCombos:  normalizeRapidexDhis2COCOptions(input.Dhis2CategoryOptionCombos),
-		Dhis2AttributeOptionCombos: normalizeRapidexDhis2AOCOptions(input.Dhis2AttributeOptionCombos),
+		RapidProServerCode:       normalizeRapidProServerCode(input.RapidProServerCode),
+		Dhis2ServerCode:          normalizeRapidexDHIS2ServerCode(input.Dhis2ServerCode),
+		LastRefreshedAt:          input.LastRefreshedAt,
+		RapidProFlows:            normalizeRapidexRapidProFlowsOptions(input.RapidProFlows),
+		RapidProContactFields:    normalizeRapidProFields(input.RapidProContactFields),
+		Dhis2Datasets:            normalizeRapidexDhis2DatasetOptions(input.Dhis2Datasets),
+		Dhis2LoadedDatasetIDs:    normalizeStringSlice(input.Dhis2LoadedDatasetIDs),
+		Dhis2DatasetMetadataByID: datasetMetadataByID,
 	}
 }
 
@@ -396,21 +439,10 @@ func normalizeRapidexRapidProFlowsOptions(input []RapidexRapidProFlowOption) []R
 func normalizeRapidexDhis2Datasets(input []dhis2metadata.DataSet) []RapidexDhis2DatasetOption {
 	output := make([]RapidexDhis2DatasetOption, 0, len(input))
 	for _, item := range input {
-		refs := make([]RapidexDhis2DataElementRef, 0, len(item.DataSetElements))
-		for _, ref := range item.DataSetElements {
-			if strings.TrimSpace(ref.DataElement.ID) == "" {
-				continue
-			}
-			refs = append(refs, RapidexDhis2DataElementRef{ID: strings.TrimSpace(ref.DataElement.ID), Name: strings.TrimSpace(ref.DataElement.Name)})
-		}
-		slices.SortFunc(refs, func(left, right RapidexDhis2DataElementRef) int {
-			return strings.Compare(strings.ToLower(left.Name), strings.ToLower(right.Name))
-		})
 		output = append(output, RapidexDhis2DatasetOption{
-			ID:           strings.TrimSpace(item.ID),
-			Name:         strings.TrimSpace(item.Name),
-			PeriodType:   strings.TrimSpace(item.PeriodType),
-			DataElements: refs,
+			ID:         strings.TrimSpace(item.ID),
+			Name:       strings.TrimSpace(item.Name),
+			PeriodType: strings.TrimSpace(item.PeriodType),
 		})
 	}
 	return normalizeRapidexDhis2DatasetOptions(output)
@@ -423,31 +455,12 @@ func normalizeRapidexDhis2DatasetOptions(input []RapidexDhis2DatasetOption) []Ra
 		if id == "" {
 			continue
 		}
-		refs := make([]RapidexDhis2DataElementRef, 0, len(item.DataElements))
-		for _, ref := range item.DataElements {
-			refID := strings.TrimSpace(ref.ID)
-			if refID == "" {
-				continue
-			}
-			refs = append(refs, RapidexDhis2DataElementRef{ID: refID, Name: strings.TrimSpace(ref.Name)})
-		}
-		slices.SortFunc(refs, func(left, right RapidexDhis2DataElementRef) int {
-			return strings.Compare(strings.ToLower(left.Name), strings.ToLower(right.Name))
-		})
-		output = append(output, RapidexDhis2DatasetOption{ID: id, Name: strings.TrimSpace(item.Name), PeriodType: strings.TrimSpace(item.PeriodType), DataElements: refs})
+		output = append(output, RapidexDhis2DatasetOption{ID: id, Name: strings.TrimSpace(item.Name), PeriodType: strings.TrimSpace(item.PeriodType)})
 	}
 	slices.SortFunc(output, func(left, right RapidexDhis2DatasetOption) int {
 		return strings.Compare(strings.ToLower(left.Name), strings.ToLower(right.Name))
 	})
 	return output
-}
-
-func normalizeRapidexDhis2DataElements(input []dhis2metadata.DataElement) []RapidexDhis2DataElementOption {
-	output := make([]RapidexDhis2DataElementOption, 0, len(input))
-	for _, item := range input {
-		output = append(output, RapidexDhis2DataElementOption{ID: strings.TrimSpace(item.ID), Name: strings.TrimSpace(item.Name), ValueType: strings.TrimSpace(item.ValueType)})
-	}
-	return normalizeRapidexDhis2DataElementOptions(output)
 }
 
 func normalizeRapidexDhis2DataElementOptions(input []RapidexDhis2DataElementOption) []RapidexDhis2DataElementOption {
@@ -488,7 +501,7 @@ func normalizeRapidexDhis2COCOptions(input []RapidexDhis2CategoryOptionComboOpti
 	return output
 }
 
-func normalizeRapidexDhis2AOCs(input []dhis2metadata.AttributeOptionCombo) []RapidexDhis2AttributeOptionComboOption {
+func normalizeRapidexDhis2AOCs(input []dhis2metadata.CategoryOptionCombo) []RapidexDhis2AttributeOptionComboOption {
 	output := make([]RapidexDhis2AttributeOptionComboOption, 0, len(input))
 	for _, item := range input {
 		output = append(output, RapidexDhis2AttributeOptionComboOption{ID: strings.TrimSpace(item.ID), Name: strings.TrimSpace(item.Name)})
@@ -511,6 +524,48 @@ func normalizeRapidexDhis2AOCOptions(input []RapidexDhis2AttributeOptionComboOpt
 	return output
 }
 
+func normalizeRapidexDhis2DatasetMetadata(input dhis2metadata.DataSet, refreshedAt *time.Time) RapidexDhis2DatasetMetadata {
+	dataElements := make([]RapidexDhis2DataElementOption, 0, len(input.DataSetElements))
+	categoryOptionCombos := make([]dhis2metadata.CategoryOptionCombo, 0)
+	for _, ref := range input.DataSetElements {
+		dataElementID := strings.TrimSpace(ref.DataElement.ID)
+		if dataElementID == "" {
+			continue
+		}
+		dataElements = append(dataElements, RapidexDhis2DataElementOption{
+			ID:        dataElementID,
+			Name:      strings.TrimSpace(ref.DataElement.Name),
+			ValueType: strings.TrimSpace(ref.DataElement.ValueType),
+		})
+		categoryOptionCombos = append(categoryOptionCombos, ref.DataElement.CategoryCombo.CategoryOptionCombos...)
+	}
+	return normalizeRapidexDhis2DatasetMetadataOption(RapidexDhis2DatasetMetadata{
+		ID:                    strings.TrimSpace(input.ID),
+		Name:                  strings.TrimSpace(input.Name),
+		PeriodType:            strings.TrimSpace(input.PeriodType),
+		LastRefreshedAt:       refreshedAt,
+		DataElements:          dataElements,
+		CategoryOptionCombos:  normalizeRapidexDhis2COCs(categoryOptionCombos),
+		AttributeOptionCombos: normalizeRapidexDhis2AOCs(categoryOptionCombos),
+	}, strings.TrimSpace(input.ID))
+}
+
+func normalizeRapidexDhis2DatasetMetadataOption(input RapidexDhis2DatasetMetadata, fallbackID string) RapidexDhis2DatasetMetadata {
+	id := strings.TrimSpace(input.ID)
+	if id == "" {
+		id = strings.TrimSpace(fallbackID)
+	}
+	return RapidexDhis2DatasetMetadata{
+		ID:                    id,
+		Name:                  strings.TrimSpace(input.Name),
+		PeriodType:            strings.TrimSpace(input.PeriodType),
+		LastRefreshedAt:       input.LastRefreshedAt,
+		DataElements:          normalizeRapidexDhis2DataElementOptions(input.DataElements),
+		CategoryOptionCombos:  normalizeRapidexDhis2COCOptions(input.CategoryOptionCombos),
+		AttributeOptionCombos: normalizeRapidexDhis2AOCOptions(input.AttributeOptionCombos),
+	}
+}
+
 func buildRapidexMetadataWarnings(mappings []rapidex.MappingConfig, snapshot RapidexWebhookMetadataSnapshot) []string {
 	warnings := []string{}
 	flowKeys := map[string]RapidexRapidProFlowOption{}
@@ -521,43 +576,64 @@ func buildRapidexMetadataWarnings(mappings []rapidex.MappingConfig, snapshot Rap
 	for _, dataset := range snapshot.Dhis2Datasets {
 		datasetIDs[strings.TrimSpace(dataset.ID)] = struct{}{}
 	}
-	dataElementIDs := map[string]struct{}{}
-	for _, item := range snapshot.Dhis2DataElements {
-		dataElementIDs[strings.TrimSpace(item.ID)] = struct{}{}
-	}
 	contactFieldKeys := map[string]struct{}{}
 	for _, field := range snapshot.RapidProContactFields {
 		contactFieldKeys[strings.ToLower(strings.TrimSpace(field.Key))] = struct{}{}
 	}
 	for _, mapping := range mappings {
+		mappingFlowUUID := strings.TrimSpace(mapping.FlowUUID)
+		mappingDatasetID := strings.TrimSpace(mapping.Dataset)
 		if _, ok := flowKeys[strings.TrimSpace(mapping.FlowUUID)]; !ok {
 			warnings = append(warnings, fmt.Sprintf("Mapped flow %q is not present in the last RapidPro metadata snapshot.", mapping.FlowUUID))
 		}
-		if _, ok := datasetIDs[strings.TrimSpace(mapping.Dataset)]; !ok {
+		if _, ok := datasetIDs[mappingDatasetID]; !ok {
 			warnings = append(warnings, fmt.Sprintf("Mapped dataset %q is not present in the last DHIS2 metadata snapshot.", mapping.Dataset))
 		}
+		datasetMetadata, datasetMetadataLoaded := snapshot.Dhis2DatasetMetadataByID[mappingDatasetID]
+		if mappingDatasetID != "" && !datasetMetadataLoaded {
+			warnings = append(warnings, fmt.Sprintf("Mapped dataset %q has not had its dataset metadata loaded yet.", mapping.Dataset))
+		}
+		dataElementIDs := map[string]struct{}{}
+		if datasetMetadataLoaded {
+			for _, item := range datasetMetadata.DataElements {
+				dataElementIDs[strings.TrimSpace(item.ID)] = struct{}{}
+			}
+		}
 		if value := strings.ToLower(strings.TrimSpace(mapping.OrgUnitVar)); value != "" {
-			if !rapidexSnapshotHasSourceField(flowKeys[strings.TrimSpace(mapping.FlowUUID)], contactFieldKeys, value) {
+			if !rapidexSnapshotHasSourceField(flowKeys[mappingFlowUUID], contactFieldKeys, value) {
 				warnings = append(warnings, fmt.Sprintf("Org unit variable %q was not found in discovered RapidPro flow results or contact fields.", mapping.OrgUnitVar))
 			}
 		}
 		if value := strings.ToLower(strings.TrimSpace(mapping.PeriodVar)); value != "" {
-			if !rapidexSnapshotHasSourceField(flowKeys[strings.TrimSpace(mapping.FlowUUID)], contactFieldKeys, value) {
+			if !rapidexSnapshotHasSourceField(flowKeys[mappingFlowUUID], contactFieldKeys, value) {
 				warnings = append(warnings, fmt.Sprintf("Period variable %q was not found in discovered RapidPro flow results or contact fields.", mapping.PeriodVar))
 			}
 		}
 		for _, row := range mapping.Mappings {
-			if _, ok := dataElementIDs[strings.TrimSpace(row.DataElement)]; !ok {
-				warnings = append(warnings, fmt.Sprintf("Mapped data element %q is not present in the last DHIS2 metadata snapshot.", row.DataElement))
+			if datasetMetadataLoaded {
+				if _, ok := dataElementIDs[strings.TrimSpace(row.DataElement)]; !ok {
+					warnings = append(warnings, fmt.Sprintf("Mapped data element %q is not present in the last metadata loaded for dataset %q.", row.DataElement, mapping.Dataset))
+				}
 			}
 			if value := strings.ToLower(strings.TrimSpace(row.Field)); value != "" {
-				if !rapidexSnapshotHasSourceField(flowKeys[strings.TrimSpace(mapping.FlowUUID)], contactFieldKeys, value) {
+				if !rapidexSnapshotHasSourceField(flowKeys[mappingFlowUUID], contactFieldKeys, value) {
 					warnings = append(warnings, fmt.Sprintf("Webhook field %q was not found in discovered RapidPro flow results or contact fields.", row.Field))
 				}
 			}
 		}
 	}
 	return normalizeStringSlice(warnings)
+}
+
+func normalizeRapidexMetadataRefreshScope(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", rapidexMetadataRefreshScopeCatalog:
+		return rapidexMetadataRefreshScopeCatalog
+	case rapidexMetadataRefreshScopeDatasets:
+		return rapidexMetadataRefreshScopeDatasets
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
 }
 
 func rapidexSnapshotHasSourceField(flow RapidexRapidProFlowOption, contactFields map[string]struct{}, key string) bool {

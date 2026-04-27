@@ -3,12 +3,14 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"basepro/backend/internal/audit"
 	"basepro/backend/internal/sukumad/rapidex"
+	dhis2metadata "basepro/backend/internal/sukumad/rapidex/dhis2metadata"
 	"basepro/backend/internal/sukumad/rapidex/rapidpro"
 	sukumadserver "basepro/backend/internal/sukumad/server"
 )
@@ -58,9 +60,100 @@ func (f fakeRapidProFieldClient) ListContactFields(context.Context, rapidpro.Con
 	return append([]rapidpro.ContactField(nil), f.fields...), nil
 }
 
+type fakeRapidexMetadataServerCatalog struct {
+	records map[string]sukumadserver.Record
+	items   []sukumadserver.Record
+}
+
+func (f fakeRapidexMetadataServerCatalog) ListServers(context.Context, sukumadserver.ListQuery) (sukumadserver.ListResult, error) {
+	return sukumadserver.ListResult{Items: append([]sukumadserver.Record(nil), f.items...)}, nil
+}
+
+func (f fakeRapidexMetadataServerCatalog) GetServerByCode(_ context.Context, code string) (sukumadserver.Record, error) {
+	record, ok := f.records[code]
+	if !ok {
+		return sukumadserver.Record{}, errors.New("server not found")
+	}
+	return record, nil
+}
+
+type fakeRapidexFlowClient struct {
+	flows  []rapidpro.Flow
+	fields []rapidpro.ContactField
+}
+
+func (f fakeRapidexFlowClient) ListFlows(context.Context, rapidpro.Connection) ([]rapidpro.Flow, error) {
+	return append([]rapidpro.Flow(nil), f.flows...), nil
+}
+
+func (f fakeRapidexFlowClient) ListContactFields(context.Context, rapidpro.Connection) ([]rapidpro.ContactField, error) {
+	return append([]rapidpro.ContactField(nil), f.fields...), nil
+}
+
+type fakeRapidexDHIS2MetadataClient struct {
+	lastConn            ConnectionCapture
+	requestedDatasetIDs []string
+}
+
+type ConnectionCapture struct {
+	BaseURL   string
+	Headers   map[string]string
+	URLParams map[string]string
+}
+
+func (f *fakeRapidexDHIS2MetadataClient) capture(conn dhis2metadata.Connection) {
+	f.lastConn = ConnectionCapture{
+		BaseURL:   conn.BaseURL,
+		Headers:   cloneTestStringMap(conn.Headers),
+		URLParams: cloneTestStringMap(conn.URLParams),
+	}
+}
+
+func (f *fakeRapidexDHIS2MetadataClient) ListDataSets(_ context.Context, conn dhis2metadata.Connection) ([]dhis2metadata.DataSet, error) {
+	f.capture(conn)
+	return []dhis2metadata.DataSet{{ID: "ds1", Name: "Dataset 1"}}, nil
+}
+
+func (f *fakeRapidexDHIS2MetadataClient) GetDataSet(_ context.Context, conn dhis2metadata.Connection, datasetID string) (dhis2metadata.DataSet, error) {
+	f.capture(conn)
+	f.requestedDatasetIDs = append(f.requestedDatasetIDs, datasetID)
+	return dhis2metadata.DataSet{
+		ID:         datasetID,
+		Name:       "Dataset " + datasetID,
+		PeriodType: "Monthly",
+		DataSetElements: []dhis2metadata.DataSetElementItem{
+			{
+				DataElement: dhis2metadata.DataElement{
+					ID:        "de1",
+					Name:      "Data Element 1",
+					ValueType: "NUMBER",
+					CategoryCombo: dhis2metadata.CategoryCombo{
+						ID:   "cc1",
+						Name: "Default",
+						CategoryOptionCombos: []dhis2metadata.CategoryOptionCombo{
+							{ID: "coc1", Name: "Default"},
+						},
+					},
+				},
+			},
+		},
+	}, nil
+}
+
 func (f *fakeAuditRepo) Insert(_ context.Context, event audit.Event) error {
 	f.events = append(f.events, event)
 	return nil
+}
+
+func cloneTestStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return map[string]string{}
+	}
+	cloned := make(map[string]string, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func (f *fakeAuditRepo) List(context.Context, audit.ListFilter) (audit.ListResult, error) {
@@ -397,5 +490,146 @@ func TestRapidexWebhookMappingProviderReturnsMappingByFlowUUID(t *testing.T) {
 	}
 	if got.FlowUUID != "flow-a" || got.Dataset != "dataset-a" {
 		t.Fatalf("unexpected mapping %#v", got)
+	}
+}
+
+func TestRefreshRapidexWebhookMetadataPassesDHIS2URLParams(t *testing.T) {
+	repo := newFakeRepo()
+	catalog := fakeRapidexMetadataServerCatalog{
+		records: map[string]sukumadserver.Record{
+			"rapidpro": {Code: "rapidpro", BaseURL: "https://rapidpro.example.com"},
+			"dhis2": {
+				Code:      "dhis2",
+				BaseURL:   "https://dhis.example.com/api",
+				URLParams: map[string]string{"locale": "en", "strategy": "children"},
+				Headers:   map[string]string{"Authorization": "ApiToken test"},
+			},
+		},
+		items: []sukumadserver.Record{
+			{Code: "rapidpro", Name: "RapidPro", SystemType: "rapidpro"},
+			{Code: "dhis2", Name: "DHIS2", SystemType: "dhis2"},
+		},
+	}
+	dhis2Client := &fakeRapidexDHIS2MetadataClient{}
+	service := NewService(repo, nil).
+		WithRapidexMetadataIntegration(
+			catalog,
+			fakeRapidexFlowClient{
+				flows:  []rapidpro.Flow{{UUID: "flow-1", Name: "Facility Flow"}},
+				fields: []rapidpro.ContactField{{Key: "facility_code", Label: "Facility Code"}},
+			},
+			dhis2Client,
+		)
+
+	_, err := service.RefreshRapidexWebhookMetadata(context.Background(), RapidexWebhookMetadataRefreshInput{
+		RapidProServerCode: "rapidpro",
+		Dhis2ServerCode:    "dhis2",
+		Scope:              "catalog",
+	}, nil)
+	if err != nil {
+		t.Fatalf("refresh rapidex webhook metadata: %v", err)
+	}
+	if dhis2Client.lastConn.BaseURL != "https://dhis.example.com/api" {
+		t.Fatalf("expected dhis2 base url to pass through, got %q", dhis2Client.lastConn.BaseURL)
+	}
+	if dhis2Client.lastConn.URLParams["locale"] != "en" || dhis2Client.lastConn.URLParams["strategy"] != "children" {
+		t.Fatalf("expected dhis2 url params to pass through, got %#v", dhis2Client.lastConn.URLParams)
+	}
+	if dhis2Client.lastConn.Headers["Authorization"] != "ApiToken test" {
+		t.Fatalf("expected dhis2 headers to pass through, got %#v", dhis2Client.lastConn.Headers)
+	}
+}
+
+func TestRefreshRapidexWebhookMetadataAliasesAOCOptionsFromCategoryOptionCombos(t *testing.T) {
+	repo := newFakeRepo()
+	catalog := fakeRapidexMetadataServerCatalog{
+		records: map[string]sukumadserver.Record{
+			"rapidpro": {Code: "rapidpro", BaseURL: "https://rapidpro.example.com"},
+			"dhis2":    {Code: "dhis2", BaseURL: "https://dhis.example.com"},
+		},
+		items: []sukumadserver.Record{
+			{Code: "rapidpro", Name: "RapidPro", SystemType: "rapidpro"},
+			{Code: "dhis2", Name: "DHIS2", SystemType: "dhis2"},
+		},
+	}
+	dhis2Client := &fakeRapidexDHIS2MetadataClient{}
+	service := NewService(repo, nil).
+		WithRapidexMetadataIntegration(
+			catalog,
+			fakeRapidexFlowClient{
+				flows:  []rapidpro.Flow{{UUID: "flow-1", Name: "Facility Flow"}},
+				fields: []rapidpro.ContactField{{Key: "facility_code", Label: "Facility Code"}},
+			},
+			dhis2Client,
+		)
+
+	got, err := service.RefreshRapidexWebhookMetadata(context.Background(), RapidexWebhookMetadataRefreshInput{
+		RapidProServerCode: "rapidpro",
+		Dhis2ServerCode:    "dhis2",
+		Scope:              "datasets",
+		DatasetIDs:         []string{"ds1"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("refresh rapidex webhook metadata: %v", err)
+	}
+	metadata, ok := got.Snapshot.Dhis2DatasetMetadataByID["ds1"]
+	if !ok {
+		t.Fatalf("expected dataset metadata for ds1, got %#v", got.Snapshot.Dhis2DatasetMetadataByID)
+	}
+	if len(metadata.CategoryOptionCombos) != 1 || metadata.CategoryOptionCombos[0].ID != "coc1" {
+		t.Fatalf("expected category option combos in dataset metadata, got %#v", metadata.CategoryOptionCombos)
+	}
+	if len(metadata.AttributeOptionCombos) != 1 || metadata.AttributeOptionCombos[0].ID != "coc1" {
+		t.Fatalf("expected attribute option combos to mirror category option combos, got %#v", metadata.AttributeOptionCombos)
+	}
+}
+
+func TestRefreshRapidexWebhookMetadataRequiresDatasetIDsForDatasetScope(t *testing.T) {
+	repo := newFakeRepo()
+	service := NewService(repo, nil).
+		WithRapidexMetadataIntegration(
+			fakeRapidexMetadataServerCatalog{
+				records: map[string]sukumadserver.Record{
+					"rapidpro": {Code: "rapidpro", BaseURL: "https://rapidpro.example.com"},
+					"dhis2":    {Code: "dhis2", BaseURL: "https://dhis.example.com"},
+				},
+			},
+			fakeRapidexFlowClient{},
+			&fakeRapidexDHIS2MetadataClient{},
+		)
+
+	_, err := service.RefreshRapidexWebhookMetadata(context.Background(), RapidexWebhookMetadataRefreshInput{
+		RapidProServerCode: "rapidpro",
+		Dhis2ServerCode:    "dhis2",
+		Scope:              "datasets",
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "validation failed") {
+		t.Fatalf("expected dataset validation error, got %v", err)
+	}
+}
+
+func TestRefreshRapidexWebhookMetadataLoadsOnlyRequestedDatasets(t *testing.T) {
+	repo := newFakeRepo()
+	catalog := fakeRapidexMetadataServerCatalog{
+		records: map[string]sukumadserver.Record{
+			"rapidpro": {Code: "rapidpro", BaseURL: "https://rapidpro.example.com"},
+			"dhis2":    {Code: "dhis2", BaseURL: "https://dhis.example.com"},
+		},
+	}
+	dhis2Client := &fakeRapidexDHIS2MetadataClient{}
+	service := NewService(repo, nil).
+		WithRapidexMetadataIntegration(catalog, fakeRapidexFlowClient{}, dhis2Client)
+
+	_, err := service.RefreshRapidexWebhookMetadata(context.Background(), RapidexWebhookMetadataRefreshInput{
+		RapidProServerCode: "rapidpro",
+		Dhis2ServerCode:    "dhis2",
+		Scope:              "datasets",
+		DatasetIDs:         []string{"ds2"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("refresh rapidex webhook metadata: %v", err)
+	}
+	if len(dhis2Client.requestedDatasetIDs) != 1 || dhis2Client.requestedDatasetIDs[0] != "ds2" {
+		t.Fatalf("expected only ds2 to be requested, got %#v", dhis2Client.requestedDatasetIDs)
 	}
 }
