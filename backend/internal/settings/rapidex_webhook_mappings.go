@@ -60,18 +60,22 @@ func NewRapidexWebhookMappingProvider(repo Repository) *RapidexWebhookMappingPro
 	return &RapidexWebhookMappingProvider{repo: repo}
 }
 
-func (p *RapidexWebhookMappingProvider) GetByFlowUUID(ctx context.Context, flowUUID string) (rapidex.MappingConfig, bool, error) {
+func (p *RapidexWebhookMappingProvider) GetByFlowUUID(ctx context.Context, flowUUID string) (rapidex.WebhookBinding, bool, error) {
 	stored, err := p.getStored(ctx)
 	if err != nil {
-		return rapidex.MappingConfig{}, false, err
+		return rapidex.WebhookBinding{}, false, err
 	}
 	normalizedFlowUUID := strings.TrimSpace(flowUUID)
 	for _, cfg := range stored.Mappings {
 		if strings.TrimSpace(cfg.FlowUUID) == normalizedFlowUUID {
-			return cfg, true, nil
+			return rapidex.WebhookBinding{
+				MappingConfig:      cfg,
+				RapidProServerCode: stored.RapidProServerCode,
+				DHIS2ServerCode:    stored.Dhis2ServerCode,
+			}, true, nil
 		}
 	}
-	return rapidex.MappingConfig{}, false, nil
+	return rapidex.WebhookBinding{}, false, nil
 }
 
 func (p *RapidexWebhookMappingProvider) getStored(ctx context.Context) (rapidexWebhookMappingsStored, error) {

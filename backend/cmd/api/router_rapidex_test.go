@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -9,11 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"basepro/backend/internal/apperror"
 	"basepro/backend/internal/auth"
 	"basepro/backend/internal/rbac"
 	"basepro/backend/internal/sukumad/orgunit"
+	"basepro/backend/internal/sukumad/rapidex"
 	"basepro/backend/internal/sukumad/reporter"
 	request "basepro/backend/internal/sukumad/request"
+	sukumadserver "basepro/backend/internal/sukumad/server"
 )
 
 func TestRapidexRoutesRequireAuthAndPermissions(t *testing.T) {
@@ -130,6 +134,193 @@ func TestRapidexOrgUnitRoutePassesHierarchyQueryFlags(t *testing.T) {
 	if len(body.Items) != 1 || !body.Items[0].HasChildren {
 		t.Fatalf("expected response to include org unit with hasChildren=true, got %+v", body.Items)
 	}
+}
+
+func TestRapidexWebhookRouteAcceptsAPITokenAndQueuesRequest(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.ModuleFlagsProvider = func() map[string]bool { return map[string]bool{"requests": true} }
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_requestswrite"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        51,
+		Name:      "rapidex-webhook",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[51] = []auth.APITokenPermission{{APITokenID: 51, Permission: rbac.PermissionRequestsWrite}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	requestCreator := &rapidexRouteRequestCreator{}
+	deps.RapidexService = rapidex.NewIntegrationService(rapidexRouteMappingProvider{
+		binding: rapidex.WebhookBinding{
+			MappingConfig: rapidex.MappingConfig{
+				FlowUUID:   "flow-1",
+				Dataset:    "ds-1",
+				OrgUnitVar: "facility",
+				PeriodVar:  "period",
+				Mappings: []rapidex.DataValueMapping{
+					{Field: "value_a", DataElement: "de-1"},
+				},
+			},
+			DHIS2ServerCode: "dhis2-main",
+		},
+		ok: true,
+	}, nil, requestCreator, rapidexRouteServerResolver{
+		record: sukumadserver.Record{UID: "dhis2-uid"},
+	})
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rapidex/webhook", bytes.NewReader([]byte(`{
+		"flow_uuid":"flow-1",
+		"results":{"facility":"OU_123","period":"202604","value_a":"17"},
+		"contact":{"uuid":"contact-1","urns":["tel:+256782820208"]}
+	}`)))
+	req.Header.Set("X-API-Token", plain)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(requestCreator.calls) != 1 {
+		t.Fatalf("expected request queue call, got %d", len(requestCreator.calls))
+	}
+}
+
+func TestRapidexWebhookRouteRequiresAuthentication(t *testing.T) {
+	router := newRouter(AppDeps{
+		ModuleFlagsProvider: func() map[string]bool { return map[string]bool{"requests": true} },
+		RapidexService: rapidex.NewIntegrationService(rapidexRouteMappingProvider{
+			binding: rapidex.WebhookBinding{
+				MappingConfig: rapidex.MappingConfig{
+					FlowUUID:   "flow-1",
+					Dataset:    "ds-1",
+					OrgUnitVar: "facility",
+					PeriodVar:  "period",
+					Mappings:   []rapidex.DataValueMapping{{Field: "value_a", DataElement: "de-1"}},
+				},
+				DHIS2ServerCode: "dhis2-main",
+			},
+			ok: true,
+		}, nil, &rapidexRouteRequestCreator{}, rapidexRouteServerResolver{
+			record: sukumadserver.Record{UID: "dhis2-uid"},
+		}),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rapidex/webhook", bytes.NewReader([]byte(`{"flow_uuid":"flow-1"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRapidexWebhookRouteReturnsValidationError(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.ModuleFlagsProvider = func() map[string]bool { return map[string]bool{"requests": true} }
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_requestswrite_validation"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        52,
+		Name:      "rapidex-webhook",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[52] = []auth.APITokenPermission{{APITokenID: 52, Permission: rbac.PermissionRequestsWrite}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+	deps.RapidexService = rapidex.NewIntegrationService(rapidexRouteMappingProvider{
+		binding: rapidex.WebhookBinding{
+			MappingConfig: rapidex.MappingConfig{
+				FlowUUID:   "flow-1",
+				Dataset:    "ds-1",
+				OrgUnitVar: "facility",
+				PeriodVar:  "period",
+				Mappings:   []rapidex.DataValueMapping{{Field: "value_a", DataElement: "de-1"}},
+			},
+			DHIS2ServerCode: "dhis2-main",
+		},
+		ok: true,
+	}, nil, &rapidexRouteRequestCreator{}, rapidexRouteServerResolver{
+		record: sukumadserver.Record{UID: "dhis2-uid"},
+	})
+
+	router := newRouter(deps)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rapidex/webhook", bytes.NewReader([]byte(`{
+		"flow_uuid":"flow-1",
+		"results":{"period":"202604"}
+	}`)))
+	req.Header.Set("X-API-Token", plain)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Error struct {
+			Code    string         `json:"code"`
+			Details map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != apperror.CodeValidationFailed {
+		t.Fatalf("expected validation code, got %+v", body.Error)
+	}
+	if _, ok := body.Error.Details["orgUnit"]; !ok {
+		t.Fatalf("expected orgUnit validation details, got %+v", body.Error.Details)
+	}
+}
+
+type rapidexRouteMappingProvider struct {
+	binding rapidex.WebhookBinding
+	ok      bool
+	err     error
+}
+
+func (p rapidexRouteMappingProvider) GetByFlowUUID(context.Context, string) (rapidex.WebhookBinding, bool, error) {
+	return p.binding, p.ok, p.err
+}
+
+type rapidexRouteRequestCreator struct {
+	calls []rapidex.ExternalRequestInput
+}
+
+func (r *rapidexRouteRequestCreator) CreateExternalRequest(_ context.Context, input rapidex.ExternalRequestInput) error {
+	r.calls = append(r.calls, input)
+	return nil
+}
+
+type rapidexRouteServerResolver struct {
+	record sukumadserver.Record
+	err    error
+}
+
+func (r rapidexRouteServerResolver) GetServerByCode(context.Context, string) (sukumadserver.Record, error) {
+	if r.err != nil {
+		return sukumadserver.Record{}, r.err
+	}
+	return r.record, nil
 }
 
 type rapidexOrgUnitRepo struct {

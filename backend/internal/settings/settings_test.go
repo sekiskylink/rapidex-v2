@@ -488,7 +488,7 @@ func TestRapidexWebhookMappingProviderReturnsMappingByFlowUUID(t *testing.T) {
 	if !ok {
 		t.Fatal("expected mapping to be found")
 	}
-	if got.FlowUUID != "flow-a" || got.Dataset != "dataset-a" {
+	if got.MappingConfig.FlowUUID != "flow-a" || got.MappingConfig.Dataset != "dataset-a" {
 		t.Fatalf("unexpected mapping %#v", got)
 	}
 }

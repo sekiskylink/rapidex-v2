@@ -53,6 +53,28 @@ var (
 	BuildDate = "unknown"
 )
 
+type rapidexRequestCreator struct {
+	service *requests.Service
+}
+
+func (r rapidexRequestCreator) CreateExternalRequest(ctx context.Context, input rapidex.ExternalRequestInput) error {
+	if r.service == nil {
+		return nil
+	}
+	_, err := r.service.CreateExternalRequest(ctx, requests.ExternalCreateInput{
+		SourceSystem:         input.SourceSystem,
+		DestinationServerUID: input.DestinationServerUID,
+		CorrelationID:        input.CorrelationID,
+		IdempotencyKey:       input.IdempotencyKey,
+		Payload:              input.Payload,
+		PayloadFormat:        input.PayloadFormat,
+		SubmissionBinding:    input.SubmissionBinding,
+		URLSuffix:            input.URLSuffix,
+		Extras:               input.Extras,
+	})
+	return err
+}
+
 func main() {
 	if err := run(); err != nil {
 		logging.L().Error("api_start_failed", slog.String("error", err.Error()))
@@ -200,7 +222,7 @@ func run() error {
 		WithRecentReportsLookup(requests.NewRepository(database)).
 		WithScopeResolver(sukumadUserOrgUnitService)
 	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
-	rapidexIntegrationService := rapidex.NewIntegrationService(settings.NewRapidexWebhookMappingProvider(settingsRepo), sukumadReporterService, nil)
+	rapidexIntegrationService := rapidex.NewIntegrationService(settings.NewRapidexWebhookMappingProvider(settingsRepo), sukumadReporterService, rapidexRequestCreator{service: sukumadRequestService}, sukumadServerService)
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()
 		files := make([]documentation.SourceFile, 0, len(cfg.Documentation.Files))

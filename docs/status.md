@@ -1,5 +1,43 @@
 # Status
 
+## Milestone — RapidEx Webhook Queueing to Exchange Requests (Complete)
+
+### What changed
+- Replaced the placeholder RapidEx webhook handoff with a real queueing path that now creates normal Sukumad exchange requests through the existing request lifecycle.
+- Extended the settings-backed RapidEx mapping provider so webhook processing reads both the saved flow mapping and the saved RapidPro/DHIS2 server codes from `app_settings`.
+- Wired backend startup so the RapidEx integration uses the real request service plus integration-server lookup instead of the old placeholder logger.
+- Updated `POST /api/v1/rapidex/webhook` so it now:
+  - validates the incoming RapidPro webhook payload
+  - maps the webhook into a DHIS2 aggregate `dataValueSets` payload
+  - resolves the configured DHIS2 integration server from saved RapidEx settings
+  - queues an `exchange_requests` row with JSON body submission to `/api/dataValueSets`
+  - seeds a deterministic idempotency key so duplicate webhook deliveries dedupe at the request layer
+  - stores RapidEx context in request extras, including `msisdn` when a `tel:` URN is present
+- Corrected the public webhook route registration so the endpoint is served at `/api/v1/rapidex/webhook` instead of the accidental double-prefixed path.
+- Added a durable architecture note in `docs/notes/rapidex-webhook-request-queueing.md`.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-27-rapidex-webhook-request-queueing.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - RapidEx integration service coverage for successful queueing, mapped-payload validation, deterministic idempotency, `msisdn` extraction, and missing-DHIS2-server handling
+  - settings provider coverage updated for the richer webhook binding lookup result
+  - API router coverage for API-token-authenticated webhook submission, unauthenticated rejection, and validation-failure responses
+
+### Verification summary
+- Backend focused RapidEx/settings suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/rapidex ./internal/settings`)
+- Backend focused API router suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run 'TestRapidexWebhookRoute|TestRapidexRoutes'`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Reporter lookup and org-unit override are still intentionally out of scope for this milestone; webhook queueing currently uses the saved mapping output as authored.
+- Existing frontend test runs still emit non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing frontend builds still emit third-party `'use client'` and chunk-size warnings unrelated to this change.
+
 ## Milestone — RapidEx Mapping Metadata Discovery (Complete)
 
 ### What changed

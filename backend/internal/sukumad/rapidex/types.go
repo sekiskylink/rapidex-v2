@@ -64,6 +64,28 @@ type DataValue struct {
 	Value                string `json:"value"`
 }
 
+// WebhookBinding couples a saved flow mapping with the persisted RapidEx
+// settings needed to enqueue the mapped payload.
+type WebhookBinding struct {
+	MappingConfig      MappingConfig
+	RapidProServerCode string
+	DHIS2ServerCode    string
+}
+
+// ExternalRequestInput captures the subset of request queueing inputs RapidEx
+// needs without importing the request package directly.
+type ExternalRequestInput struct {
+	SourceSystem         string
+	DestinationServerUID string
+	CorrelationID        string
+	IdempotencyKey       string
+	Payload              any
+	PayloadFormat        string
+	SubmissionBinding    string
+	URLSuffix            string
+	Extras               map[string]any
+}
+
 // RapidProWebhook is a simplified representation of the webhook body
 // delivered by RapidPro when a flow completes.  Only the fields required
 // for mapping are included here.  Additional properties (such as contact
@@ -74,6 +96,8 @@ type RapidProWebhook struct {
 	Fields   map[string]interface{} `json:"fields"`
 	Contact  struct {
 		UUID   string                 `json:"uuid"`
+		URN    string                 `json:"urn"`
+		URNs   []string               `json:"urns"`
 		Fields map[string]interface{} `json:"fields"`
 	} `json:"contact"`
 	Extra map[string]interface{} `json:"extra"`
