@@ -461,6 +461,22 @@ func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input 
 	if strings.TrimSpace(input.Name) == "" {
 		return APITokenCreateResult{}, apperror.Unauthorized("Token name is required")
 	}
+	if input.BoundUserID != nil {
+		user, err := s.repo.GetUserByID(ctx, *input.BoundUserID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return APITokenCreateResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+					"boundUserId": []string{"must reference an existing user"},
+				})
+			}
+			return APITokenCreateResult{}, err
+		}
+		if !user.IsActive {
+			return APITokenCreateResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+				"boundUserId": []string{"must reference an active user"},
+			})
+		}
+	}
 
 	now := s.now()
 	plaintext, err := GenerateAPIToken()
@@ -483,6 +499,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input 
 		TokenHash:       HashAPIToken(s.apiTokenSecret, plaintext),
 		Prefix:          APITokenPrefix(plaintext),
 		CreatedByUserID: actorUserID,
+		BoundUserID:     input.BoundUserID,
 		ExpiresAt:       expiresAt,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -499,6 +516,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input 
 		Metadata: map[string]any{
 			"token_id":    created.ID,
 			"prefix":      created.Prefix,
+			"bound_user":  created.BoundUserID,
 			"permissions": input.Permissions,
 			"ip":          ip,
 			"user_agent":  userAgent,
@@ -510,6 +528,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input 
 		Name:        created.Name,
 		Prefix:      created.Prefix,
 		Token:       plaintext,
+		BoundUserID: created.BoundUserID,
 		ExpiresAt:   created.ExpiresAt,
 		Permissions: input.Permissions,
 	}, nil
@@ -564,6 +583,20 @@ func (s *Service) AuthenticateAPIToken(ctx context.Context, plaintext, ip, userA
 	if token.ExpiresAt != nil && now.After(*token.ExpiresAt) {
 		return Principal{}, apperror.Unauthorized("Invalid API token")
 	}
+	var boundUsername string
+	if token.BoundUserID != nil {
+		user, userErr := s.repo.GetUserByID(ctx, *token.BoundUserID)
+		if userErr != nil {
+			if errors.Is(userErr, ErrNotFound) {
+				return Principal{}, apperror.Unauthorized("Invalid API token")
+			}
+			return Principal{}, userErr
+		}
+		if !user.IsActive {
+			return Principal{}, apperror.Unauthorized("Invalid API token")
+		}
+		boundUsername = user.Username
+	}
 	permissions, err := s.repo.GetAPITokenPermissions(ctx, token.ID)
 	if err != nil {
 		return Principal{}, err
@@ -588,6 +621,8 @@ func (s *Service) AuthenticateAPIToken(ctx context.Context, plaintext, ip, userA
 		Type:             "api_token",
 		ID:               strconv.FormatInt(token.ID, 10),
 		APITokenID:       token.ID,
+		BoundUserID:      token.BoundUserID,
+		BoundUsername:    boundUsername,
 		Permissions:      names,
 		PermissionGrants: grants,
 	}, nil

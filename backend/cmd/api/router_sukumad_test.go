@@ -20,6 +20,7 @@ import (
 	"basepro/backend/internal/sukumad/delivery"
 	documentation "basepro/backend/internal/sukumad/documentation"
 	"basepro/backend/internal/sukumad/observability"
+	"basepro/backend/internal/sukumad/orgunit"
 	"basepro/backend/internal/sukumad/ratelimit"
 	requests "basepro/backend/internal/sukumad/request"
 	"basepro/backend/internal/sukumad/scheduler"
@@ -65,19 +66,25 @@ func (r *dashboardTestRepository) GetSnapshot(_ context.Context, _ time.Time) (d
 type apiTokenRepo struct {
 	tokens      map[string]*auth.APIToken
 	permissions map[int64][]auth.APITokenPermission
+	users       map[int64]*auth.User
 }
 
 func newAPITokenRepo() *apiTokenRepo {
 	return &apiTokenRepo{
 		tokens:      map[string]*auth.APIToken{},
 		permissions: map[int64][]auth.APITokenPermission{},
+		users:       map[int64]*auth.User{},
 	}
 }
 
 func (r *apiTokenRepo) GetUserByUsername(context.Context, string) (*auth.User, error) {
 	return nil, auth.ErrNotFound
 }
-func (r *apiTokenRepo) GetUserByID(context.Context, int64) (*auth.User, error) {
+func (r *apiTokenRepo) GetUserByID(_ context.Context, userID int64) (*auth.User, error) {
+	if user, ok := r.users[userID]; ok {
+		copy := *user
+		return &copy, nil
+	}
 	return nil, auth.ErrNotFound
 }
 func (r *apiTokenRepo) GetActiveUserByIdentifier(context.Context, string) (*auth.User, error) {
@@ -142,6 +149,10 @@ func (r *apiTokenRepo) UpdateAPITokenLastUsed(_ context.Context, tokenID int64, 
 }
 func (r *apiTokenRepo) EnsureUser(context.Context, string, string, bool) (*auth.User, error) {
 	return nil, auth.ErrNotFound
+}
+
+func int64PtrTest(v int64) *int64 {
+	return &v
 }
 
 func TestDashboardOperationsEventsRequiresObservabilityRead(t *testing.T) {
@@ -479,6 +490,155 @@ func TestExternalServerListRouteRejectsTokenWithoutServersRead(t *testing.T) {
 	router := newRouter(deps)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/external/servers", nil)
+	req.Header.Set("X-API-Token", plain)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestInternalServerCreateRouteAcceptsAPIToken(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	rbacService := rbacServiceWithPermissions(nil)
+
+	deps := newSukumadTestAppDeps(jwt, rbacService)
+	deps.ServerHandler = server.NewHandler(server.NewService(server.NewRepository(), audit.NewService(&fakeAuditRepo{})))
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_serverswrite"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        31,
+		Name:      "server-writer",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[31] = []auth.APITokenPermission{{APITokenID: 31, Permission: rbac.PermissionServersWrite}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader([]byte(`{
+		"name":"DHIS2 Secondary",
+		"code":"dhis2-secondary",
+		"systemType":"dhis2",
+		"baseUrl":"https://dhis.example.com",
+		"endpointType":"http",
+		"httpMethod":"post",
+		"useAsync":false,
+		"parseResponses":true,
+		"suspended":false
+	}`)))
+	req.Header.Set("X-API-Token", plain)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestOrgUnitRoutesAcceptBoundUserAPIToken(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.OrgUnitService = orgunit.NewService(&rapidexOrgUnitRepo{})
+
+	tokenRepo := newAPITokenRepo()
+	tokenRepo.users[44] = &auth.User{ID: 44, Username: "svc-reader", IsActive: true}
+	secret := "test-secret"
+	plain := "bpt_orgunitsread"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:          32,
+		Name:        "orgunit-reader",
+		TokenHash:   hash,
+		Prefix:      auth.APITokenPrefix(plain),
+		BoundUserID: int64PtrTest(44),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	tokenRepo.permissions[32] = []auth.APITokenPermission{{APITokenID: 32, Permission: rbac.PermissionOrgUnitsRead}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/orgunits?page=1&pageSize=10", nil)
+	req.Header.Set("X-API-Token", plain)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestOrgUnitRoutesRejectUnboundAPIToken(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.OrgUnitService = orgunit.NewService(&rapidexOrgUnitRepo{})
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_orgunitsread_unbound"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        33,
+		Name:      "orgunit-reader",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[33] = []auth.APITokenPermission{{APITokenID: 33, Permission: rbac.PermissionOrgUnitsRead}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/orgunits?page=1&pageSize=10", nil)
+	req.Header.Set("X-API-Token", plain)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdminAPITokenRoutesRejectAPITokenPrincipal(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_adminread"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        34,
+		Name:      "admin-reader",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[34] = []auth.APITokenPermission{{APITokenID: 34, Permission: rbac.PermissionAPITokensRead}}
+	authService := auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+
+	router := newRouter(AppDeps{
+		JWTManager:          jwt,
+		AuthService:         authService,
+		AuthHandler:         auth.NewHandler(authService),
+		APITokenHeaderName:  "X-API-Token",
+		ModuleFlagsProvider: func() map[string]bool { return map[string]bool{} },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/api-tokens", nil)
 	req.Header.Set("X-API-Token", plain)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

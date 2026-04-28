@@ -72,7 +72,6 @@ func registerServerRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "servers"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionServersRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionServersRead), handler.Get)
@@ -106,7 +105,6 @@ func registerRequestRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "requests"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionRequestsRead), handler.Get)
@@ -145,7 +143,6 @@ func registerAsyncRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "jobs"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionJobsRead), handler.Get)
@@ -172,7 +169,6 @@ func registerDeliveryRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "deliveries"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.List)
 	group.GET("/:id", middleware.RequirePermission(rbacService, rbac.PermissionDeliveriesRead), handler.Get)
@@ -198,7 +194,6 @@ func registerSchedulerRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "scheduler"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("/jobs", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerRead), handler.ListJobs)
 	group.POST("/jobs", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.CreateJob)
@@ -227,7 +222,6 @@ func registerObservabilityRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "observability"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("/workers", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.ListWorkers)
 	group.GET("/workers/:id", middleware.RequirePermission(rbacService, rbac.PermissionObservabilityRead), handler.GetWorker)
@@ -275,7 +269,6 @@ func registerDocumentationRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "documentation"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("", handler.List)
 	group.GET("/:slug", handler.Get)
@@ -297,7 +290,7 @@ func registerOrgUnitRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "orgunits"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
+		middleware.RequireEffectiveUser(),
 	)
 	group.GET("/orgunits", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsRead), func(c *gin.Context) {
 		userID, ok := currentUserID(c)
@@ -426,7 +419,7 @@ func registerReporterRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "reporters"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
+		middleware.RequireEffectiveUser(),
 	)
 	group.GET("/reporters", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), func(c *gin.Context) {
 		userID, ok := currentUserID(c)
@@ -694,7 +687,6 @@ func registerReporterGroupRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "reporters"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
 	)
 	group.GET("/reporter-groups", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), handler.List)
 	group.GET("/reporter-groups/options", middleware.RequirePermission(rbacService, rbac.PermissionReportersRead), handler.ListOptions)
@@ -718,7 +710,7 @@ func registerUserOrgUnitRoutes(
 		middleware.RequireModuleEnabled(moduleFlagsProvider, "orgunits"),
 		middleware.ResolveJWTPrincipal(jwtManager),
 		middleware.RequireAuth(),
-		middleware.RequireJWTUser(),
+		middleware.RequireEffectiveUser(),
 	)
 	group.GET("/user-org-units/:userId", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsRead), func(c *gin.Context) {
 		userID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
@@ -770,8 +762,8 @@ func registerUserOrgUnitRoutes(
 
 func currentUserID(c *gin.Context) (int64, bool) {
 	principal, ok := middleware.PrincipalFromContext(c)
-	if !ok || principal.Type != "user" || principal.UserID == 0 {
+	if !ok {
 		return 0, false
 	}
-	return principal.UserID, true
+	return principal.EffectiveUserID()
 }

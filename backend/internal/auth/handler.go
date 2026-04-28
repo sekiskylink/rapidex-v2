@@ -32,6 +32,7 @@ type logoutRequest struct {
 
 type createAPITokenRequest struct {
 	Name             string   `json:"name"`
+	BoundUserID      *int64   `json:"boundUserId"`
 	ExpiresInSeconds *int64   `json:"expiresInSeconds"`
 	Permissions      []string `json:"permissions"`
 	ModuleScope      *string  `json:"moduleScope"`
@@ -149,13 +150,14 @@ func (h *Handler) ListAPITokens(c *gin.Context) {
 	masked := make([]gin.H, 0, len(tokens))
 	for _, token := range tokens {
 		masked = append(masked, gin.H{
-			"id":         token.ID,
-			"name":       token.Name,
-			"prefix":     token.Prefix,
-			"revokedAt":  token.RevokedAt,
-			"expiresAt":  token.ExpiresAt,
-			"lastUsedAt": token.LastUsedAt,
-			"createdAt":  token.CreatedAt,
+			"id":          token.ID,
+			"name":        token.Name,
+			"prefix":      token.Prefix,
+			"boundUserId": token.BoundUserID,
+			"revokedAt":   token.RevokedAt,
+			"expiresAt":   token.ExpiresAt,
+			"lastUsedAt":  token.LastUsedAt,
+			"createdAt":   token.CreatedAt,
 		})
 	}
 
@@ -177,6 +179,7 @@ func (h *Handler) CreateAPIToken(c *gin.Context) {
 
 	result, err := h.service.CreateAPIToken(c.Request.Context(), actorUserID(principal), APITokenCreateInput{
 		Name:             req.Name,
+		BoundUserID:      req.BoundUserID,
 		ExpiresInSeconds: req.ExpiresInSeconds,
 		Permissions:      req.Permissions,
 		ModuleScope:      req.ModuleScope,
@@ -209,13 +212,14 @@ func (h *Handler) RevokeAPIToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":         token.ID,
-		"name":       token.Name,
-		"prefix":     token.Prefix,
-		"revokedAt":  token.RevokedAt,
-		"expiresAt":  token.ExpiresAt,
-		"lastUsedAt": token.LastUsedAt,
-		"createdAt":  token.CreatedAt,
+		"id":          token.ID,
+		"name":        token.Name,
+		"prefix":      token.Prefix,
+		"boundUserId": token.BoundUserID,
+		"revokedAt":   token.RevokedAt,
+		"expiresAt":   token.ExpiresAt,
+		"lastUsedAt":  token.LastUsedAt,
+		"createdAt":   token.CreatedAt,
 	})
 }
 

@@ -270,10 +270,10 @@ func (r *SQLRepository) CreateAPIToken(ctx context.Context, token APIToken, perm
 
 	var created APIToken
 	err = tx.GetContext(ctx, &created, `
-		INSERT INTO api_tokens (name, token_hash, prefix, created_by_user_id, expires_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, name, token_hash, prefix, created_by_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
-	`, token.Name, token.TokenHash, token.Prefix, token.CreatedByUserID, token.ExpiresAt, token.CreatedAt, token.UpdatedAt)
+		INSERT INTO api_tokens (name, token_hash, prefix, created_by_user_id, bound_user_id, expires_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, name, token_hash, prefix, created_by_user_id, bound_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
+	`, token.Name, token.TokenHash, token.Prefix, token.CreatedByUserID, token.BoundUserID, token.ExpiresAt, token.CreatedAt, token.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert api token: %w", err)
 	}
@@ -303,7 +303,7 @@ func (r *SQLRepository) CreateAPIToken(ctx context.Context, token APIToken, perm
 func (r *SQLRepository) ListAPITokens(ctx context.Context) ([]APIToken, error) {
 	var tokens []APIToken
 	if err := r.db.SelectContext(ctx, &tokens, `
-		SELECT id, name, token_hash, prefix, created_by_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
+		SELECT id, name, token_hash, prefix, created_by_user_id, bound_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
 		FROM api_tokens
 		ORDER BY created_at DESC
 	`); err != nil {
@@ -315,7 +315,7 @@ func (r *SQLRepository) ListAPITokens(ctx context.Context) ([]APIToken, error) {
 func (r *SQLRepository) GetAPITokenByID(ctx context.Context, tokenID int64) (*APIToken, error) {
 	var token APIToken
 	if err := r.db.GetContext(ctx, &token, `
-		SELECT id, name, token_hash, prefix, created_by_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
+		SELECT id, name, token_hash, prefix, created_by_user_id, bound_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
 		FROM api_tokens
 		WHERE id = $1
 	`, tokenID); err != nil {
@@ -330,7 +330,7 @@ func (r *SQLRepository) GetAPITokenByID(ctx context.Context, tokenID int64) (*AP
 func (r *SQLRepository) GetAPITokenByHash(ctx context.Context, hash string) (*APIToken, error) {
 	var token APIToken
 	if err := r.db.GetContext(ctx, &token, `
-		SELECT id, name, token_hash, prefix, created_by_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
+		SELECT id, name, token_hash, prefix, created_by_user_id, bound_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
 		FROM api_tokens
 		WHERE token_hash = $1
 	`, hash); err != nil {

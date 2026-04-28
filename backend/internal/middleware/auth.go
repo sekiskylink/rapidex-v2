@@ -218,6 +218,23 @@ func RequireJWTUser() gin.HandlerFunc {
 	}
 }
 
+func RequireEffectiveUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := PrincipalFromContext(c)
+		if !ok {
+			apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+			c.Abort()
+			return
+		}
+		if _, ok := principal.EffectiveUserID(); !ok {
+			apperror.Write(c, apperror.Forbidden("Forbidden"))
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func RequirePermission(rbacService *rbac.Service, permission string, opts ...PermissionOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		principal, ok := PrincipalFromContext(c)

@@ -47,6 +47,7 @@ type APIToken struct {
 	TokenHash       string     `db:"token_hash"`
 	Prefix          string     `db:"prefix"`
 	CreatedByUserID *int64     `db:"created_by_user_id"`
+	BoundUserID     *int64     `db:"bound_user_id"`
 	RevokedAt       *time.Time `db:"revoked_at"`
 	ExpiresAt       *time.Time `db:"expires_at"`
 	LastUsedAt      *time.Time `db:"last_used_at"`
@@ -68,6 +69,7 @@ type PermissionGrant struct {
 type APITokenCreateInput struct {
 	Name             string
 	CreatedByUserID  *int64
+	BoundUserID      *int64
 	ExpiresInSeconds *int64
 	Permissions      []string
 	ModuleScope      *string
@@ -78,6 +80,7 @@ type APITokenCreateResult struct {
 	Name        string     `json:"name"`
 	Prefix      string     `json:"prefix"`
 	Token       string     `json:"token"`
+	BoundUserID *int64     `json:"boundUserId,omitempty"`
 	ExpiresAt   *time.Time `json:"expiresAt"`
 	Permissions []string   `json:"permissions"`
 }
@@ -105,7 +108,26 @@ type Principal struct {
 	UserID           int64
 	Username         string
 	APITokenID       int64
+	BoundUserID      *int64
+	BoundUsername    string
 	Roles            []string
 	Permissions      []string
 	PermissionGrants []PermissionGrant
+}
+
+func (p Principal) EffectiveUserID() (int64, bool) {
+	switch p.Type {
+	case "user":
+		if p.UserID == 0 {
+			return 0, false
+		}
+		return p.UserID, true
+	case "api_token":
+		if p.BoundUserID == nil || *p.BoundUserID == 0 {
+			return 0, false
+		}
+		return *p.BoundUserID, true
+	default:
+		return 0, false
+	}
 }

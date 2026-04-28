@@ -1,5 +1,46 @@
 # Status
 
+## Milestone — API Token Route Expansion with Bound User Support (Complete)
+
+### What changed
+- Added optional bound-user support for API tokens via `api_tokens.bound_user_id` and a new backend migration.
+- Extended API-token creation and authentication so tokens can carry an effective user context when they are explicitly bound to an active user.
+- Kept interactive/admin APIs JWT-only, including `/api/v1/admin/api-tokens`, `/api/v1/users`, `/api/v1/settings`, `/api/v1/admin/roles`, `/api/v1/admin/permissions`, `/api/v1/auth/me`, and dashboard routes.
+- Expanded the machine-safe Sukumad backend surface to accept API tokens on operational endpoints including:
+  - `/api/v1/servers`
+  - `/api/v1/requests`
+  - `/api/v1/jobs`
+  - `/api/v1/deliveries`
+  - `/api/v1/scheduler`
+  - `/api/v1/observability`
+  - `/api/v1/documentation`
+  - existing token-friendly routes such as `/api/v1/audit`, `/api/v1/external/*`, and `/api/v1/rapidex/webhook`
+- Enabled bound-user API tokens for user-scoped Sukumad routes so existing org-unit and reporter authorization logic can be reused without introducing a parallel access model.
+- Added a durable architecture note in `docs/notes/api-token-bound-user-scope.md`.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-28-api-token-route-expansion.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - auth service and handler coverage for bound-user token creation, validation, and principal hydration
+  - router coverage for internal server API-token access
+  - router coverage for bound-user org-unit API-token access and unbound-token rejection
+  - router coverage proving `/api/v1/admin/api-tokens` remains JWT-user only
+
+### Verification summary
+- Backend focused auth/middleware suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/auth ./internal/middleware`)
+- Backend focused router suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run 'TestExternalServerListRoute|TestInternalServerCreateRouteAcceptsAPIToken|TestOrgUnitRoutes|TestAdminAPITokenRoutesRejectAPITokenPrincipal|TestRapidexWebhookRoute|TestRapidexRoutes'`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Web and desktop API-token management flows can be extended later to surface `boundUserId` directly when operators need to create bound-user tokens from the UI.
+- Existing frontend test runs still emit non-blocking MUI/jsdom `anchorEl` warnings.
+- Existing frontend builds still emit third-party `'use client'` and chunk-size warnings unrelated to this change.
+
 ## Milestone — RapidEx Webhook Queueing to Exchange Requests (Complete)
 
 ### What changed

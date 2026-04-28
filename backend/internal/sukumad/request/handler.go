@@ -315,10 +315,11 @@ func principalFromContext(c *gin.Context) (auth.Principal, bool) {
 }
 
 func actorUserID(principal auth.Principal) *int64 {
-	if principal.Type != "user" {
+	userID, ok := principal.EffectiveUserID()
+	if !ok {
 		return nil
 	}
-	return &principal.UserID
+	return &userID
 }
 
 func parseExternalSummaryRange(startValue, endValue string) (time.Time, time.Time, map[string]any) {

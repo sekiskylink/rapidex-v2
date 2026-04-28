@@ -13,6 +13,7 @@ import (
 func TestCreateAPITokenEndpointReturnsPlaintextOnceAndStoresHash(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	repo.usersByID[7] = &User{ID: 7, Username: "svc-user", IsActive: true}
 	auditRepo := &fakeAuditRepo{}
 	service := newTestService(repo, auditRepo)
 	handler := NewHandler(service)
@@ -25,6 +26,7 @@ func TestCreateAPITokenEndpointReturnsPlaintextOnceAndStoresHash(t *testing.T) {
 
 	payload := map[string]any{
 		"name":        "automation",
+		"boundUserId": int64(7),
 		"permissions": []string{"audit.read"},
 	}
 	body, _ := json.Marshal(payload)
@@ -48,6 +50,9 @@ func TestCreateAPITokenEndpointReturnsPlaintextOnceAndStoresHash(t *testing.T) {
 	if resp.Prefix != APITokenPrefix(resp.Token) {
 		t.Fatalf("expected prefix %s, got %s", APITokenPrefix(resp.Token), resp.Prefix)
 	}
+	if resp.BoundUserID == nil || *resp.BoundUserID != 7 {
+		t.Fatalf("expected bound user id 7, got %+v", resp.BoundUserID)
+	}
 
 	stored, err := repo.GetAPITokenByID(req.Context(), resp.ID)
 	if err != nil {
@@ -58,6 +63,9 @@ func TestCreateAPITokenEndpointReturnsPlaintextOnceAndStoresHash(t *testing.T) {
 	}
 	if stored.TokenHash != HashAPIToken("test-key", resp.Token) {
 		t.Fatal("stored hash does not match configured HMAC hash")
+	}
+	if stored.BoundUserID == nil || *stored.BoundUserID != 7 {
+		t.Fatalf("expected stored bound user id 7, got %+v", stored.BoundUserID)
 	}
 
 	permissions, err := repo.GetAPITokenPermissions(req.Context(), resp.ID)

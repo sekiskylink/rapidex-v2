@@ -438,13 +438,16 @@ func TestRefreshReuseDetectionRevokesActiveTokens(t *testing.T) {
 
 func TestCreateAPITokenStoresHashAndPrefix(t *testing.T) {
 	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	repo.usersByID[7] = &User{ID: 7, Username: "svc-reporter", IsActive: true}
 	auditRepo := &fakeAuditRepo{}
 	service := newTestService(repo, auditRepo)
 
 	expires := int64(3600)
 	adminID := int64(1)
+	boundUserID := int64(7)
 	result, err := service.CreateAPIToken(context.Background(), &adminID, APITokenCreateInput{
 		Name:             "ci-token",
+		BoundUserID:      &boundUserID,
 		ExpiresInSeconds: &expires,
 		Permissions:      []string{"audit.read"},
 	}, "127.0.0.1", "test-agent")
@@ -469,10 +472,61 @@ func TestCreateAPITokenStoresHashAndPrefix(t *testing.T) {
 	if stored.TokenHash != HashAPIToken("test-key", result.Token) {
 		t.Fatal("stored hash does not match expected HMAC")
 	}
+	if stored.BoundUserID == nil || *stored.BoundUserID != boundUserID {
+		t.Fatalf("expected bound user id %d, got %+v", boundUserID, stored.BoundUserID)
+	}
 
 	perms, _ := repo.GetAPITokenPermissions(context.Background(), result.ID)
 	if len(perms) != 1 || perms[0].Permission != "audit.read" {
 		t.Fatalf("expected stored permission audit.read, got %+v", perms)
+	}
+}
+
+func TestCreateAPITokenRejectsInactiveBoundUser(t *testing.T) {
+	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	repo.usersByID[9] = &User{ID: 9, Username: "disabled", IsActive: false}
+	service := newTestService(repo, &fakeAuditRepo{})
+
+	adminID := int64(1)
+	boundUserID := int64(9)
+	_, err := service.CreateAPIToken(context.Background(), &adminID, APITokenCreateInput{
+		Name:        "ci-token",
+		BoundUserID: &boundUserID,
+	}, "127.0.0.1", "test-agent")
+	if err == nil {
+		t.Fatal("expected inactive bound user to be rejected")
+	}
+}
+
+func TestAuthenticateAPITokenIncludesBoundUser(t *testing.T) {
+	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	repo.usersByID[5] = &User{ID: 5, Username: "svc", IsActive: true}
+	service := newTestService(repo, &fakeAuditRepo{})
+
+	now := time.Now().UTC()
+	plain := "plain-token"
+	hash := HashAPIToken("test-key", plain)
+	repo.apiTokensByHash[hash] = &APIToken{
+		ID:          2,
+		Name:        "svc-token",
+		TokenHash:   hash,
+		Prefix:      APITokenPrefix(plain),
+		BoundUserID: int64Ptr(5),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	repo.apiTokensByID[2] = repo.apiTokensByHash[hash]
+	repo.apiTokenPerms[2] = []APITokenPermission{{APITokenID: 2, Permission: "requests.read"}}
+
+	principal, err := service.AuthenticateAPIToken(context.Background(), plain, "127.0.0.1", "test-agent")
+	if err != nil {
+		t.Fatalf("authenticate api token: %v", err)
+	}
+	if principal.BoundUserID == nil || *principal.BoundUserID != 5 {
+		t.Fatalf("expected bound user id 5, got %+v", principal.BoundUserID)
+	}
+	if principal.BoundUsername != "svc" {
+		t.Fatalf("expected bound username svc, got %q", principal.BoundUsername)
 	}
 }
 
@@ -607,4 +661,8 @@ func TestAPITokenCreateAndRevokeProduceAuditLogs(t *testing.T) {
 	if auditRepo.events[1].Action != "api_token.revoke" {
 		t.Fatalf("expected second audit action api_token.revoke, got %s", auditRepo.events[1].Action)
 	}
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }
