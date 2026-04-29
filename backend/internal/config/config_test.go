@@ -3,6 +3,9 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
+	"sort"
 	"testing"
 	"time"
 )
@@ -292,6 +295,77 @@ func TestValidateSukumadRequestMetadataColumns(t *testing.T) {
 	}
 	if err := validate(cfg); err == nil {
 		t.Fatal("expected invalid metadata column type to fail validation")
+	}
+}
+
+func TestDefaultDocumentationFilesMatchDocsNotesDirectory(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve caller path")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
+	matches, err := filepath.Glob(filepath.Join(repoRoot, "docs", "notes", "*.md"))
+	if err != nil {
+		t.Fatalf("glob docs/notes: %v", err)
+	}
+
+	expectedPaths := make([]string, 0, len(matches))
+	for _, match := range matches {
+		expectedPaths = append(expectedPaths, filepath.Base(match))
+	}
+	sort.Strings(expectedPaths)
+
+	defaults := defaultDocumentationFiles()
+	actualPaths := make([]string, 0, len(defaults))
+	seenSlugs := map[string]struct{}{}
+	seenPaths := map[string]struct{}{}
+	lastOrder := -1
+	for _, entry := range defaults {
+		if _, ok := seenSlugs[entry.Slug]; ok {
+			t.Fatalf("duplicate default documentation slug %q", entry.Slug)
+		}
+		seenSlugs[entry.Slug] = struct{}{}
+		if _, ok := seenPaths[entry.Path]; ok {
+			t.Fatalf("duplicate default documentation path %q", entry.Path)
+		}
+		seenPaths[entry.Path] = struct{}{}
+		if entry.Order <= lastOrder {
+			t.Fatalf("expected strictly increasing documentation order, got %d after %d", entry.Order, lastOrder)
+		}
+		lastOrder = entry.Order
+		actualPaths = append(actualPaths, entry.Path)
+	}
+	sort.Strings(actualPaths)
+
+	if !reflect.DeepEqual(actualPaths, expectedPaths) {
+		t.Fatalf("default documentation files mismatch\nexpected: %v\nactual:   %v", expectedPaths, actualPaths)
+	}
+}
+
+func TestSampleConfigDocumentationFilesMatchDefaults(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve caller path")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
+
+	if _, err := Load(Options{
+		ConfigFile: filepath.Join(repoRoot, "backend", "config", "config.yaml"),
+		Watch:      false,
+	}); err != nil {
+		t.Fatalf("load sample config: %v", err)
+	}
+
+	cfg := Get()
+	defaults := defaultDocumentationFiles()
+	if len(cfg.Documentation.Files) != len(defaults) {
+		t.Fatalf("expected %d documentation files in sample config, got %d", len(defaults), len(cfg.Documentation.Files))
+	}
+	for i, expected := range defaults {
+		actual := cfg.Documentation.Files[i]
+		if actual.Slug != expected.Slug || actual.Title != expected.Title || actual.Path != expected.Path || actual.Order != expected.Order {
+			t.Fatalf("sample config documentation entry %d mismatch: expected %+v, got %+v", i, expected, actual)
+		}
 	}
 }
 
