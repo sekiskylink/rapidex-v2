@@ -34,6 +34,10 @@ type updateRapidexWebhookMappingsRequest struct {
 	Mappings           []RapidexWebhookMappingConfig `json:"mappings"`
 }
 
+type updateRapidexPartialReportParsersRequest struct {
+	Parsers []RapidexPartialReportParserConfig `json:"parsers"`
+}
+
 type importRapidexWebhookMappingsRequest struct {
 	YAML string `json:"yaml"`
 }
@@ -158,6 +162,15 @@ func (h *Handler) GetRapidexWebhookMappings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
+func (h *Handler) GetRapidexPartialReportParsers(c *gin.Context) {
+	settings, err := h.service.GetRapidexPartialReportParsers(c.Request.Context())
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
 func (h *Handler) UpdateRapidexWebhookMappings(c *gin.Context) {
 	principal, ok := principalFromContext(c)
 	if !ok {
@@ -177,6 +190,31 @@ func (h *Handler) UpdateRapidexWebhookMappings(c *gin.Context) {
 		RapidProServerCode: req.RapidProServerCode,
 		Dhis2ServerCode:    req.Dhis2ServerCode,
 		Mappings:           req.Mappings,
+	}, actorUserID(principal))
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *Handler) UpdateRapidexPartialReportParsers(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	var req updateRapidexPartialReportParsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"body": []string{"invalid JSON payload"},
+		}))
+		return
+	}
+
+	settings, err := h.service.UpdateRapidexPartialReportParsers(c.Request.Context(), RapidexPartialReportParsersUpdateInput{
+		Parsers: req.Parsers,
 	}, actorUserID(principal))
 	if err != nil {
 		apperror.Write(c, err)

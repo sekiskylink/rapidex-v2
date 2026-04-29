@@ -206,6 +206,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		settingsGroup.GET("/rapidpro-reporter-sync/preview-reporters", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.ListRapidProReporterSyncPreviewReporters)
 		settingsGroup.GET("/rapidpro-reporter-sync/preview", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidProReporterSyncPreview)
 		settingsGroup.GET("/rapidex-webhook-mappings", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidexWebhookMappings)
+		settingsGroup.GET("/rapidex-partial-report-parsers", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidexPartialReportParsers)
 		settingsGroup.GET("/rapidex-webhook-mappings/metadata", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRapidexWebhookMetadata)
 		settingsGroup.GET("/rapidex-webhook-mappings/export-yaml", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.ExportRapidexWebhookMappingsYAML)
 		settingsGroup.GET("/runtime-config", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.SettingsHandler.GetRuntimeConfig)
@@ -215,6 +216,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		settingsGroup.POST("/rapidex-webhook-mappings/import-yaml", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.ImportRapidexWebhookMappingsYAML)
 		settingsGroup.PUT("/rapidpro-reporter-sync", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateRapidProReporterSync)
 		settingsGroup.PUT("/rapidex-webhook-mappings", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateRapidexWebhookMappings)
+		settingsGroup.PUT("/rapidex-partial-report-parsers", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.SettingsHandler.UpdateRapidexPartialReportParsers)
 		if deps.ModuleFlagsHandler != nil {
 			settingsGroup.GET("/module-enablement", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsRead), deps.ModuleFlagsHandler.GetEffective)
 			settingsGroup.PUT("/module-enablement", middleware.RequirePermission(deps.RBACService, rbac.PermissionSettingsWrite, middleware.WithAdminRoleOverride()), deps.ModuleFlagsHandler.UpdateRuntimeOverrides)

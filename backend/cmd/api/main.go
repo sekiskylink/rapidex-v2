@@ -222,7 +222,8 @@ func run() error {
 		WithRecentReportsLookup(requests.NewRepository(database)).
 		WithScopeResolver(sukumadUserOrgUnitService)
 	settingsService = settingsService.WithRapidProPreviewProvider(sukumadReporterService)
-	rapidexIntegrationService := rapidex.NewIntegrationService(settings.NewRapidexWebhookMappingProvider(settingsRepo), sukumadReporterService, rapidexRequestCreator{service: sukumadRequestService}, sukumadServerService)
+	rapidexIntegrationService := rapidex.NewIntegrationService(settings.NewRapidexWebhookMappingProvider(settingsRepo), sukumadReporterService, rapidexRequestCreator{service: sukumadRequestService}, sukumadServerService).
+		WithPartialReportParserProvider(settings.NewRapidexPartialReportParserProvider(settingsRepo))
 	sukumadDocumentationService := documentation.NewService(func() documentation.SourceConfig {
 		cfg := config.Get()
 		files := make([]documentation.SourceFile, 0, len(cfg.Documentation.Files))

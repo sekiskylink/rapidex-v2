@@ -1,5 +1,43 @@
 # Status
 
+## Update — RapidEx Partial Report Parser Endpoint (Complete)
+
+### What changed
+- Added a backend RapidEx parser utility endpoint at `POST /api/v1/rapidex/parse-report` that accepts raw report text and returns ordered values based on backend-configured indicator positions.
+- Added reusable partial-report parsing logic under the RapidEx backend module to support:
+  - arbitrary indicator ordering
+  - missing indicators filled with `0`
+  - mixed delimiters (`.`, `,`, whitespace)
+  - merged tokens such as `ma2`
+  - unknown indicators ignored but reported in response metadata
+- Added RapidEx settings storage and provider support for parser rules keyed by report keyword, with read/write routes at:
+  - `GET /api/v1/settings/rapidex-partial-report-parsers`
+  - `PUT /api/v1/settings/rapidex-partial-report-parsers`
+- Wired the RapidEx integration service to resolve parser config from settings so the same parsing logic can be reused by future webhook ingestion work.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-29-rapidex-partial-report-parser.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - parser unit coverage for ordered, partial, mixed-delimiter, merged-token, unknown-indicator, and malformed-message cases
+  - settings service coverage for parser normalization, sorting, duplicate-keyword rejection, and provider lookup
+  - router coverage for parser settings read/write routes
+  - router coverage for `POST /api/v1/rapidex/parse-report` with API-token auth and validation failure handling
+
+### Verification summary
+- Backend focused parser/settings suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/rapidex ./internal/settings`)
+- Backend focused rapidex/router suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run 'TestRapidexParseReportRouteAcceptsAPITokenAndReturnsOrderedValues|TestRapidexParseReportRouteReturnsValidationErrorForUnknownKeyword|TestRapidexWebhookRouteAcceptsAPITokenAndQueuesRequest|TestRapidexWebhookRouteReturnsValidationError|TestRapidexPartialReportParsersReadRouteAcceptsSettingsReader|TestRapidexPartialReportParsersUpdateRouteAcceptsSettingsWriter|TestRapidexWebhookMappingsReadRouteAcceptsSettingsReader|TestRapidexWebhookMappingsUpdateRouteAcceptsSettingsWriter'`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Web and desktop do not yet expose a UI for managing partial-report parser rules; the backend settings routes are available for integration.
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this RapidEx parser change.
+
 ## Update — API Token Copy and Confirmed Delete (Complete)
 
 ### What changed

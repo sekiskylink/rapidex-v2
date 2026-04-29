@@ -327,6 +327,64 @@ func TestRapidexWebhookMappingsUpdateRouteAcceptsSettingsWriter(t *testing.T) {
 	}
 }
 
+func TestRapidexPartialReportParsersReadRouteAcceptsSettingsReader(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(205, "reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		205: {"settings.read"},
+	})
+	repo := &fakeSettingsRepo{
+		values: map[string][]byte{
+			"rapidex::partial_report_parsers": []byte(`{"parsers":[{"keyword":"cases","indicators":["ma","dy","tf"]}]}`),
+		},
+	}
+	handler := settings.NewHandler(settings.NewService(repo, nil))
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/rapidex-partial-report-parsers", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"keyword":"cases"`) {
+		t.Fatalf("expected partial report parser payload, got %s", w.Body.String())
+	}
+}
+
+func TestRapidexPartialReportParsersUpdateRouteAcceptsSettingsWriter(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(206, "writer", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		206: {"settings.write"},
+	})
+	handler := settings.NewHandler(settings.NewService(&fakeSettingsRepo{}, nil))
+	router := newRouter(AppDeps{
+		JWTManager:      jwt,
+		RBACService:     rbacService,
+		SettingsHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/rapidex-partial-report-parsers", strings.NewReader(`{"parsers":[{"keyword":"cases","indicators":["ma","dy","tf"]}]}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"keyword":"cases"`) {
+		t.Fatalf("expected updated parser payload, got %s", w.Body.String())
+	}
+}
+
 func rbacServiceWithPermissions(perms map[int64][]string) *rbac.Service {
 	roleMap := map[int64][]rbac.Role{}
 	permMap := map[int64][]rbac.Permission{}

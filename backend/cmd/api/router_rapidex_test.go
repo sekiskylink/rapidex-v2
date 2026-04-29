@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -389,6 +390,84 @@ func TestRapidexWebhookRouteReturnsValidationError(t *testing.T) {
 	}
 }
 
+func TestRapidexParseReportRouteAcceptsAPITokenAndReturnsOrderedValues(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.ModuleFlagsProvider = func() map[string]bool { return map[string]bool{"requests": true} }
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_requestswrite_parse"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        54,
+		Name:      "rapidex-parse",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[54] = []auth.APITokenPermission{{APITokenID: 54, Permission: rbac.PermissionRequestsWrite}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+	deps.RapidexService = rapidex.NewIntegrationService(nil, nil, nil, rapidexRouteServerResolver{}).
+		WithPartialReportParserProvider(rapidexRouteParserProvider{
+			config: rapidex.PartialReportParserConfig{Keyword: "cases", Indicators: []string{"ma", "dy", "tf"}},
+			ok:     true,
+		})
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rapidex/parse-report", bytes.NewReader([]byte(`{"message":"cases.tf.1.dy.4.ma.2"}`)))
+	req.Header.Set("X-API-Token", plain)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"orderedValueString":"2.4.1"`) {
+		t.Fatalf("expected orderedValueString 2.4.1, got %s", w.Body.String())
+	}
+}
+
+func TestRapidexParseReportRouteReturnsValidationErrorForUnknownKeyword(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.ModuleFlagsProvider = func() map[string]bool { return map[string]bool{"requests": true} }
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_requestswrite_parse_invalid"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        55,
+		Name:      "rapidex-parse",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[55] = []auth.APITokenPermission{{APITokenID: 55, Permission: rbac.PermissionRequestsWrite}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+	deps.RapidexService = rapidex.NewIntegrationService(nil, nil, nil, rapidexRouteServerResolver{}).
+		WithPartialReportParserProvider(rapidexRouteParserProvider{})
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rapidex/parse-report", bytes.NewReader([]byte(`{"message":"cases.tf.1.dy.4.ma.2"}`)))
+	req.Header.Set("X-API-Token", plain)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 type rapidexRouteMappingProvider struct {
 	binding rapidex.WebhookBinding
 	ok      bool
@@ -397,6 +476,16 @@ type rapidexRouteMappingProvider struct {
 
 func (p rapidexRouteMappingProvider) GetByFlowUUID(context.Context, string) (rapidex.WebhookBinding, bool, error) {
 	return p.binding, p.ok, p.err
+}
+
+type rapidexRouteParserProvider struct {
+	config rapidex.PartialReportParserConfig
+	ok     bool
+	err    error
+}
+
+func (p rapidexRouteParserProvider) GetByKeyword(context.Context, string) (rapidex.PartialReportParserConfig, bool, error) {
+	return p.config, p.ok, p.err
 }
 
 type rapidexRouteRequestCreator struct {

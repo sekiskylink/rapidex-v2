@@ -430,6 +430,73 @@ func TestUpdateRapidexWebhookMappingsRejectsDuplicateFlowUUID(t *testing.T) {
 	}
 }
 
+func TestUpdateRapidexPartialReportParsersNormalizesAndSortsParsers(t *testing.T) {
+	repo := newFakeRepo()
+	service := NewService(repo, nil)
+
+	got, err := service.UpdateRapidexPartialReportParsers(context.Background(), RapidexPartialReportParsersUpdateInput{
+		Parsers: []rapidex.PartialReportParserConfig{
+			{Keyword: " Deaths ", Indicators: []string{" tf ", " dy "}},
+			{Keyword: " Cases ", Indicators: []string{" ma ", " dy ", " tf "}},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("update rapidex partial report parsers: %v", err)
+	}
+	if len(got.Parsers) != 2 {
+		t.Fatalf("expected 2 parsers, got %#v", got.Parsers)
+	}
+	if got.Parsers[0].Keyword != "cases" || got.Parsers[1].Keyword != "deaths" {
+		t.Fatalf("expected parsers sorted by keyword, got %#v", got.Parsers)
+	}
+	if got.Parsers[0].Indicators[0] != "ma" || got.Parsers[0].Indicators[2] != "tf" {
+		t.Fatalf("expected trimmed indicators, got %#v", got.Parsers[0])
+	}
+	if !got.Validation.IsValid {
+		t.Fatalf("expected valid parser settings, got %#v", got.Validation)
+	}
+}
+
+func TestUpdateRapidexPartialReportParsersRejectsDuplicateKeyword(t *testing.T) {
+	service := NewService(newFakeRepo(), nil)
+
+	_, err := service.UpdateRapidexPartialReportParsers(context.Background(), RapidexPartialReportParsersUpdateInput{
+		Parsers: []rapidex.PartialReportParserConfig{
+			{Keyword: "cases", Indicators: []string{"ma"}},
+			{Keyword: "cases", Indicators: []string{"dy"}},
+		},
+	}, nil)
+	if err == nil {
+		t.Fatal("expected duplicate keyword validation error")
+	}
+}
+
+func TestRapidexPartialReportParserProviderReturnsParserByKeyword(t *testing.T) {
+	repo := newFakeRepo()
+	payload := rapidexPartialReportParsersStored{
+		Parsers: []rapidex.PartialReportParserConfig{
+			{Keyword: "cases", Indicators: []string{"ma", "dy", "tf"}},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal parser payload: %v", err)
+	}
+	repo.items["rapidex::partial_report_parsers"] = raw
+
+	provider := NewRapidexPartialReportParserProvider(repo)
+	got, ok, err := provider.GetByKeyword(context.Background(), "cases")
+	if err != nil {
+		t.Fatalf("get parser by keyword: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected parser to be found")
+	}
+	if got.Keyword != "cases" || len(got.Indicators) != 3 {
+		t.Fatalf("unexpected parser %#v", got)
+	}
+}
+
 func TestImportAndExportRapidexWebhookMappingsYAML(t *testing.T) {
 	repo := newFakeRepo()
 	service := NewService(repo, nil)

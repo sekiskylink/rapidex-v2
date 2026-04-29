@@ -20,6 +20,7 @@ import (
 // request engine.
 type IntegrationService struct {
 	mappingProvider MappingProvider
+	parserProvider  PartialReportParserProvider
 	// reporterSvc remains reserved for later reporter-based org unit override
 	// work. The current milestone intentionally queues using the saved mapping.
 	reporterSvc interface{}
@@ -48,6 +49,11 @@ func NewIntegrationService(provider MappingProvider, reporterSvc interface{}, re
 		requestSvc:      requestSvc,
 		serverSvc:       serverSvc,
 	}
+}
+
+func (s *IntegrationService) WithPartialReportParserProvider(provider PartialReportParserProvider) *IntegrationService {
+	s.parserProvider = provider
+	return s
 }
 
 // ProcessWebhook processes a RapidPro webhook event. It looks up the mapping
@@ -116,6 +122,43 @@ func (s *IntegrationService) ProcessWebhook(ctx context.Context, webhook RapidPr
 		return err
 	}
 	return nil
+}
+
+func (s *IntegrationService) ParseReport(ctx context.Context, message string) (PartialReportParseResult, error) {
+	if strings.TrimSpace(message) == "" {
+		return PartialReportParseResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"message": []string{"is required"},
+		})
+	}
+	if s.parserProvider == nil {
+		return PartialReportParseResult{}, fmt.Errorf("rapidex partial report parser is not configured")
+	}
+
+	tokens := tokenizePartialReportMessage(message)
+	if len(tokens) == 0 {
+		return PartialReportParseResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"message": []string{"is required"},
+		})
+	}
+
+	keyword := normalizePartialReportToken(tokens[0])
+	cfg, ok, err := s.parserProvider.GetByKeyword(ctx, keyword)
+	if err != nil {
+		return PartialReportParseResult{}, fmt.Errorf("load partial report parser: %w", err)
+	}
+	if !ok {
+		return PartialReportParseResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"message": []string{fmt.Sprintf("no parser configured for keyword %s", keyword)},
+		})
+	}
+
+	result, err := ParsePartialReportMessage(message, cfg)
+	if err != nil {
+		return PartialReportParseResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"message": []string{err.Error()},
+		})
+	}
+	return result, nil
 }
 
 func validateAggregatePayload(payload AggregatePayload, binding WebhookBinding) map[string]any {
