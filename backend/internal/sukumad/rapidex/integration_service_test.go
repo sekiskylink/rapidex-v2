@@ -136,6 +136,76 @@ func TestProcessWebhookQueuesAggregatePayload(t *testing.T) {
 	}
 }
 
+func TestProcessWebhookUnwrapsNestedValueFields(t *testing.T) {
+	requestCreator := &fakeExternalRequestCreator{}
+	service := NewIntegrationService(fakeMappingProvider{
+		ok: true,
+		binding: WebhookBinding{
+			MappingConfig: MappingConfig{
+				FlowUUID:   "flow-1",
+				Dataset:    "ds-1",
+				OrgUnitVar: "facility",
+				PeriodVar:  "period",
+				PayloadAOC: "HllvX50cXC0",
+				Mappings: []DataValueMapping{
+					{Field: "value_a", DataElement: "de-1", CategoryOptionCombo: "HllvX50cXC0"},
+					{Field: "value_b", DataElement: "de-2", CategoryOptionCombo: "HllvX50cXC0"},
+				},
+			},
+			DHIS2ServerCode: "dhis2-main",
+		},
+	}, nil, requestCreator, &fakeServerResolver{record: sukumadserver.Record{UID: "dhis2-uid"}})
+
+	webhook := RapidProWebhook{
+		FlowUUID: "flow-1",
+		Results: map[string]interface{}{
+			"facility": map[string]interface{}{
+				"category": "All Responses",
+				"value":    "FvewOonC8lS",
+			},
+			"period": map[string]interface{}{
+				"category": "All Responses",
+				"value":    "2026W17",
+			},
+			"value_a": map[string]interface{}{
+				"category": "OPD New Attendance",
+				"value":    "1",
+			},
+			"value_b": map[string]interface{}{
+				"category": "OPD Total Attendance",
+				"value":    "3",
+			},
+		},
+	}
+
+	if err := service.ProcessWebhook(context.Background(), webhook); err != nil {
+		t.Fatalf("process webhook: %v", err)
+	}
+	if len(requestCreator.calls) != 1 {
+		t.Fatalf("expected 1 request create call, got %d", len(requestCreator.calls))
+	}
+
+	payload, ok := requestCreator.calls[0].Payload.(AggregatePayload)
+	if !ok {
+		t.Fatalf("expected aggregate payload, got %T", requestCreator.calls[0].Payload)
+	}
+	if payload.OrgUnit != "FvewOonC8lS" {
+		t.Fatalf("expected mapped orgUnit value, got %q", payload.OrgUnit)
+	}
+	if payload.Period != "2026W17" {
+		t.Fatalf("expected mapped period value, got %q", payload.Period)
+	}
+	if len(payload.DataValues) != 2 {
+		t.Fatalf("expected 2 data values, got %+v", payload.DataValues)
+	}
+	if payload.DataValues[0].Value != "1" {
+		t.Fatalf("expected first nested value to unwrap, got %q", payload.DataValues[0].Value)
+	}
+	if payload.DataValues[1].Value != "3" {
+		t.Fatalf("expected second nested value to unwrap, got %q", payload.DataValues[1].Value)
+	}
+}
+
 func TestProcessWebhookRejectsInvalidMappedPayload(t *testing.T) {
 	service := NewIntegrationService(fakeMappingProvider{
 		ok: true,
