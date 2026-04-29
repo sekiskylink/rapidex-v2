@@ -47,6 +47,10 @@ func (s *Service) List(ctx context.Context, query ListQuery) (ListResult, error)
 	return s.repo.List(ctx, query)
 }
 
+func (s *Service) ListLevels(ctx context.Context) ([]Level, error) {
+	return s.repo.ListLevels(ctx)
+}
+
 func (s *Service) ListForUser(ctx context.Context, userID int64, query ListQuery) (ListResult, error) {
 	scopedQuery, err := s.applyScope(ctx, userID, query)
 	if err != nil {

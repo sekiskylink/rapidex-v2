@@ -71,6 +71,10 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 		search := fmt.Sprintf("%%%s%%", strings.TrimSpace(query.Search))
 		args = append(args, search, search, search)
 	}
+	if query.HierarchyLevel != nil {
+		where += " AND hierarchy_level = ?"
+		args = append(args, *query.HierarchyLevel)
+	}
 	if query.ParentID != nil {
 		where += " AND parent_id = ?"
 		args = append(args, *query.ParentID)
@@ -134,6 +138,18 @@ func (r *PgRepository) List(ctx context.Context, query ListQuery) (ListResult, e
 	result.Total = total
 	result.Items = convertOrgUnitRows(rows)
 	return result, nil
+}
+
+func (r *PgRepository) ListLevels(ctx context.Context) ([]Level, error) {
+	rows := []Level{}
+	if err := r.db.SelectContext(ctx, &rows, `
+		SELECT id, uid, code, name, level
+		FROM org_unit_levels
+		ORDER BY level ASC, LOWER(name) ASC, id ASC
+	`); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (r *PgRepository) GetByID(ctx context.Context, id int64) (OrgUnit, error) {

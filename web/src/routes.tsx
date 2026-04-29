@@ -41,6 +41,7 @@ import {
   normalizeJobsRouteSearch,
   normalizeSchedulerRouteSearch,
   normalizeObservabilityRouteSearch,
+  normalizeOrgUnitsRouteSearch,
 } from './pages/listRouteSearch'
 import { getModuleLabelForPath } from './registry/moduleEnablement'
 import { getRouteAccessState } from './registry/navigation'
@@ -429,6 +430,8 @@ const documentationRoute = createRoute({
 const orgUnitsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/orgunits',
+  validateSearch: (search: Record<string, unknown>) =>
+    normalizeOrgUnitsRouteSearch(search),
   component: () => {
     const state = getRouteAccessState('/orgunits', getAuthSnapshot().user)
     if (state === 'allowed') {

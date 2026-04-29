@@ -91,3 +91,75 @@ func TestPgRepositoryListOrdersChildrenAlphabetically(t *testing.T) {
 		t.Fatalf("unmet sqlmock expectations: %v", err)
 	}
 }
+
+func TestPgRepositoryListFiltersByHierarchyLevel(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	repo := NewPgRepository(sqlx.NewDb(sqlDB, "sqlmock"))
+
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM org_units WHERE 1=1 AND hierarchy_level = \?`).
+		WithArgs(2).
+		WillReturnRows(countRows)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "uid", "code", "name", "short_name", "description", "parent_id", "hierarchy_level", "path",
+		"display_path", "address", "email", "url", "phone_number", "extras", "attribute_values",
+		"opening_date", "deleted", "has_children", "last_sync_date", "created_at", "updated_at",
+	}).
+		AddRow(5, "uid-5", "HC-1", "Alpha Health Centre", "Alpha Health Centre", "", 9, 2, "/uid-9/uid-5", "Uganda / Kampala", "", "", "", "", []byte(`{}`), []byte(`{}`), nil, false, false, nil, testTime, testTime)
+
+	mock.ExpectQuery(`(?s)SELECT id, uid, code, name, short_name, description, parent_id, hierarchy_level, path,.*FROM org_units.*WHERE 1=1 AND hierarchy_level = \?.*ORDER BY hierarchy_level ASC, COALESCE\(parent_id, 0\) ASC, LOWER\(name\) ASC, id ASC.*LIMIT 20 OFFSET 0`).
+		WithArgs(2).
+		WillReturnRows(rows)
+
+	level := 2
+	result, err := repo.List(context.Background(), ListQuery{HierarchyLevel: &level})
+	if err != nil {
+		t.Fatalf("list org units: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].HierarchyLevel != 2 {
+		t.Fatalf("expected hierarchy level 2, got %+v", result.Items[0])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sqlmock expectations: %v", err)
+	}
+}
+
+func TestPgRepositoryListLevelsOrdersByLevel(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	repo := NewPgRepository(sqlx.NewDb(sqlDB, "sqlmock"))
+
+	rows := sqlmock.NewRows([]string{"id", "uid", "code", "name", "level"}).
+		AddRow(2, "uid-2", "level-2", "District", 2).
+		AddRow(3, "uid-3", "level-3", "Facility", 3)
+
+	mock.ExpectQuery(`(?s)SELECT id, uid, code, name, level FROM org_unit_levels ORDER BY level ASC, LOWER\(name\) ASC, id ASC`).
+		WillReturnRows(rows)
+
+	levels, err := repo.ListLevels(context.Background())
+	if err != nil {
+		t.Fatalf("list org unit levels: %v", err)
+	}
+	if len(levels) != 2 {
+		t.Fatalf("expected 2 levels, got %d", len(levels))
+	}
+	if levels[0].Level != 2 || levels[1].Level != 3 {
+		t.Fatalf("expected levels ordered ascending, got %+v", levels)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sqlmock expectations: %v", err)
+	}
+}

@@ -142,6 +142,69 @@ describe('org units page', () => {
     expect(await screen.findByText('Alpha Health Centre')).toBeInTheDocument()
   })
 
+  it('filters facilities by level and reloads when cleared', async () => {
+    authenticate(['orgunits.read'])
+    apiRequestSpy.mockImplementation(async (path: string) => {
+      if (path === '/orgunits/levels') {
+        return {
+          items: [
+            { id: 2, uid: 'level-2', code: 'district', name: 'District', level: 2 },
+            { id: 4, uid: 'level-4', code: 'facility', name: 'Facility', level: 4 },
+          ],
+        }
+      }
+      if (path === '/orgunits?page=0&pageSize=200') {
+        return {
+          items: [
+            buildOrgUnit(),
+            buildOrgUnit({ id: 13, uid: 'ou-13', code: 'FAC-13', name: 'Central Hospital', hierarchyLevel: 3 }),
+          ],
+          totalCount: 2,
+          page: 0,
+          pageSize: 200,
+        }
+      }
+      if (path === '/orgunits?page=0&pageSize=200&level=2') {
+        return {
+          items: [
+            buildOrgUnit(),
+            buildOrgUnit({ id: 12, uid: 'ou-12', code: 'FAC-12', name: 'Bravo Health Centre' }),
+          ],
+          totalCount: 2,
+          page: 0,
+          pageSize: 200,
+        }
+      }
+      if (path === '/orgunits?page=0&pageSize=200&level=4') {
+        return { items: [], totalCount: 0, page: 0, pageSize: 200 }
+      }
+      if (path === '/orgunits/sync-state') {
+        return {}
+      }
+      return {}
+    })
+
+    renderRoute('/orgunits')
+
+    await screen.findByRole('combobox', { name: 'Level' })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Level' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Level 2' }))
+
+    await waitFor(() => expect(apiRequestSpy).toHaveBeenCalledWith('/orgunits?page=0&pageSize=200&level=2'))
+    expect(screen.getAllByText('Kampala District').length).toBeGreaterThan(0)
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Level' }))
+    expect(await screen.findByRole('option', { name: 'Level 4' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: 'Level 4' }))
+
+    await waitFor(() => expect(apiRequestSpy).toHaveBeenCalledWith('/orgunits?page=0&pageSize=200&level=4'))
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Level' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'All levels' }))
+
+    await waitFor(() => expect(apiRequestSpy).toHaveBeenCalledWith('/orgunits?page=0&pageSize=200'))
+  })
+
   it('opens facility details from the browse hierarchy', async () => {
     authenticate(['orgunits.read'])
     apiRequestSpy.mockImplementation(async (path: string) => {

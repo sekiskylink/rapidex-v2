@@ -120,6 +120,10 @@ documentation:
       title: "Scheduler Maintenance Jobs"
       path: "scheduler-maintenance-jobs.md"
       order: 140
+    - slug: "scheduler-ui-details-and-actions"
+      title: "Scheduler UI Details and Actions"
+      path: "scheduler-ui-details-and-actions.md"
+      order: 145
     - slug: "sukumad-overview"
       title: "Sukumad Overview"
       path: "sukumad-overview.md"

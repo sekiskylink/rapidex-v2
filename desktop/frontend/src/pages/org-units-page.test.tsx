@@ -170,6 +170,100 @@ describe('desktop org units page', () => {
     expect(await screen.findByText('Alpha Health Centre')).toBeInTheDocument()
   })
 
+  it('filters facilities by level and reloads when cleared', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/v1/auth/me')) {
+        return new Response(JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['orgunits.read'] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/orgunits/levels')) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              { id: 2, uid: 'level-2', code: 'district', name: 'District', level: 2 },
+              { id: 4, uid: 'level-4', code: 'facility', name: 'Facility', level: 4 },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.endsWith('/api/v1/orgunits?page=0&pageSize=200')) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              buildOrgUnit(),
+              buildOrgUnit({ id: 13, uid: 'ou-13', code: 'FAC-13', name: 'Central Hospital', hierarchyLevel: 3 }),
+            ],
+            totalCount: 2,
+            page: 0,
+            pageSize: 200,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.endsWith('/api/v1/orgunits?page=0&pageSize=200&level=2')) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              buildOrgUnit(),
+              buildOrgUnit({ id: 12, uid: 'ou-12', code: 'FAC-12', name: 'Bravo Health Centre' }),
+            ],
+            totalCount: 2,
+            page: 0,
+            pageSize: 200,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.endsWith('/api/v1/orgunits?page=0&pageSize=200&level=4')) {
+        return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 200 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/api/v1/orgunits/sync-state')) {
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderRoute('/orgunits', store)
+
+    await screen.findByRole('combobox', { name: 'Level' })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Level' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Level 2' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/orgunits?page=0&pageSize=200&level=2'), expect.anything()))
+    expect(screen.getAllByText('Kampala District').length).toBeGreaterThan(0)
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Level' }))
+    expect(await screen.findByRole('option', { name: 'Level 4' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: 'Level 4' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/orgunits?page=0&pageSize=200&level=4'), expect.anything()))
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Level' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'All levels' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/orgunits?page=0&pageSize=200'), expect.anything()))
+  })
+
   it('opens facility details from the browse hierarchy', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

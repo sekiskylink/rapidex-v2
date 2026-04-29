@@ -1,5 +1,68 @@
 # Status
 
+## Update — Facilities Level Filter Source Stabilization (Complete)
+
+### What changed
+- Changed the Facilities `Level` dropdown in both web and desktop to load its options from backend `org_unit_levels` instead of inferring them from the currently loaded org units.
+- Added `GET /api/v1/orgunits/levels` so the clients can fetch the full configured level catalog through the standard Sukumad orgunit stack.
+- Kept the level dropdown stable after filtering: selecting a level no longer narrows the available level options to the filtered result set.
+- Refreshed the saved Facilities milestone prompt traceability with a follow-up copy in `docs/prompts/2026-04-29-facilities-level-filter-source.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - org-unit repository coverage for listing configured levels from `org_unit_levels`
+  - router coverage for the new `/api/v1/orgunits/levels` endpoint
+- Web:
+  - Facilities page coverage proving the dropdown still includes levels sourced from the backend after applying a filter
+- Desktop:
+  - matching Facilities page coverage proving the dropdown remains stable after filtering
+
+### Verification summary
+- Backend focused org-unit/router suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/orgunit ./cmd/api`)
+- Web focused Facilities suite: PASS (`cd web && npm test -- --run src/pages/org-units-page.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused Facilities suite: PASS (`cd desktop/frontend && npm test -- --run src/pages/org-units-page.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this Facilities change.
+
+## Milestone — Facilities Level Filter (Complete)
+
+### What changed
+- Added an optional `level` query filter to the backend Facilities/org-units list route and repository so operators can request a single hierarchy level directly from `GET /api/v1/orgunits`.
+- Updated both web and desktop Facilities pages to add a single-select `Level` filter beside the existing search and hierarchy-browse controls.
+- Wired the Facilities filter state through each client’s route-search handling so changing the filter reloads the main Facilities grid with or without `level=<n>`.
+- Kept facility search and hierarchy browsing unfiltered so operators can still find and inspect org units outside the current grid filter.
+- Fixed backend documentation defaults/sample config drift by registering `scheduler-ui-details-and-actions.md`, which was required for the full backend suite to pass after recent documentation additions.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-29-facilities-level-filter.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - org-unit repository coverage for exact hierarchy-level filtering
+  - router coverage proving `level` is parsed and passed through on Facilities list requests
+- Web:
+  - Facilities page coverage for selecting a level filter and clearing back to `All levels`
+  - existing Facilities and route smoke coverage rerun
+- Desktop:
+  - matching Facilities page coverage for selecting and clearing the level filter
+  - existing route smoke coverage rerun
+
+### Verification summary
+- Backend focused org-unit/router suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/orgunit ./cmd/api`)
+- Backend route regression: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run TestRapidexOrgUnitRoutePassesHierarchyQueryFlags`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused Facilities + route smoke suites: PASS (`cd web && npm test -- --run src/pages/org-units-page.test.tsx src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused Facilities + route smoke suites: PASS (`cd desktop/frontend && npm test -- --run src/pages/org-units-page.test.tsx src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this Facilities change.
+
 ## Milestone — Scheduler UI View/Delete and Post-Save Navigation (Complete)
 
 ### What changed

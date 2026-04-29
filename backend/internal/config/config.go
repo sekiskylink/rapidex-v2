@@ -719,6 +719,7 @@ func defaultDocumentationFiles() []struct {
 		{Slug: "worker-process-logging", Title: "Worker Process Logging", Path: "worker-process-logging.md", Order: 120},
 		{Slug: "scheduler-architecture", Title: "Scheduler Architecture", Path: "scheduler-architecture.md", Order: 130},
 		{Slug: "scheduler-maintenance-jobs", Title: "Scheduler Maintenance Jobs", Path: "scheduler-maintenance-jobs.md", Order: 140},
+		{Slug: "scheduler-ui-details-and-actions", Title: "Scheduler UI Details and Actions", Path: "scheduler-ui-details-and-actions.md", Order: 145},
 		{Slug: "sukumad-overview", Title: "Sukumad Overview", Path: "sukumad-overview.md", Order: 150},
 		{Slug: "sukumad-architecture", Title: "Sukumad Architecture", Path: "sukumad-archtecture.md", Order: 160},
 		{Slug: "sukumad-db-architecture", Title: "Sukumad DB Architecture", Path: "sukumad-db-architecture.md", Order: 170},

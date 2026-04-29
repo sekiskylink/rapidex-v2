@@ -32,6 +32,10 @@ export interface ObservabilityRouteSearch {
   workerId?: string
 }
 
+export interface OrgUnitsRouteSearch {
+  level?: string
+}
+
 function readString(search: Record<string, unknown>, key: string) {
   const value = search[key]
   return typeof value === 'string' ? value.trim() : ''
@@ -82,5 +86,11 @@ export function normalizeObservabilityRouteSearch(search: Record<string, unknown
     deliveryId: toOptional(readString(search, 'deliveryId')),
     jobId: toOptional(readString(search, 'jobId')),
     workerId: toOptional(readString(search, 'workerId')),
+  }
+}
+
+export function normalizeOrgUnitsRouteSearch(search: Record<string, unknown>): OrgUnitsRouteSearch {
+  return {
+    level: toOptional(readString(search, 'level')),
   }
 }

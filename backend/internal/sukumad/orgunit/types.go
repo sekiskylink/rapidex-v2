@@ -150,6 +150,7 @@ type ListQuery struct {
 	Page            int
 	PageSize        int
 	Search          string
+	HierarchyLevel  *int
 	ParentID        *int64
 	RootsOnly       bool
 	LeafOnly        bool

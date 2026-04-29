@@ -21,10 +21,12 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { DataGrid } from '@mui/x-data-grid'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { getAuthSnapshot } from '../auth/state'
 import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { apiRequest } from '../lib/api'
 import { AddCircleRoundedIcon } from '../ui/icons'
+import type { OrgUnitsRouteSearch } from './listRouteSearch'
 import { OrgUnitDetailsDialog } from './reporter-dialogs'
 
 interface OrgUnit {
@@ -53,6 +55,18 @@ interface OrgUnit {
 interface OrgUnitListResponse {
   items: OrgUnit[]
   totalCount: number
+}
+
+interface OrgUnitLevel {
+  id: number
+  uid: string
+  code: string
+  name: string
+  level: number
+}
+
+interface OrgUnitLevelListResponse {
+  items: OrgUnitLevel[]
 }
 
 interface SyncState {
@@ -194,11 +208,37 @@ function formatFacilityPath(unit: OrgUnit | null) {
     .join(' / ')
 }
 
+function getImmediateParentLabel(unit: OrgUnit, items: OrgUnit[]) {
+  if (!unit.parentId) {
+    return ''
+  }
+  const inList = items.find((item) => item.id === unit.parentId)?.name
+  if (inList) {
+    return inList
+  }
+  const parts = formatFacilityPath(unit)
+    .split(' / ')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return parts.length > 0 ? parts[parts.length - 1] : ''
+}
+
 function sortOrgUnitsAlphabetically(items: OrgUnit[]) {
   return [...items].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
 }
 
+function normalizeLevelValue(value: string) {
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return ''
+  }
+  const parsed = Number.parseInt(trimmed, 10)
+  return Number.isNaN(parsed) || parsed <= 0 ? '' : String(parsed)
+}
+
 export function OrgUnitsPage() {
+  const navigate = useNavigate()
+  const routeSearch = useSearch({ strict: false }) as OrgUnitsRouteSearch
   const currentUser = getAuthSnapshot().user
   const [items, setItems] = React.useState<OrgUnit[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -216,6 +256,8 @@ export function OrgUnitsPage() {
   const [searchInput, setSearchInput] = React.useState('')
   const [searchOptions, setSearchOptions] = React.useState<OrgUnit[]>([])
   const [searchLoading, setSearchLoading] = React.useState(false)
+  const [levelOptions, setLevelOptions] = React.useState<number[]>([])
+  const [levelFilter, setLevelFilter] = React.useState(normalizeLevelValue(routeSearch.level ?? ''))
   const [browserOpen, setBrowserOpen] = React.useState(false)
   const [browserLoading, setBrowserLoading] = React.useState(false)
   const [browserTrail, setBrowserTrail] = React.useState<FacilityBrowserEntry[]>([])
@@ -225,7 +267,11 @@ export function OrgUnitsPage() {
     setLoading(true)
     setError('')
     try {
-      const response = await apiRequest<OrgUnitListResponse>('/orgunits?page=0&pageSize=200')
+      const query = new URLSearchParams({ page: '0', pageSize: '200' })
+      if (levelFilter) {
+        query.set('level', levelFilter)
+      }
+      const response = await apiRequest<OrgUnitListResponse>(`/orgunits?${query.toString()}`)
       setItems(response.items ?? [])
       const state = await apiRequest<SyncState>('/orgunits/sync-state')
       setSyncState(state)
@@ -234,11 +280,40 @@ export function OrgUnitsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [levelFilter])
 
   React.useEffect(() => {
     void load()
   }, [load])
+
+  const loadLevels = React.useCallback(async () => {
+    try {
+      const response = await apiRequest<OrgUnitLevelListResponse>('/orgunits/levels')
+      const nextLevels = (response.items ?? [])
+        .map((item) => item.level)
+        .filter((level) => Number.isInteger(level) && level > 0)
+        .sort((left, right) => left - right)
+      setLevelOptions((current) => (current.join(',') === nextLevels.join(',') ? current : nextLevels))
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load facility levels.')
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void loadLevels()
+  }, [loadLevels])
+
+  React.useEffect(() => {
+    setLevelFilter(normalizeLevelValue(routeSearch.level ?? ''))
+  }, [routeSearch.level])
+
+  React.useEffect(() => {
+    const nextLevel = levelFilter || undefined
+    if ((routeSearch.level ?? '') === (nextLevel ?? '')) {
+      return
+    }
+    void navigate({ to: '/orgunits', search: { level: nextLevel }, replace: true })
+  }, [levelFilter, navigate, routeSearch.level])
 
   const fetchSearchOptions = React.useCallback(async (search: string) => {
     const response = await apiRequest<OrgUnitListResponse>(`/orgunits?page=0&pageSize=20&search=${encodeURIComponent(search)}`)
@@ -308,7 +383,7 @@ export function OrgUnitsPage() {
         field: 'parentId',
         headerName: 'Parent',
         width: 180,
-        valueGetter: (_value, row) => items.find((item) => item.id === row.parentId)?.name ?? '',
+        valueGetter: (_value, row) => getImmediateParentLabel(row, items),
       },
       { field: 'phoneNumber', headerName: 'Phone', width: 150 },
       { field: 'path', headerName: 'UID Path', flex: 1.1, minWidth: 220 },
@@ -455,7 +530,7 @@ export function OrgUnitsPage() {
         }),
       })
       setSyncResult(response)
-      await load()
+      await Promise.all([load(), loadLevels()])
       if (!response.dryRun) {
         setSyncDialogOpen(false)
       }
@@ -588,6 +663,20 @@ export function OrgUnitsPage() {
           )}
           sx={{ flex: 1, minWidth: 280 }}
         />
+        <TextField
+          select
+          label="Level"
+          value={levelFilter}
+          onChange={(event) => setLevelFilter(normalizeLevelValue(event.target.value))}
+          sx={{ minWidth: { xs: '100%', lg: 180 } }}
+        >
+          <MenuItem value="">All levels</MenuItem>
+          {levelOptions.map((option) => (
+            <MenuItem key={option} value={String(option)}>
+              {`Level ${option}`}
+            </MenuItem>
+          ))}
+        </TextField>
         <Button variant="outlined" onClick={openBrowser} sx={{ minWidth: { lg: 180 } }}>
           Browse hierarchy
         </Button>

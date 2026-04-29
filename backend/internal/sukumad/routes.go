@@ -302,6 +302,12 @@ func registerOrgUnitRoutes(
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 		pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 		search := c.Query("search")
+		var hierarchyLevel *int
+		if level := c.Query("level"); level != "" {
+			if parsed, err := strconv.Atoi(level); err == nil {
+				hierarchyLevel = &parsed
+			}
+		}
 		rootsOnly, _ := strconv.ParseBool(c.DefaultQuery("rootsOnly", "false"))
 		leafOnly, _ := strconv.ParseBool(c.DefaultQuery("leafOnly", "false"))
 		var parentID *int64
@@ -311,13 +317,21 @@ func registerOrgUnitRoutes(
 			}
 		}
 		result, err := service.ListForUser(c.Request.Context(), userID, orgunit.ListQuery{
-			Page: page, PageSize: pageSize, Search: search, ParentID: parentID, RootsOnly: rootsOnly, LeafOnly: leafOnly,
+			Page: page, PageSize: pageSize, Search: search, HierarchyLevel: hierarchyLevel, ParentID: parentID, RootsOnly: rootsOnly, LeafOnly: leafOnly,
 		})
 		if err != nil {
 			apperror.Write(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, result)
+	})
+	group.GET("/orgunits/levels", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsRead), func(c *gin.Context) {
+		levels, err := service.ListLevels(c.Request.Context())
+		if err != nil {
+			apperror.Write(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"items": levels})
 	})
 	group.GET("/orgunits/sync-state", middleware.RequirePermission(rbacService, rbac.PermissionOrgUnitsRead), func(c *gin.Context) {
 		result, err := service.GetSyncState(c.Request.Context())

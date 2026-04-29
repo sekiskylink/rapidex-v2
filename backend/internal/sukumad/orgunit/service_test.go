@@ -13,6 +13,7 @@ type stubRepository struct {
 func (s *stubRepository) List(context.Context, ListQuery) (ListResult, error) {
 	return ListResult{}, nil
 }
+func (s *stubRepository) ListLevels(context.Context) ([]Level, error)        { return nil, nil }
 func (s *stubRepository) GetByID(context.Context, int64) (OrgUnit, error)    { return OrgUnit{}, nil }
 func (s *stubRepository) GetByUID(context.Context, string) (OrgUnit, error)  { return OrgUnit{}, nil }
 func (s *stubRepository) GetByCode(context.Context, string) (OrgUnit, error) { return OrgUnit{}, nil }
