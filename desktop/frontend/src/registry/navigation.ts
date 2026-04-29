@@ -38,6 +38,11 @@ export interface NavigationDefinition {
   visibleWhen?: (ctx: NavigationVisibilityContext) => boolean
 }
 
+export interface NavigationLabelField {
+  id: string
+  label: string
+}
+
 export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = [
   {
     id: 'dashboard',
@@ -215,6 +220,27 @@ export const authenticatedNavigationRegistry: readonly NavigationDefinition[] = 
     ],
   },
 ]
+
+function collectNavigationLabelFields(
+  definitions: readonly NavigationDefinition[],
+  fields: NavigationLabelField[],
+) {
+  for (const definition of definitions) {
+    fields.push({
+      id: definition.id,
+      label: `${definition.label} ${definition.path ? 'link' : 'menu'}`,
+    })
+    if (definition.children) {
+      collectNavigationLabelFields(definition.children, fields)
+    }
+  }
+}
+
+export function getEditableNavigationLabelFields() {
+  const fields: NavigationLabelField[] = []
+  collectNavigationLabelFields(authenticatedNavigationRegistry, fields)
+  return fields
+}
 
 function isVisible(definition: NavigationDefinition, ctx: NavigationVisibilityContext) {
   if (!isNavigationItemEnabled(definition.id)) {

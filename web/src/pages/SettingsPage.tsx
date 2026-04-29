@@ -27,6 +27,7 @@ import { getApiBaseUrlOverride, setApiBaseUrlOverride } from '../lib/apiBaseUrl'
 import { loadAuthSettings, saveAuthSettings, type AuthMode } from '../lib/authSettings'
 import { useAppNotify } from '../notifications/facade'
 import { hasPermission } from '../rbac/permissions'
+import { getEditableNavigationLabelFields } from '../registry/navigation'
 import type { ModuleEffectiveConfig } from '../registry/moduleEnablement'
 import { moduleRegistry } from '../registry/modules'
 import { type UiThemeMode } from '../ui/preferences'
@@ -229,23 +230,7 @@ interface CreateAPITokenResponse {
 
 type RuntimeConfigFormat = 'json' | 'yaml'
 
-const navigationLabelFields = [
-  { id: 'dashboard', label: 'Dashboard link' },
-  { id: 'settings', label: 'Settings link' },
-  { id: 'administration', label: 'Administration menu' },
-  { id: 'users', label: 'Users link' },
-  { id: 'roles', label: 'Roles link' },
-  { id: 'permissions', label: 'Permissions link' },
-  { id: 'audit', label: 'Audit link' },
-  { id: 'sukumad', label: 'Sukumad menu' },
-  { id: 'servers', label: 'Servers link' },
-  { id: 'requests', label: 'Requests link' },
-  { id: 'deliveries', label: 'Deliveries link' },
-  { id: 'jobs', label: 'Jobs link' },
-  { id: 'scheduler', label: 'Scheduler link' },
-  { id: 'observability', label: 'Observability link' },
-  { id: 'documentation', label: 'Documentation link' },
-] as const
+const navigationLabelFields = getEditableNavigationLabelFields()
 
 const rapidProReporterSourceOptions = [
   { key: 'name', label: 'Reporter Name' },

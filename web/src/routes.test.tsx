@@ -929,6 +929,13 @@ describe('web settings page', () => {
     renderWithRouter('/settings/general')
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    expect(screen.getByLabelText('General link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Branding link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Modules link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Integrations link')).toBeInTheDocument()
+    expect(screen.getByLabelText('About link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Facilities link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reporters link')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Forest' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Start with side navigation collapsed' }))

@@ -1814,6 +1814,13 @@ describe('app shell routes', () => {
     renderWithRouter('/settings/general', store)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+    expect(screen.getByLabelText('General link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Branding link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Modules link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Integrations link')).toBeInTheDocument()
+    expect(screen.getByLabelText('About link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Facilities link')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reporters link')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Scheduler link'), { target: { value: 'Timed Calls' } })
 
     await waitFor(() => {
