@@ -199,6 +199,7 @@ func registerSchedulerRoutes(
 	group.POST("/jobs", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.CreateJob)
 	group.GET("/jobs/:id", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerRead), handler.GetJob)
 	group.PUT("/jobs/:id", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.UpdateJob)
+	group.DELETE("/jobs/:id", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.DeleteJob)
 	group.POST("/jobs/:id/enable", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.EnableJob)
 	group.POST("/jobs/:id/disable", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.DisableJob)
 	group.POST("/jobs/:id/run-now", middleware.RequirePermission(rbacService, rbac.PermissionSchedulerWrite), handler.RunNow)

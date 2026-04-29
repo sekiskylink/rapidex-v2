@@ -220,23 +220,33 @@ describe('desktop scheduler pages', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        if (url.endsWith('/api/v1/scheduler/jobs/3')) {
+        if (url.includes('/api/v1/scheduler/jobs?')) {
           return new Response(
             JSON.stringify({
-              id: 3,
-              uid: 'sch-3',
-              code: 'cleanup',
-              name: 'Cleanup',
-              description: 'Cleanup job',
-              jobCategory: 'maintenance',
-              jobType: 'purge_old_logs',
-              scheduleType: 'cron',
-              scheduleExpr: '0 2 * * *',
-              timezone: 'UTC',
-              enabled: true,
-              allowConcurrentRuns: true,
-              config: { dryRun: false, batchSize: 500, maxAgeDays: 30 },
-              nextRunAt: '2026-04-19T02:00:00Z',
+              items: [
+                {
+                  id: 3,
+                  uid: 'sch-3',
+                  code: 'cleanup',
+                  name: 'Cleanup',
+                  description: 'Cleanup job',
+                  jobCategory: 'maintenance',
+                  jobType: 'purge_old_logs',
+                  scheduleType: 'cron',
+                  scheduleExpr: '0 2 * * *',
+                  timezone: 'UTC',
+                  enabled: true,
+                  allowConcurrentRuns: true,
+                  config: { dryRun: false, batchSize: 500, maxAgeDays: 30 },
+                  nextRunAt: '2026-04-19T02:00:00Z',
+                  latestRunStatus: '',
+                  createdAt: '2026-04-18T21:00:00Z',
+                  updatedAt: '2026-04-18T21:00:00Z',
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -274,6 +284,8 @@ describe('desktop scheduler pages', () => {
       scheduleExpr: '0 2 * * *',
       config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
     })
+    expect(await screen.findByRole('heading', { name: 'Scheduler', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByText('cleanup')).toBeInTheDocument()
   })
 
   it('submits URL call scheduled job config through backend API', async () => {
@@ -598,5 +610,235 @@ describe('desktop scheduler pages', () => {
         lookbackMinutes: 3,
       },
     })
+  })
+
+  it('returns to the scheduler list after editing a scheduled job', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let updatePayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['scheduler.read', 'scheduler.write'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/3') && !init?.method) {
+          return new Response(
+            JSON.stringify({
+              id: 3,
+              uid: 'sch-3',
+              code: 'cleanup',
+              name: 'Cleanup',
+              description: 'Cleanup job',
+              jobCategory: 'maintenance',
+              jobType: 'purge_old_logs',
+              scheduleType: 'cron',
+              scheduleExpr: '0 2 * * *',
+              timezone: 'UTC',
+              enabled: true,
+              allowConcurrentRuns: true,
+              config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
+              nextRunAt: '2026-04-19T02:00:00Z',
+              latestRunStatus: 'succeeded',
+              createdAt: '2026-04-18T21:00:00Z',
+              updatedAt: '2026-04-18T21:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/3') && init?.method === 'PUT') {
+          updatePayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              id: 3,
+              uid: 'sch-3',
+              code: 'cleanup',
+              name: 'Cleanup Updated',
+              description: 'Cleanup job',
+              jobCategory: 'maintenance',
+              jobType: 'purge_old_logs',
+              scheduleType: 'cron',
+              scheduleExpr: '0 2 * * *',
+              timezone: 'UTC',
+              enabled: true,
+              allowConcurrentRuns: true,
+              config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/scheduler/jobs?')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 3,
+                  uid: 'sch-3',
+                  code: 'cleanup',
+                  name: 'Cleanup Updated',
+                  description: 'Cleanup job',
+                  jobCategory: 'maintenance',
+                  jobType: 'purge_old_logs',
+                  scheduleType: 'cron',
+                  scheduleExpr: '0 2 * * *',
+                  timezone: 'UTC',
+                  enabled: true,
+                  allowConcurrentRuns: true,
+                  config: { dryRun: false, batchSize: 250, maxAgeDays: 45 },
+                  nextRunAt: '2026-04-19T02:00:00Z',
+                  latestRunStatus: 'succeeded',
+                  createdAt: '2026-04-18T21:00:00Z',
+                  updatedAt: '2026-04-18T21:10:00Z',
+                },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/scheduler/3', store)
+
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Cleanup Updated' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(updatePayload).not.toBeNull())
+    expect(updatePayload).toMatchObject({ name: 'Cleanup Updated' })
+    expect(await screen.findByRole('heading', { name: 'Scheduler', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByText('Cleanup Updated')).toBeInTheDocument()
+  })
+
+  it('opens a schedule detail dialog and deletes a schedule from the listing', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    let deleted = false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({ id: 5, username: 'alice', roles: ['Staff'], permissions: ['scheduler.read', 'scheduler.write'] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/scheduler/jobs?')) {
+          return new Response(
+            JSON.stringify({
+              items: deleted
+                ? []
+                : [
+                    {
+                      id: 1,
+                      uid: 'sch-1',
+                      code: 'nightly-sync',
+                      name: 'Nightly Sync',
+                      description: 'Nightly integration sync',
+                      jobCategory: 'integration',
+                      jobType: 'dhis2.sync',
+                      scheduleType: 'interval',
+                      scheduleExpr: '15m',
+                      timezone: 'UTC',
+                      enabled: true,
+                      allowConcurrentRuns: false,
+                      config: { serverCode: 'dhis2' },
+                      nextRunAt: '2026-04-18T21:15:00Z',
+                      latestRunStatus: 'succeeded',
+                      createdAt: '2026-04-18T21:00:00Z',
+                      updatedAt: '2026-04-18T21:00:00Z',
+                    },
+                  ],
+              totalCount: deleted ? 0 : 1,
+              page: 1,
+              pageSize: 25,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/1') && !init?.method) {
+          return new Response(
+            JSON.stringify({
+              id: 1,
+              uid: 'sch-1',
+              code: 'nightly-sync',
+              name: 'Nightly Sync',
+              description: 'Nightly integration sync',
+              jobCategory: 'integration',
+              jobType: 'dhis2.sync',
+              scheduleType: 'interval',
+              scheduleExpr: '15m',
+              timezone: 'UTC',
+              enabled: true,
+              allowConcurrentRuns: false,
+              config: { serverCode: 'dhis2' },
+              nextRunAt: '2026-04-18T21:15:00Z',
+              lastRunAt: '2026-04-18T21:00:00Z',
+              lastSuccessAt: '2026-04-18T21:00:00Z',
+              latestRunStatus: 'succeeded',
+              createdAt: '2026-04-18T20:00:00Z',
+              updatedAt: '2026-04-18T21:00:00Z',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/api/v1/scheduler/jobs/1') && init?.method === 'DELETE') {
+          deleted = true
+          return new Response('', { status: 204 })
+        }
+        if (url.includes('/api/v1/bootstrap')) {
+          return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderRoute('/scheduler', store)
+
+    fireEvent.click(await screen.findByLabelText('Actions for nightly-sync'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'View' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Scheduled Job Detail' })).toBeInTheDocument()
+    expect(screen.getByText('Nightly integration sync')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    fireEvent.click(screen.getByLabelText('Actions for nightly-sync'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    expect(await screen.findByText('Delete scheduled job nightly-sync? This removes the schedule and its recorded runs.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => expect(deleted).toBe(true))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete scheduled job?' })).not.toBeInTheDocument())
   })
 })

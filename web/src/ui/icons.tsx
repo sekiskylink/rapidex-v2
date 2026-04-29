@@ -91,6 +91,16 @@ export const ChatBubbleOutlineRoundedIcon = makeIcon(
 export const SyncRoundedIcon = makeIcon(
   'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8m-6.76.74L3.78 6.2A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8z',
 )
+export const HistoryRoundedIcon = makeIcon(
+  'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3m-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8z',
+)
+export const PlayArrowRoundedIcon = makeIcon('M8 5v14l11-7z')
+export const ToggleOnRoundedIcon = makeIcon(
+  'M17 7H7a5 5 0 0 0 0 10h10a5 5 0 0 0 0-10m0 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6',
+)
+export const ToggleOffRoundedIcon = makeIcon(
+  'M17 7H7a5 5 0 0 0 0 10h10a5 5 0 0 0 0-10M7 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6',
+)
 export const AddCircleRoundedIcon = makeIcon(
   'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z',
 )

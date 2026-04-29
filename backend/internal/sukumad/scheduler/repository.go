@@ -326,6 +326,21 @@ func (r *SQLRepository) UpdateScheduledJob(ctx context.Context, params UpdatePar
 	return decodeRow(row)
 }
 
+func (r *SQLRepository) DeleteScheduledJob(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM scheduled_jobs WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete scheduled job: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete scheduled job rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (r *SQLRepository) SetScheduledJobEnabled(ctx context.Context, params SetEnabledParams) (Record, error) {
 	var row recordRow
 	if err := r.db.GetContext(ctx, &row, `
@@ -896,6 +911,26 @@ func (r *memoryRepository) UpdateScheduledJob(_ context.Context, params UpdatePa
 		return cloned, nil
 	}
 	return Record{}, sql.ErrNoRows
+}
+
+func (r *memoryRepository) DeleteScheduledJob(_ context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for index := range r.jobs {
+		if r.jobs[index].ID != id {
+			continue
+		}
+		r.jobs = append(r.jobs[:index], r.jobs[index+1:]...)
+		filteredRuns := r.runs[:0]
+		for _, run := range r.runs {
+			if run.ScheduledJobID != id {
+				filteredRuns = append(filteredRuns, run)
+			}
+		}
+		r.runs = filteredRuns
+		return nil
+	}
+	return sql.ErrNoRows
 }
 
 func (r *memoryRepository) SetScheduledJobEnabled(_ context.Context, params SetEnabledParams) (Record, error) {

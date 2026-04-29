@@ -155,6 +155,26 @@ func (h *Handler) UpdateJob(c *gin.Context) {
 	c.JSON(http.StatusOK, record)
 }
 
+func (h *Handler) DeleteJob(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"invalid scheduled job id"}}))
+		return
+	}
+
+	if err := h.service.DeleteScheduledJob(c.Request.Context(), actorUserID(principal), id); err != nil {
+		apperror.Write(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (h *Handler) EnableJob(c *gin.Context) {
 	h.setEnabled(c, true)
 }

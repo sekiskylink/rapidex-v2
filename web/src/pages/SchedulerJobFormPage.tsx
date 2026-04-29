@@ -554,7 +554,8 @@ export function SchedulerJobFormPage() {
         body: JSON.stringify(payload),
       })
       notify.success(isEdit ? 'Scheduled job updated.' : 'Scheduled job created.')
-      void navigate({ to: '/scheduler/$jobId', params: { jobId: String(response.id) }, replace: true })
+      void response
+      void navigate({ to: '/scheduler', replace: true })
     } catch (error) {
       setErrorMessage(isEdit ? 'Unable to update scheduled job.' : 'Unable to create scheduled job.')
       await handleAppError(error, {

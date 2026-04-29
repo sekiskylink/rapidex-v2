@@ -10,6 +10,7 @@ import { AdminRowActions } from '../components/admin/AdminRowActions'
 import { buildAdminListRequestQuery, useAdminListSearch } from '../components/admin/listSearch'
 import { AppDataGrid, type AppDataGridFetchParams } from '../components/datagrid/AppDataGrid'
 import { handleAppError } from '../errors/handleAppError'
+import { SchedulerJobDetailDialog, type SchedulerJobDetailRecord } from './SchedulerJobDetailDialog'
 import type { SchedulerRouteSearch } from './listRouteSearch'
 
 interface ScheduledJobRecord {
@@ -71,6 +72,10 @@ export function SchedulerJobsPage() {
   const canWrite = Boolean(principal?.permissions.includes('scheduler.write'))
   const [reloadToken, setReloadToken] = React.useState(0)
   const [errorMessage, setErrorMessage] = React.useState('')
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailError, setDetailError] = React.useState('')
+  const [selectedJob, setSelectedJob] = React.useState<SchedulerJobDetailRecord | null>(null)
   const { searchInput, setSearchInput, search } = useAdminListSearch(routeSearch.q ?? '')
   const [categoryFilter, setCategoryFilter] = React.useState(routeSearch.category ?? '')
 
@@ -108,16 +113,42 @@ export function SchedulerJobsPage() {
     [apiClient, categoryFilter, search],
   )
 
-  const performMutation = async (path: string, failureMessage: string) => {
+  const performMutation = async (path: string, failureMessage: string, method = 'POST') => {
     setErrorMessage('')
     try {
-      await apiClient.request(path, { method: 'POST' })
+      await apiClient.request(path, { method })
       setReloadToken((value) => value + 1)
     } catch (error) {
       setErrorMessage(failureMessage)
       await handleAppError(error, { fallbackMessage: failureMessage })
     }
   }
+
+  const openDetailDialog = React.useCallback(
+    async (jobId: number) => {
+      setDetailOpen(true)
+      setDetailLoading(true)
+      setDetailError('')
+      setSelectedJob(null)
+      try {
+        const response = await apiClient.request<SchedulerJobDetailRecord>(`/api/v1/scheduler/jobs/${jobId}`)
+        setSelectedJob(response)
+      } catch (error) {
+        setDetailError('Unable to load scheduled job.')
+        await handleAppError(error, { fallbackMessage: 'Unable to load scheduled job.' })
+      } finally {
+        setDetailLoading(false)
+      }
+    },
+    [apiClient],
+  )
+
+  const closeDetailDialog = React.useCallback(() => {
+    setDetailOpen(false)
+    setDetailLoading(false)
+    setDetailError('')
+    setSelectedJob(null)
+  }, [])
 
   const columns = React.useMemo<GridColDef<ScheduledJobRecord>[]>(
     () => [
@@ -162,6 +193,14 @@ export function SchedulerJobsPage() {
             rowLabel={params.row.code}
             actions={[
               {
+                id: 'view',
+                label: 'View',
+                icon: 'view',
+                onClick: () => {
+                  void openDetailDialog(params.row.id)
+                },
+              },
+              {
                 id: 'edit',
                 label: 'Edit',
                 icon: 'edit',
@@ -172,7 +211,7 @@ export function SchedulerJobsPage() {
               {
                 id: 'runs',
                 label: 'Runs',
-                icon: 'view',
+                icon: 'history',
                 onClick: () => {
                   void navigate({ to: '/scheduler/$jobId/runs', params: { jobId: String(params.row.id) } })
                 },
@@ -182,7 +221,7 @@ export function SchedulerJobsPage() {
                     {
                       id: params.row.enabled ? 'disable' : 'enable',
                       label: params.row.enabled ? 'Disable' : 'Enable',
-                      icon: 'edit' as const,
+                      icon: params.row.enabled ? 'toggleOff' : 'toggleOn',
                       onClick: () => {
                         void performMutation(
                           `/api/v1/scheduler/jobs/${params.row.id}/${params.row.enabled ? 'disable' : 'enable'}`,
@@ -193,9 +232,20 @@ export function SchedulerJobsPage() {
                     {
                       id: 'run-now',
                       label: 'Run Now',
-                      icon: 'view' as const,
+                      icon: 'play',
                       onClick: () => {
                         void performMutation(`/api/v1/scheduler/jobs/${params.row.id}/run-now`, 'Unable to queue scheduled job run.')
+                      },
+                    },
+                    {
+                      id: 'delete',
+                      label: 'Delete',
+                      icon: 'delete',
+                      destructive: true,
+                      confirmTitle: 'Delete scheduled job?',
+                      confirmMessage: `Delete scheduled job ${params.row.code}? This removes the schedule and its recorded runs.`,
+                      onClick: () => {
+                        void performMutation(`/api/v1/scheduler/jobs/${params.row.id}`, 'Unable to delete scheduled job.', 'DELETE')
                       },
                     },
                   ]
@@ -258,6 +308,21 @@ export function SchedulerJobsPage() {
         reloadToken={reloadToken}
         externalQueryKey={[search, categoryFilter].join('|')}
         pinActionsToRight
+      />
+
+      <SchedulerJobDetailDialog
+        open={detailOpen}
+        job={selectedJob}
+        loading={detailLoading}
+        errorMessage={detailError}
+        onClose={closeDetailDialog}
+        onEdit={() => {
+          if (!selectedJob) {
+            return
+          }
+          closeDetailDialog()
+          void navigate({ to: '/scheduler/$jobId', params: { jobId: String(selectedJob.id) } })
+        }}
       />
     </Stack>
   )

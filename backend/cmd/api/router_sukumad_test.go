@@ -1146,3 +1146,22 @@ func TestSchedulerRoutesListCreateAndRunNow(t *testing.T) {
 		t.Fatalf("expected 200 runs list, got %d body=%s", runsW.Code, runsW.Body.String())
 	}
 }
+
+func TestSchedulerRoutesDeleteRequiresSchedulerWrite(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(213, "scheduler-reader", time.Now().UTC())
+	rbacService := rbacServiceWithPermissions(map[int64][]string{
+		213: {rbac.PermissionSchedulerRead},
+	})
+
+	router := newRouter(newSukumadTestAppDeps(jwt, rbacService))
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/scheduler/jobs/1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for missing scheduler.write permission, got %d body=%s", w.Code, w.Body.String())
+	}
+}

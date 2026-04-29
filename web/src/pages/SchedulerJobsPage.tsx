@@ -11,6 +11,7 @@ import { apiRequest } from '../lib/api'
 import type { PaginatedResponse } from '../lib/pagination'
 import { useAppNotify } from '../notifications/facade'
 import { AddCircleRoundedIcon } from '../ui/icons'
+import { SchedulerJobDetailDialog, type SchedulerJobDetailRecord } from './SchedulerJobDetailDialog'
 import type { SchedulerRouteSearch } from './listRouteSearch'
 
 interface ScheduledJobRecord {
@@ -71,6 +72,10 @@ export function SchedulerJobsPage() {
   const canWrite = Boolean(getAuthSnapshot().user?.permissions.includes('scheduler.write'))
   const [reloadToken, setReloadToken] = React.useState(0)
   const [errorMessage, setErrorMessage] = React.useState('')
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailError, setDetailError] = React.useState('')
+  const [selectedJob, setSelectedJob] = React.useState<SchedulerJobDetailRecord | null>(null)
   const { searchInput, setSearchInput, search } = useAdminListSearch(routeSearch.q ?? '')
   const [categoryFilter, setCategoryFilter] = React.useState(routeSearch.category ?? '')
 
@@ -108,20 +113,49 @@ export function SchedulerJobsPage() {
     [categoryFilter, search],
   )
 
-  const performMutation = async (path: string, successMessage: string) => {
+  const performMutation = async (path: string, successMessage: string, failureMessage: string, method = 'POST') => {
     setErrorMessage('')
     try {
-      await apiRequest(path, { method: 'POST' })
+      await apiRequest(path, { method })
       notify.success(successMessage)
       setReloadToken((value) => value + 1)
     } catch (error) {
-      setErrorMessage(successMessage.replace(/\.$/, '') + ' failed.')
+      setErrorMessage(failureMessage)
       await handleAppError(error, {
-        fallbackMessage: successMessage.replace(/\.$/, '') + ' failed.',
+        fallbackMessage: failureMessage,
         notifier: notify,
       })
     }
   }
+
+  const openDetailDialog = React.useCallback(
+    async (jobId: number) => {
+      setDetailOpen(true)
+      setDetailLoading(true)
+      setDetailError('')
+      setSelectedJob(null)
+      try {
+        const response = await apiRequest<SchedulerJobDetailRecord>(`/scheduler/jobs/${jobId}`)
+        setSelectedJob(response)
+      } catch (error) {
+        setDetailError('Unable to load scheduled job.')
+        await handleAppError(error, {
+          fallbackMessage: 'Unable to load scheduled job.',
+          notifier: notify,
+        })
+      } finally {
+        setDetailLoading(false)
+      }
+    },
+    [notify],
+  )
+
+  const closeDetailDialog = React.useCallback(() => {
+    setDetailOpen(false)
+    setDetailLoading(false)
+    setDetailError('')
+    setSelectedJob(null)
+  }, [])
 
   const columns = React.useMemo<GridColDef<ScheduledJobRecord>[]>(
     () => [
@@ -178,6 +212,14 @@ export function SchedulerJobsPage() {
             rowLabel={params.row.code}
             actions={[
               {
+                id: 'view',
+                label: 'View',
+                icon: 'view',
+                onClick: () => {
+                  void openDetailDialog(params.row.id)
+                },
+              },
+              {
                 id: 'edit',
                 label: 'Edit',
                 icon: 'edit',
@@ -188,7 +230,7 @@ export function SchedulerJobsPage() {
               {
                 id: 'runs',
                 label: 'Runs',
-                icon: 'view',
+                icon: 'history',
                 onClick: () => {
                   void navigate({ to: '/scheduler/$jobId/runs', params: { jobId: String(params.row.id) } })
                 },
@@ -198,20 +240,32 @@ export function SchedulerJobsPage() {
                     {
                       id: params.row.enabled ? 'disable' : 'enable',
                       label: params.row.enabled ? 'Disable' : 'Enable',
-                      icon: 'edit' as const,
+                      icon: params.row.enabled ? 'toggleOff' : 'toggleOn',
                       onClick: () => {
                         void performMutation(
                           `/scheduler/jobs/${params.row.id}/${params.row.enabled ? 'disable' : 'enable'}`,
                           `Scheduled job ${params.row.enabled ? 'disabled' : 'enabled'}.`,
+                          `Scheduled job ${params.row.enabled ? 'disable' : 'enable'} failed.`,
                         )
                       },
                     },
                     {
                       id: 'run-now',
                       label: 'Run Now',
-                      icon: 'view' as const,
+                      icon: 'play',
                       onClick: () => {
-                        void performMutation(`/scheduler/jobs/${params.row.id}/run-now`, 'Scheduled job run queued.')
+                        void performMutation(`/scheduler/jobs/${params.row.id}/run-now`, 'Scheduled job run queued.', 'Scheduled job run queue failed.')
+                      },
+                    },
+                    {
+                      id: 'delete',
+                      label: 'Delete',
+                      icon: 'delete',
+                      destructive: true,
+                      confirmTitle: 'Delete scheduled job?',
+                      confirmMessage: `Delete scheduled job ${params.row.code}? This removes the schedule and its recorded runs.`,
+                      onClick: () => {
+                        void performMutation(`/scheduler/jobs/${params.row.id}`, 'Scheduled job deleted.', 'Scheduled job delete failed.', 'DELETE')
                       },
                     },
                   ]
@@ -274,6 +328,21 @@ export function SchedulerJobsPage() {
         reloadToken={reloadToken}
         externalQueryKey={[search, categoryFilter].join('|')}
         pinActionsToRight
+      />
+
+      <SchedulerJobDetailDialog
+        open={detailOpen}
+        job={selectedJob}
+        loading={detailLoading}
+        errorMessage={detailError}
+        onClose={closeDetailDialog}
+        onEdit={() => {
+          if (!selectedJob) {
+            return
+          }
+          closeDetailDialog()
+          void navigate({ to: '/scheduler/$jobId', params: { jobId: String(selectedJob.id) } })
+        }}
       />
     </Stack>
   )

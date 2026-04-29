@@ -14,8 +14,12 @@ import {
 import ChatBubbleOutlineRoundedIcon from '@mui/icons-material/ChatBubbleOutlineRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import SyncRoundedIcon from '@mui/icons-material/SyncRounded'
+import ToggleOffRoundedIcon from '@mui/icons-material/ToggleOffRounded'
+import ToggleOnRoundedIcon from '@mui/icons-material/ToggleOnRounded'
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
 
 export interface AdminRowAction {
@@ -27,7 +31,7 @@ export interface AdminRowAction {
   destructive?: boolean
   confirmTitle?: string
   confirmMessage?: string
-  icon?: 'view' | 'edit' | 'delete' | 'sync' | 'message' | 'rapidpro' | React.ReactNode
+  icon?: 'view' | 'edit' | 'delete' | 'sync' | 'message' | 'rapidpro' | 'history' | 'play' | 'toggleOn' | 'toggleOff' | React.ReactNode
 }
 
 interface AdminRowActionsProps {
@@ -47,6 +51,18 @@ function resolveIcon(icon: AdminRowAction['icon']) {
   }
   if (icon === 'sync') {
     return <SyncRoundedIcon fontSize="small" />
+  }
+  if (icon === 'history') {
+    return <HistoryRoundedIcon fontSize="small" />
+  }
+  if (icon === 'play') {
+    return <PlayArrowRoundedIcon fontSize="small" />
+  }
+  if (icon === 'toggleOn') {
+    return <ToggleOnRoundedIcon fontSize="small" />
+  }
+  if (icon === 'toggleOff') {
+    return <ToggleOffRoundedIcon fontSize="small" />
   }
   if (icon === 'message') {
     return <ChatBubbleOutlineRoundedIcon fontSize="small" />

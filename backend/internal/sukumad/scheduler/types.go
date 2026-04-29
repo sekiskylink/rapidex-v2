@@ -231,6 +231,7 @@ type Repository interface {
 	GetScheduledJobByCode(ctx context.Context, code string) (Record, error)
 	CreateScheduledJob(ctx context.Context, params CreateParams) (Record, error)
 	UpdateScheduledJob(ctx context.Context, params UpdateParams) (Record, error)
+	DeleteScheduledJob(ctx context.Context, id int64) error
 	SetScheduledJobEnabled(ctx context.Context, params SetEnabledParams) (Record, error)
 	ListJobRuns(ctx context.Context, jobID int64, query RunListQuery) (RunListResult, error)
 	GetRunByID(ctx context.Context, id int64) (RunRecord, error)

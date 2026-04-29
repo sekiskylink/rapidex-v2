@@ -197,6 +197,55 @@ func TestDispatchDueJobsPreventsDuplicateDispatch(t *testing.T) {
 	}
 }
 
+func TestDeleteScheduledJobRemovesJobAndRuns(t *testing.T) {
+	now := time.Date(2026, 4, 18, 13, 0, 0, 0, time.UTC)
+	svc := NewService(NewRepository()).WithClock(func() time.Time { return now })
+
+	job, err := svc.CreateScheduledJob(context.Background(), CreateInput{
+		Code:         "cleanup-old-runs",
+		Name:         "Cleanup Old Runs",
+		JobCategory:  JobCategoryMaintenance,
+		JobType:      "purge_old_logs",
+		ScheduleType: ScheduleTypeInterval,
+		ScheduleExpr: "1h",
+		Timezone:     "UTC",
+		Enabled:      true,
+		Config: map[string]any{
+			"dryRun":     false,
+			"batchSize":  100,
+			"maxAgeDays": 30,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create scheduled job: %v", err)
+	}
+
+	if _, err := svc.RunNow(context.Background(), nil, job.ID); err != nil {
+		t.Fatalf("queue run: %v", err)
+	}
+
+	if err := svc.DeleteScheduledJob(context.Background(), nil, job.ID); err != nil {
+		t.Fatalf("delete scheduled job: %v", err)
+	}
+
+	if _, err := svc.GetScheduledJob(context.Background(), job.ID); err == nil {
+		t.Fatal("expected deleted job lookup to fail")
+	}
+
+	repo := svc.repo.(*memoryRepository)
+	if len(repo.runs) != 0 {
+		t.Fatalf("expected job runs to be removed with deleted job, got %+v", repo.runs)
+	}
+}
+
+func TestDeleteScheduledJobReturnsValidationErrorForMissingJob(t *testing.T) {
+	svc := NewService(NewRepository())
+
+	if err := svc.DeleteScheduledJob(context.Background(), nil, 999); err == nil {
+		t.Fatal("expected validation error for missing scheduled job")
+	}
+}
+
 func TestClaimNextPendingRunRespectsAllowConcurrentRuns(t *testing.T) {
 	repo := NewRepository().(*memoryRepository)
 	now := time.Date(2026, 4, 18, 13, 0, 0, 0, time.UTC)

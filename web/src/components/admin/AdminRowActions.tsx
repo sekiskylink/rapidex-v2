@@ -15,8 +15,12 @@ import {
   ChatBubbleOutlineRoundedIcon,
   DeleteOutlineRoundedIcon,
   EditRoundedIcon,
+  HistoryRoundedIcon,
   MoreVertRoundedIcon,
+  PlayArrowRoundedIcon,
   SyncRoundedIcon,
+  ToggleOffRoundedIcon,
+  ToggleOnRoundedIcon,
   VisibilityRoundedIcon,
 } from '../../ui/icons'
 
@@ -29,7 +33,7 @@ export interface AdminRowAction {
   destructive?: boolean
   confirmTitle?: string
   confirmMessage?: string
-  icon?: 'view' | 'edit' | 'delete' | 'sync' | 'message' | 'rapidpro' | React.ReactNode
+  icon?: 'view' | 'edit' | 'delete' | 'sync' | 'message' | 'rapidpro' | 'history' | 'play' | 'toggleOn' | 'toggleOff' | React.ReactNode
 }
 
 interface AdminRowActionsProps {
@@ -49,6 +53,18 @@ function resolveIcon(icon: AdminRowAction['icon']) {
   }
   if (icon === 'sync') {
     return <SyncRoundedIcon fontSize="small" />
+  }
+  if (icon === 'history') {
+    return <HistoryRoundedIcon fontSize="small" />
+  }
+  if (icon === 'play') {
+    return <PlayArrowRoundedIcon fontSize="small" />
+  }
+  if (icon === 'toggleOn') {
+    return <ToggleOnRoundedIcon fontSize="small" />
+  }
+  if (icon === 'toggleOff') {
+    return <ToggleOffRoundedIcon fontSize="small" />
   }
   if (icon === 'message') {
     return <ChatBubbleOutlineRoundedIcon fontSize="small" />

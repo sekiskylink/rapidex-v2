@@ -980,6 +980,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledJobRecord'
+    delete:
+      tags: [Scheduler]
+      operationId: deleteScheduledJob
+      summary: Delete a scheduled job
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Scheduled job deleted.
   /scheduler/jobs/{id}/enable:
     post:
       tags: [Scheduler]

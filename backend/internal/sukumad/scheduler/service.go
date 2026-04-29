@@ -251,6 +251,37 @@ func (s *Service) UpdateScheduledJob(ctx context.Context, input UpdateInput) (Re
 	return updated, nil
 }
 
+func (s *Service) DeleteScheduledJob(ctx context.Context, actorID *int64, id int64) error {
+	existing, err := s.GetScheduledJob(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.DeleteScheduledJob(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return apperror.ValidationWithDetails("validation failed", map[string]any{"id": []string{"scheduled job not found"}})
+		}
+		return err
+	}
+
+	s.logAudit(ctx, audit.Event{
+		Action:      "scheduler.job.deleted",
+		ActorUserID: actorID,
+		EntityType:  "scheduled_job",
+		EntityID:    strPtr(fmt.Sprintf("%d", existing.ID)),
+		Metadata: map[string]any{
+			"code":         existing.Code,
+			"name":         existing.Name,
+			"jobCategory":  existing.JobCategory,
+			"jobType":      existing.JobType,
+			"scheduleType": existing.ScheduleType,
+			"enabled":      existing.Enabled,
+		},
+	})
+
+	return nil
+}
+
 func (s *Service) SetScheduledJobEnabled(ctx context.Context, actorID *int64, id int64, enabled bool) (Record, error) {
 	existing, err := s.GetScheduledJob(ctx, id)
 	if err != nil {

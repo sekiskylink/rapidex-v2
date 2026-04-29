@@ -75,3 +75,32 @@ func TestHandlerCreateJobValidation(t *testing.T) {
 		t.Fatalf("expected 401 without principal, got %d", w.Code)
 	}
 }
+
+func TestHandlerDeleteJobRequiresPrincipal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := NewService(NewRepository())
+	if _, err := service.CreateScheduledJob(nil, CreateInput{
+		Code:         "delete-me",
+		Name:         "Delete Me",
+		JobCategory:  JobCategoryIntegration,
+		JobType:      "metadata_sync",
+		ScheduleType: ScheduleTypeInterval,
+		ScheduleExpr: "15m",
+		Timezone:     "UTC",
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("create scheduled job: %v", err)
+	}
+
+	handler := NewHandler(service)
+	router := gin.New()
+	router.DELETE("/scheduler/jobs/:id", handler.DeleteJob)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/scheduler/jobs/1", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without principal, got %d body=%s", w.Code, w.Body.String())
+	}
+}

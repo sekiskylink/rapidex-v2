@@ -1,5 +1,49 @@
 # Status
 
+## Milestone — Scheduler UI View/Delete and Post-Save Navigation (Complete)
+
+### What changed
+- Added scheduled-job deletion to the backend scheduler API with the existing `scheduler.write` permission, including route registration, service handling, repository support, and OpenAPI documentation.
+- Updated both web and desktop scheduler listings so row actions are easier to distinguish visually, including separate actions for:
+  - view details
+  - edit
+  - runs
+  - enable/disable
+  - run now
+  - delete
+- Added a read-only `Scheduled Job Detail` dialog in both web and desktop, using the existing scheduler detail API and a summary presentation instead of disabled form fields.
+- Changed scheduler create and edit flows in both clients so successful saves return to the scheduler listing instead of staying on the form route.
+- Added a durable architecture note in `docs/notes/scheduler-ui-details-and-actions.md`.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-29-scheduler-ui-improvements.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - scheduler service coverage for delete success and missing-job validation
+  - scheduler handler coverage for delete auth enforcement
+  - router coverage proving scheduler delete requires `scheduler.write`
+- Web:
+  - scheduler page coverage for post-create navigation back to the list
+  - scheduler page coverage for post-edit navigation back to the list
+  - scheduler page coverage for view-dialog opening and delete confirmation flow
+- Desktop:
+  - matching scheduler page coverage for post-create navigation back to the list
+  - matching scheduler page coverage for post-edit navigation back to the list
+  - matching scheduler page coverage for view-dialog opening and delete confirmation flow
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web focused scheduler suite: PASS (`cd web && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop focused scheduler suite: PASS (`cd desktop/frontend && npm test -- --run src/pages/scheduler-page.test.tsx`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings.
+- Frontend builds still emit existing third-party `'use client'` and large chunk-size warnings unrelated to this scheduler slice.
+
 ## Milestone — API Token Route Expansion with Bound User Support (Complete)
 
 ### What changed
