@@ -203,6 +203,23 @@ func (r *fakeRepo) ListAPITokens(_ context.Context) ([]APIToken, error) {
 	return items, nil
 }
 
+func (r *fakeRepo) ListActiveAPITokensCreatedByUser(_ context.Context, userID int64, now time.Time) ([]APIToken, error) {
+	items := make([]APIToken, 0)
+	for _, token := range r.apiTokensByID {
+		if token.CreatedByUserID == nil || *token.CreatedByUserID != userID {
+			continue
+		}
+		if token.RevokedAt != nil {
+			continue
+		}
+		if token.ExpiresAt != nil && !token.ExpiresAt.After(now) {
+			continue
+		}
+		items = append(items, *token)
+	}
+	return items, nil
+}
+
 func (r *fakeRepo) GetAPITokenByID(_ context.Context, tokenID int64) (*APIToken, error) {
 	token, ok := r.apiTokensByID[tokenID]
 	if !ok {
@@ -498,6 +515,100 @@ func TestCreateAPITokenRejectsInactiveBoundUser(t *testing.T) {
 	}
 }
 
+func TestCreateAPITokenRejectsNonPositiveExpiry(t *testing.T) {
+	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	service := newTestService(repo, &fakeAuditRepo{})
+
+	adminID := int64(1)
+	expires := int64(0)
+	_, err := service.CreateAPIToken(context.Background(), &adminID, APITokenCreateInput{
+		Name:             "ci-token",
+		ExpiresInSeconds: &expires,
+	}, "127.0.0.1", "test-agent")
+	if err == nil {
+		t.Fatal("expected non-positive expiry to be rejected")
+	}
+
+	appErr, ok := err.(*apperror.AppError)
+	if !ok {
+		t.Fatalf("expected apperror, got %T", err)
+	}
+	if appErr.Details["expiresInSeconds"] == nil {
+		t.Fatalf("expected expiresInSeconds validation details, got %+v", appErr.Details)
+	}
+}
+
+func TestListActiveAPITokensCreatedByUserReturnsOnlyActiveOwnedTokens(t *testing.T) {
+	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	service := newTestService(repo, &fakeAuditRepo{})
+	now := time.Date(2026, 4, 29, 11, 30, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+
+	adminID := int64(1)
+	otherID := int64(2)
+	expiredAt := now.Add(-time.Minute)
+	activeExpiresAt := now.Add(24 * time.Hour)
+	revokedAt := now.Add(-10 * time.Minute)
+	lastUsedAt := now.Add(-5 * time.Minute)
+
+	repo.apiTokensByID[1] = &APIToken{
+		ID:              1,
+		Name:            "active-owned",
+		Prefix:          "bpt_aa",
+		CreatedByUserID: &adminID,
+		CreatedAt:       now.Add(-time.Hour),
+		UpdatedAt:       now.Add(-time.Hour),
+		ExpiresAt:       &activeExpiresAt,
+		LastUsedAt:      &lastUsedAt,
+	}
+	repo.apiTokensByID[2] = &APIToken{
+		ID:              2,
+		Name:            "expired-owned",
+		Prefix:          "bpt_bb",
+		CreatedByUserID: &adminID,
+		CreatedAt:       now.Add(-2 * time.Hour),
+		UpdatedAt:       now.Add(-2 * time.Hour),
+		ExpiresAt:       &expiredAt,
+	}
+	repo.apiTokensByID[3] = &APIToken{
+		ID:              3,
+		Name:            "revoked-owned",
+		Prefix:          "bpt_cc",
+		CreatedByUserID: &adminID,
+		CreatedAt:       now.Add(-3 * time.Hour),
+		UpdatedAt:       now.Add(-3 * time.Hour),
+		RevokedAt:       &revokedAt,
+	}
+	repo.apiTokensByID[4] = &APIToken{
+		ID:              4,
+		Name:            "other-user",
+		Prefix:          "bpt_dd",
+		CreatedByUserID: &otherID,
+		CreatedAt:       now.Add(-4 * time.Hour),
+		UpdatedAt:       now.Add(-4 * time.Hour),
+	}
+	repo.apiTokensByID[5] = &APIToken{
+		ID:              5,
+		Name:            "never-expiring-owned",
+		Prefix:          "bpt_ee",
+		CreatedByUserID: &adminID,
+		CreatedAt:       now.Add(-30 * time.Minute),
+		UpdatedAt:       now.Add(-30 * time.Minute),
+	}
+
+	items, err := service.ListActiveAPITokensCreatedByUser(context.Background(), adminID)
+	if err != nil {
+		t.Fatalf("list active api tokens created by user: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 active owned tokens, got %d", len(items))
+	}
+	names := []string{items[0].Name, items[1].Name}
+	if !(containsName(names, "active-owned") && containsName(names, "never-expiring-owned")) {
+		t.Fatalf("unexpected token names: %+v", names)
+	}
+}
+
 func TestAuthenticateAPITokenIncludesBoundUser(t *testing.T) {
 	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
 	repo.usersByID[5] = &User{ID: 5, Username: "svc", IsActive: true}
@@ -665,4 +776,13 @@ func TestAPITokenCreateAndRevokeProduceAuditLogs(t *testing.T) {
 
 func int64Ptr(v int64) *int64 {
 	return &v
+}
+
+func containsName(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

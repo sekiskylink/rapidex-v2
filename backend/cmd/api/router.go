@@ -135,6 +135,7 @@ func newRouter(deps AppDeps) *gin.Engine {
 		admin := api.Group("/admin/api-tokens")
 		admin.Use(middleware.ResolveJWTPrincipal(deps.JWTManager), middleware.RequireAuth(), middleware.RequireJWTUser())
 		admin.GET("", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensRead), deps.AuthHandler.ListAPITokens)
+		admin.GET("/mine", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensWrite), deps.AuthHandler.ListMyActiveAPITokens)
 		admin.POST("", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensWrite), deps.AuthHandler.CreateAPIToken)
 		admin.POST("/:id/revoke", middleware.RequirePermission(deps.RBACService, rbac.PermissionAPITokensWrite), deps.AuthHandler.RevokeAPIToken)
 	}

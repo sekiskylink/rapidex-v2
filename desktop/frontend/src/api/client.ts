@@ -372,13 +372,22 @@ interface CreateAPITokenRequest {
   moduleScope?: string
 }
 
-interface CreateAPITokenResponse {
+export interface CreateAPITokenResponse {
   id: number
   name: string
   prefix: string
   token: string
   expiresAt?: string | null
   permissions: string[]
+}
+
+export interface APITokenSummary {
+  id: number
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt?: string | null
+  lastUsedAt?: string | null
 }
 
 export interface ForgotPasswordRequest {
@@ -869,6 +878,12 @@ export function createApiClient(deps: ApiClientDeps) {
       return authorizedRequest<CreateAPITokenResponse>('/api/v1/admin/api-tokens', {
         method: 'POST',
         body: JSON.stringify(payload),
+      })
+    },
+
+    async listMyActiveApiTokens() {
+      return authorizedRequest<{ items?: APITokenSummary[] }>('/api/v1/admin/api-tokens/mine', {
+        method: 'GET',
       })
     },
 

@@ -956,17 +956,37 @@ describe('web settings page', () => {
 
   it('creates and reveals an API token in settings', async () => {
     authenticateForSettings(['settings.read', 'api_tokens.write'])
+    let createPayload: Record<string, unknown> | undefined
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/admin/api-tokens/mine') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 3,
+                  name: 'Existing token',
+                  prefix: 'bpt_old',
+                  createdAt: '2026-04-20T09:00:00Z',
+                  expiresAt: '2026-05-20T09:00:00Z',
+                  lastUsedAt: null,
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         if (url.endsWith('/admin/api-tokens') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
           return new Response(
             JSON.stringify({
               id: 7,
               name: 'Web API token',
               prefix: 'bpt_abc',
               token: 'plaintext-api-token',
+              expiresAt: '2026-05-29T09:00:00Z',
               permissions: ['settings.read'],
             }),
             { status: 201, headers: { 'Content-Type': 'application/json' } },
@@ -983,7 +1003,14 @@ describe('web settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Token' }))
 
     expect(await screen.findByText('plaintext-api-token')).toBeInTheDocument()
+    expect(await screen.findByText('Existing token')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy Token' })).toBeInTheDocument()
+    expect(createPayload).toEqual(
+      expect.objectContaining({
+        name: 'Web API token',
+        expiresInSeconds: 2592000,
+      }),
+    )
   })
 
   it('changing mode persists after reload', async () => {

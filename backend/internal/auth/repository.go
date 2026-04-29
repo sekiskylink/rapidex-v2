@@ -30,6 +30,7 @@ type Repository interface {
 
 	CreateAPIToken(ctx context.Context, token APIToken, permissions []string, moduleScope *string) (*APIToken, error)
 	ListAPITokens(ctx context.Context) ([]APIToken, error)
+	ListActiveAPITokensCreatedByUser(ctx context.Context, userID int64, now time.Time) ([]APIToken, error)
 	GetAPITokenByID(ctx context.Context, tokenID int64) (*APIToken, error)
 	GetAPITokenByHash(ctx context.Context, hash string) (*APIToken, error)
 	GetAPITokenPermissions(ctx context.Context, tokenID int64) ([]APITokenPermission, error)
@@ -308,6 +309,21 @@ func (r *SQLRepository) ListAPITokens(ctx context.Context) ([]APIToken, error) {
 		ORDER BY created_at DESC
 	`); err != nil {
 		return nil, fmt.Errorf("list api tokens: %w", err)
+	}
+	return tokens, nil
+}
+
+func (r *SQLRepository) ListActiveAPITokensCreatedByUser(ctx context.Context, userID int64, now time.Time) ([]APIToken, error) {
+	var tokens []APIToken
+	if err := r.db.SelectContext(ctx, &tokens, `
+		SELECT id, name, token_hash, prefix, created_by_user_id, bound_user_id, revoked_at, expires_at, last_used_at, created_at, updated_at
+		FROM api_tokens
+		WHERE created_by_user_id = $1
+		  AND revoked_at IS NULL
+		  AND (expires_at IS NULL OR expires_at > $2)
+		ORDER BY created_at DESC
+	`, userID, now); err != nil {
+		return nil, fmt.Errorf("list active api tokens created by user: %w", err)
 	}
 	return tokens, nil
 }

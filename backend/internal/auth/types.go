@@ -85,6 +85,15 @@ type APITokenCreateResult struct {
 	Permissions []string   `json:"permissions"`
 }
 
+type APITokenSummary struct {
+	ID         int64      `json:"id"`
+	Name       string     `json:"name"`
+	Prefix     string     `json:"prefix"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+}
+
 type PasswordResetRequestResult struct {
 	Status string `json:"status"`
 }

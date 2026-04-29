@@ -454,12 +454,37 @@ func (s *Service) ListAPITokens(ctx context.Context) ([]APIToken, error) {
 	return s.repo.ListAPITokens(ctx)
 }
 
+func (s *Service) ListActiveAPITokensCreatedByUser(ctx context.Context, userID int64) ([]APITokenSummary, error) {
+	tokens, err := s.repo.ListActiveAPITokensCreatedByUser(ctx, userID, s.now())
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]APITokenSummary, 0, len(tokens))
+	for _, token := range tokens {
+		items = append(items, APITokenSummary{
+			ID:         token.ID,
+			Name:       token.Name,
+			Prefix:     token.Prefix,
+			CreatedAt:  token.CreatedAt,
+			ExpiresAt:  token.ExpiresAt,
+			LastUsedAt: token.LastUsedAt,
+		})
+	}
+	return items, nil
+}
+
 func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input APITokenCreateInput, ip, userAgent string) (APITokenCreateResult, error) {
 	if !s.apiTokenEnabled {
 		return APITokenCreateResult{}, apperror.Unauthorized("API token auth is disabled")
 	}
 	if strings.TrimSpace(input.Name) == "" {
 		return APITokenCreateResult{}, apperror.Unauthorized("Token name is required")
+	}
+	if input.ExpiresInSeconds != nil && *input.ExpiresInSeconds <= 0 {
+		return APITokenCreateResult{}, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"expiresInSeconds": []string{"must be greater than 0"},
+		})
 	}
 	if input.BoundUserID != nil {
 		user, err := s.repo.GetUserByID(ctx, *input.BoundUserID)
@@ -486,7 +511,7 @@ func (s *Service) CreateAPIToken(ctx context.Context, actorUserID *int64, input 
 
 	var expiresAt *time.Time
 	ttl := s.apiTokenTTL
-	if input.ExpiresInSeconds != nil && *input.ExpiresInSeconds > 0 {
+	if input.ExpiresInSeconds != nil {
 		ttl = time.Duration(*input.ExpiresInSeconds) * time.Second
 	}
 	if ttl > 0 {

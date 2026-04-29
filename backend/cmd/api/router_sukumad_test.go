@@ -122,6 +122,23 @@ func (r *apiTokenRepo) CreateAPIToken(context.Context, auth.APIToken, []string, 
 	return nil, auth.ErrNotFound
 }
 func (r *apiTokenRepo) ListAPITokens(context.Context) ([]auth.APIToken, error) { return nil, nil }
+func (r *apiTokenRepo) ListActiveAPITokensCreatedByUser(_ context.Context, userID int64, now time.Time) ([]auth.APIToken, error) {
+	items := make([]auth.APIToken, 0)
+	for _, token := range r.tokens {
+		if token.CreatedByUserID == nil || *token.CreatedByUserID != userID {
+			continue
+		}
+		if token.RevokedAt != nil {
+			continue
+		}
+		if token.ExpiresAt != nil && !token.ExpiresAt.After(now) {
+			continue
+		}
+		copy := *token
+		items = append(items, copy)
+	}
+	return items, nil
+}
 func (r *apiTokenRepo) GetAPITokenByID(context.Context, int64) (*auth.APIToken, error) {
 	return nil, auth.ErrNotFound
 }
@@ -645,6 +662,72 @@ func TestAdminAPITokenRoutesRejectAPITokenPrincipal(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdminAPITokenMineRouteReturnsOnlyOwnedActiveTokens(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(111, "admin", time.Now().UTC())
+
+	tokenRepo := newAPITokenRepo()
+	ownerID := int64(111)
+	otherID := int64(222)
+	now := time.Now().UTC()
+	activeExpiry := now.Add(time.Hour)
+	expiredAt := now.Add(-time.Minute)
+	tokenRepo.tokens["owned"] = &auth.APIToken{
+		ID:              71,
+		Name:            "owned-active",
+		Prefix:          "bpt_ow",
+		CreatedByUserID: &ownerID,
+		CreatedAt:       now.Add(-time.Minute),
+		UpdatedAt:       now.Add(-time.Minute),
+		ExpiresAt:       &activeExpiry,
+	}
+	tokenRepo.tokens["expired"] = &auth.APIToken{
+		ID:              72,
+		Name:            "owned-expired",
+		Prefix:          "bpt_ex",
+		CreatedByUserID: &ownerID,
+		CreatedAt:       now.Add(-2 * time.Minute),
+		UpdatedAt:       now.Add(-2 * time.Minute),
+		ExpiresAt:       &expiredAt,
+	}
+	tokenRepo.tokens["other"] = &auth.APIToken{
+		ID:              73,
+		Name:            "other-active",
+		Prefix:          "bpt_ot",
+		CreatedByUserID: &otherID,
+		CreatedAt:       now.Add(-3 * time.Minute),
+		UpdatedAt:       now.Add(-3 * time.Minute),
+	}
+
+	auditService := audit.NewService(&fakeAuditRepo{})
+	authService := auth.NewService(tokenRepo, auditService, jwt, nil, time.Minute, time.Hour, time.Hour, "secret", true, 4)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(map[int64][]string{
+		111: {rbac.PermissionAPITokensWrite},
+	}))
+	deps.AuthService = authService
+	deps.AuthHandler = auth.NewHandler(authService)
+
+	router := newRouter(deps)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/api-tokens/mine", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var payload struct {
+		Items []auth.APITokenSummary `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Items) != 1 || payload.Items[0].Name != "owned-active" {
+		t.Fatalf("expected only owned-active token, got %+v", payload.Items)
 	}
 }
 

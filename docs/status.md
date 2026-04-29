@@ -1,5 +1,41 @@
 # Status
 
+## Update — API Token Expiry and Active Token Listing (Complete)
+
+### What changed
+- Added duration-based expiry selection to API token creation under `Settings > Integrations` in both web and desktop, using presets (`1 day`, `7 days`, `30 days`, `90 days`) plus a custom duration option.
+- Kept the existing backend API token model and surfaced its per-token TTL override by sending `expiresInSeconds` from both clients when creating a token.
+- Added backend validation so `expiresInSeconds`, when supplied, must be a positive value instead of silently falling back to the default token TTL.
+- Added `GET /api/v1/admin/api-tokens/mine` for JWT-authenticated users with `api_tokens.write`, returning only the caller’s active issued tokens.
+- Added a `My Active Tokens` section in both web and desktop settings so operators can view the active tokens they created, including prefix, created time, expiry, and last-used time.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-29-api-token-expiry-and-listing.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - auth service coverage for rejecting non-positive API token expiry values
+  - auth service and handler coverage for listing only the current user’s active issued tokens
+  - router coverage for the new `/api/v1/admin/api-tokens/mine` endpoint
+  - middleware test-repository compatibility updates for the expanded auth repository interface
+- Web:
+  - settings route coverage proving API token creation submits `expiresInSeconds`
+  - settings route coverage proving the active-token list renders in the integrations section
+- Desktop:
+  - matching settings route coverage for expiry submission and active-token list rendering
+
+### Verification summary
+- Backend focused auth suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/auth`)
+- Backend focused API token router suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run 'TestAdminAPIToken(MineRouteReturnsOnlyOwnedActiveTokens|RoutesRejectAPITokenPrincipal)$'`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke/settings suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke/settings suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this API token change.
+
 ## Update — Facilities Level Filter Source Stabilization (Complete)
 
 ### What changed

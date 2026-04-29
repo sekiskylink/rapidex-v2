@@ -164,6 +164,26 @@ func (h *Handler) ListAPITokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": masked})
 }
 
+func (h *Handler) ListMyActiveAPITokens(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		apperror.Write(c, apperror.Unauthorized("Unauthorized"))
+		return
+	}
+	if principal.Type != "user" {
+		apperror.Write(c, apperror.Forbidden("Forbidden"))
+		return
+	}
+
+	tokens, err := h.service.ListActiveAPITokensCreatedByUser(c.Request.Context(), principal.UserID)
+	if err != nil {
+		apperror.Write(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": tokens})
+}
+
 func (h *Handler) CreateAPIToken(c *gin.Context) {
 	principal, ok := principalFromContext(c)
 	if !ok {
@@ -172,7 +192,13 @@ func (h *Handler) CreateAPIToken(c *gin.Context) {
 	}
 
 	var req createAPITokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Name) == "" {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", map[string]any{
+			"body": []string{"invalid JSON payload"},
+		}))
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
 		apperror.Write(c, apperror.Unauthorized("Token name is required"))
 		return
 	}

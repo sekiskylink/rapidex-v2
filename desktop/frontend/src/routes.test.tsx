@@ -2303,6 +2303,7 @@ describe('app shell routes', () => {
       expiresAt: Date.now() + 60_000,
     })
 
+    let createPayload: Record<string, unknown> | undefined
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2318,13 +2319,32 @@ describe('app shell routes', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.endsWith('/api/v1/admin/api-tokens/mine') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 9,
+                  name: 'Existing desktop token',
+                  prefix: 'bpt_old',
+                  createdAt: '2026-04-20T09:00:00Z',
+                  expiresAt: '2026-05-20T09:00:00Z',
+                  lastUsedAt: null,
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         if (url.endsWith('/api/v1/admin/api-tokens') && init?.method === 'POST') {
+          createPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
           return new Response(
             JSON.stringify({
               id: 12,
               name: 'Desktop API token',
               prefix: 'bpt_xyz',
               token: 'plaintext-api-token',
+              expiresAt: '2026-05-29T09:00:00Z',
               permissions: ['settings.read'],
             }),
             { status: 201, headers: { 'Content-Type': 'application/json' } },
@@ -2372,7 +2392,14 @@ describe('app shell routes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Token' }))
 
     expect(await screen.findByText('plaintext-api-token')).toBeInTheDocument()
+    expect(await screen.findByText('Existing desktop token')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy Token' })).toBeInTheDocument()
+    expect(createPayload).toEqual(
+      expect.objectContaining({
+        name: 'Desktop API token',
+        expiresInSeconds: 2592000,
+      }),
+    )
   })
 
   it('shows module enablement list and write-permission guidance on settings page', async () => {

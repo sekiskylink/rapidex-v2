@@ -63,6 +63,9 @@ func (r *tokenRepo) CreateAPIToken(context.Context, auth.APIToken, []string, *st
 	return nil, auth.ErrNotFound
 }
 func (r *tokenRepo) ListAPITokens(context.Context) ([]auth.APIToken, error) { return nil, nil }
+func (r *tokenRepo) ListActiveAPITokensCreatedByUser(context.Context, int64, time.Time) ([]auth.APIToken, error) {
+	return nil, nil
+}
 func (r *tokenRepo) GetAPITokenByID(context.Context, int64) (*auth.APIToken, error) {
 	return nil, auth.ErrNotFound
 }

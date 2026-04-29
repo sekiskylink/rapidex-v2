@@ -228,7 +228,33 @@ interface CreateAPITokenResponse {
   permissions: string[]
 }
 
+interface APITokenSummary {
+  id: number
+  name: string
+  prefix: string
+  createdAt: string
+  expiresAt?: string | null
+  lastUsedAt?: string | null
+}
+
+type APITokenExpiryPreset = '1d' | '7d' | '30d' | '90d' | 'custom'
+type APITokenExpiryUnit = 'minutes' | 'hours' | 'days'
+
 type RuntimeConfigFormat = 'json' | 'yaml'
+
+const apiTokenExpiryPresetOptions: Array<{ value: APITokenExpiryPreset; label: string }> = [
+  { value: '1d', label: '1 day' },
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
+  { value: '90d', label: '90 days' },
+  { value: 'custom', label: 'Custom' },
+]
+
+const apiTokenExpiryUnitOptions: Array<{ value: APITokenExpiryUnit; label: string }> = [
+  { value: 'minutes', label: 'Minutes' },
+  { value: 'hours', label: 'Hours' },
+  { value: 'days', label: 'Days' },
+]
 
 const navigationLabelFields = getEditableNavigationLabelFields()
 
@@ -255,6 +281,48 @@ function formatRapidProPreviewJSON(preview: RapidProReporterSyncPreviewResponse 
     return ''
   }
   return JSON.stringify(preview.requestBody ?? {}, null, 2)
+}
+
+function resolveAPITokenExpirySeconds(
+  preset: APITokenExpiryPreset,
+  customValue: string,
+  customUnit: APITokenExpiryUnit,
+): number | null {
+  switch (preset) {
+    case '1d':
+      return 24 * 60 * 60
+    case '7d':
+      return 7 * 24 * 60 * 60
+    case '30d':
+      return 30 * 24 * 60 * 60
+    case '90d':
+      return 90 * 24 * 60 * 60
+    case 'custom': {
+      const value = Number.parseInt(customValue, 10)
+      if (!Number.isFinite(value) || value <= 0) {
+        return null
+      }
+      switch (customUnit) {
+        case 'minutes':
+          return value * 60
+        case 'hours':
+          return value * 60 * 60
+        case 'days':
+          return value * 24 * 60 * 60
+        default:
+          return null
+      }
+    }
+    default:
+      return null
+  }
+}
+
+function formatAPITokenDateTime(value?: string | null, fallback = 'Never') {
+  if (!value) {
+    return fallback
+  }
+  return new Date(value).toLocaleString()
 }
 
 function createEmptyRapidexDataValueMapping(): RapidexWebhookDataValueMapping {
@@ -368,10 +436,16 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [authMode, setAuthMode] = React.useState<AuthMode>(() => loadAuthSettings().authMode)
   const [apiToken, setApiToken] = React.useState(() => loadAuthSettings().apiToken)
   const [tokenName, setTokenName] = React.useState('Web API token')
+  const [tokenExpiryPreset, setTokenExpiryPreset] = React.useState<APITokenExpiryPreset>('30d')
+  const [customTokenExpiryValue, setCustomTokenExpiryValue] = React.useState('30')
+  const [customTokenExpiryUnit, setCustomTokenExpiryUnit] = React.useState<APITokenExpiryUnit>('days')
   const [createdApiToken, setCreatedApiToken] = React.useState('')
   const [apiAccessSaving, setApiAccessSaving] = React.useState(false)
   const [apiAccessError, setApiAccessError] = React.useState('')
   const [apiTokenCreating, setApiTokenCreating] = React.useState(false)
+  const [myActiveApiTokens, setMyActiveApiTokens] = React.useState<APITokenSummary[]>([])
+  const [myActiveApiTokensLoading, setMyActiveApiTokensLoading] = React.useState(false)
+  const [myActiveApiTokensError, setMyActiveApiTokensError] = React.useState('')
   const [moduleEnablement, setModuleEnablement] = React.useState<ModuleEffectiveConfig[]>([])
   const [moduleEnablementLoading, setModuleEnablementLoading] = React.useState(true)
   const [moduleEnablementSaving, setModuleEnablementSaving] = React.useState(false)
@@ -726,6 +800,47 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       active = false
     }
   }, [canReadModuleEnablement, isIntegrationsSection, notify, rapidProPreviewReporterId])
+
+  React.useEffect(() => {
+    if (!isIntegrationsSection || !canManageApiTokens) {
+      setMyActiveApiTokens([])
+      setMyActiveApiTokensLoading(false)
+      setMyActiveApiTokensError('')
+      return
+    }
+
+    let active = true
+    setMyActiveApiTokensLoading(true)
+    setMyActiveApiTokensError('')
+    apiRequest<{ items?: APITokenSummary[] }>('/admin/api-tokens/mine', { method: 'GET' })
+      .then((payload) => {
+        if (active) {
+          setMyActiveApiTokens(payload.items ?? [])
+        }
+      })
+      .catch(async (error) => {
+        if (!active) {
+          return
+        }
+        setMyActiveApiTokens([])
+        const { error: normalized } = await handleAppError(error, {
+          fallbackMessage: 'Unable to load your active API tokens.',
+          notifier: notify,
+          notifyUser: false,
+        })
+        const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+        setMyActiveApiTokensError(`${normalized.message}${requestId}`)
+      })
+      .finally(() => {
+        if (active) {
+          setMyActiveApiTokensLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [canManageApiTokens, isIntegrationsSection, notify])
 
   const brandingUrlValidationError = React.useMemo(() => {
     if (!brandingImageUrl.trim()) {
@@ -1238,6 +1353,12 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       return
     }
 
+    const expiresInSeconds = resolveAPITokenExpirySeconds(tokenExpiryPreset, customTokenExpiryValue, customTokenExpiryUnit)
+    if (expiresInSeconds === null) {
+      setApiAccessError('Enter a valid positive custom expiry duration.')
+      return
+    }
+
     setApiTokenCreating(true)
     setApiAccessError('')
     try {
@@ -1245,6 +1366,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         method: 'POST',
         body: JSON.stringify({
           name: tokenName.trim(),
+          expiresInSeconds,
           permissions: currentPermissions,
         }),
       })
@@ -1255,6 +1377,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       })
       setAuthMode(saved.authMode)
       setApiToken(saved.apiToken)
+      const tokensPayload = await apiRequest<{ items?: APITokenSummary[] }>('/admin/api-tokens/mine', { method: 'GET' })
+      setMyActiveApiTokens(tokensPayload.items ?? [])
       notify.success('API token created. Copy it now.')
     } catch (error) {
       const { error: normalized } = await handleAppError(error, {
@@ -1705,10 +1829,89 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                     onChange={(event) => setTokenName(event.target.value)}
                     fullWidth
                   />
+                  <TextField
+                    select
+                    label="Token Expiry"
+                    value={tokenExpiryPreset}
+                    onChange={(event) => setTokenExpiryPreset(event.target.value as APITokenExpiryPreset)}
+                    fullWidth
+                  >
+                    {apiTokenExpiryPresetOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  {tokenExpiryPreset === 'custom' ? (
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                      <TextField
+                        label="Custom Expiry Value"
+                        value={customTokenExpiryValue}
+                        onChange={(event) => setCustomTokenExpiryValue(event.target.value)}
+                        fullWidth
+                      />
+                      <TextField
+                        select
+                        label="Custom Expiry Unit"
+                        value={customTokenExpiryUnit}
+                        onChange={(event) => setCustomTokenExpiryUnit(event.target.value as APITokenExpiryUnit)}
+                        sx={{ minWidth: { sm: 180 } }}
+                      >
+                        {apiTokenExpiryUnitOptions.map((option) => (
+                          <MenuItem key={option.value} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Stack>
+                  ) : null}
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     <Button variant="contained" onClick={() => void handleCreateApiToken()} disabled={apiTokenCreating || !tokenName.trim()}>
                       {apiTokenCreating ? 'Creating...' : 'Create Token'}
                     </Button>
+                  </Stack>
+                  <Divider />
+                  <Stack spacing={1.25}>
+                    <Typography variant="subtitle2">My Active Tokens</Typography>
+                    <Typography color="text.secondary">
+                      Active API tokens created by your account.
+                    </Typography>
+                    {myActiveApiTokensError ? <Alert severity="error">{myActiveApiTokensError}</Alert> : null}
+                    {myActiveApiTokensLoading ? (
+                      <Typography color="text.secondary">Loading active API tokens...</Typography>
+                    ) : myActiveApiTokens.length === 0 ? (
+                      <Alert severity="info">You have not created any active API tokens yet.</Alert>
+                    ) : (
+                      <Stack spacing={1}>
+                        {myActiveApiTokens.map((token) => (
+                          <Box
+                            key={token.id}
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 2,
+                              p: 1.5,
+                            }}
+                          >
+                            <Stack spacing={0.5}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="center" useFlexGap flexWrap="wrap">
+                                <Typography variant="subtitle2">{token.name}</Typography>
+                                <Chip size="small" label={token.prefix} variant="outlined" />
+                              </Stack>
+                              <Typography variant="body2" color="text.secondary">
+                                Created: {formatAPITokenDateTime(token.createdAt, '-')}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Expires: {formatAPITokenDateTime(token.expiresAt)}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Last used: {formatAPITokenDateTime(token.lastUsedAt, 'Not yet')}
+                              </Typography>
+                            </Stack>
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
                   </Stack>
                 </>
               ) : (
