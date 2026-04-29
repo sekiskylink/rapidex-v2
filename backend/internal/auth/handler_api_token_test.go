@@ -132,3 +132,43 @@ func TestListMyActiveAPITokensEndpointReturnsOwnedActiveTokens(t *testing.T) {
 		t.Fatalf("expected owned-token, got %+v", resp.Items[0])
 	}
 }
+
+func TestRevokeAPITokenEndpointRevokesToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := newFakeRepo(&User{ID: 1, Username: "admin", IsActive: true})
+	now := time.Date(2026, 4, 29, 11, 45, 0, 0, time.UTC)
+	repo.apiTokensByID[5] = &APIToken{
+		ID:              5,
+		Name:            "owned-token",
+		Prefix:          "bpt_12",
+		CreatedByUserID: int64Ptr(1),
+		CreatedAt:       now.Add(-time.Hour),
+		UpdatedAt:       now.Add(-time.Hour),
+	}
+
+	service := newTestService(repo, &fakeAuditRepo{})
+	service.now = func() time.Time { return now }
+	handler := NewHandler(service)
+
+	r := gin.New()
+	r.POST("/api/v1/admin/api-tokens/:id/revoke", func(c *gin.Context) {
+		c.Set(PrincipalContextKey, Principal{Type: "user", UserID: 1, Username: "admin"})
+		handler.RevokeAPIToken(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/api-tokens/5/revoke", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	stored, err := repo.GetAPITokenByID(req.Context(), 5)
+	if err != nil {
+		t.Fatalf("stored token lookup failed: %v", err)
+	}
+	if stored.RevokedAt == nil {
+		t.Fatal("expected token to be revoked")
+	}
+}

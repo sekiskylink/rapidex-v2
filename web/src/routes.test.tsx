@@ -1,5 +1,5 @@
 import React from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -957,6 +957,13 @@ describe('web settings page', () => {
   it('creates and reveals an API token in settings', async () => {
     authenticateForSettings(['settings.read', 'api_tokens.write'])
     let createPayload: Record<string, unknown> | undefined
+    let revoked = false
+    let revokePath = ''
+    const clipboardWriteText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    })
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -964,16 +971,18 @@ describe('web settings page', () => {
         if (url.endsWith('/admin/api-tokens/mine') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              items: [
-                {
-                  id: 3,
-                  name: 'Existing token',
-                  prefix: 'bpt_old',
-                  createdAt: '2026-04-20T09:00:00Z',
-                  expiresAt: '2026-05-20T09:00:00Z',
-                  lastUsedAt: null,
-                },
-              ],
+              items: revoked
+                ? []
+                : [
+                    {
+                      id: 3,
+                      name: 'Existing token',
+                      prefix: 'bpt_old',
+                      createdAt: '2026-04-20T09:00:00Z',
+                      expiresAt: '2026-05-20T09:00:00Z',
+                      lastUsedAt: null,
+                    },
+                  ],
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -992,6 +1001,14 @@ describe('web settings page', () => {
             { status: 201, headers: { 'Content-Type': 'application/json' } },
           )
         }
+        if (url.includes('/admin/api-tokens/3/revoke') && init?.method === 'POST') {
+          revoked = true
+          revokePath = url
+          return new Response(JSON.stringify({ id: 3, revokedAt: '2026-04-29T09:10:00Z' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
       }),
     )
@@ -1005,6 +1022,14 @@ describe('web settings page', () => {
     expect(await screen.findByText('plaintext-api-token')).toBeInTheDocument()
     expect(await screen.findByText('Existing token')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy Token' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Saved Token' }))
+    await waitFor(() => expect(clipboardWriteText).toHaveBeenCalledWith('plaintext-api-token'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Delete API Token' })
+    fireEvent.click(within(deleteDialog).getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(revokePath).toContain('/admin/api-tokens/3/revoke'))
+    await waitFor(() => expect(screen.queryByText('Existing token')).not.toBeInTheDocument())
+    expect(await screen.findByText('You have not created any active API tokens yet.')).toBeInTheDocument()
     expect(createPayload).toEqual(
       expect.objectContaining({
         name: 'Web API token',

@@ -2304,6 +2304,13 @@ describe('app shell routes', () => {
     })
 
     let createPayload: Record<string, unknown> | undefined
+    let revoked = false
+    let revokeUrl = ''
+    const clipboardWriteText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    })
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2322,16 +2329,18 @@ describe('app shell routes', () => {
         if (url.endsWith('/api/v1/admin/api-tokens/mine') && (!init?.method || init.method === 'GET')) {
           return new Response(
             JSON.stringify({
-              items: [
-                {
-                  id: 9,
-                  name: 'Existing desktop token',
-                  prefix: 'bpt_old',
-                  createdAt: '2026-04-20T09:00:00Z',
-                  expiresAt: '2026-05-20T09:00:00Z',
-                  lastUsedAt: null,
-                },
-              ],
+              items: revoked
+                ? []
+                : [
+                    {
+                      id: 9,
+                      name: 'Existing desktop token',
+                      prefix: 'bpt_old',
+                      createdAt: '2026-04-20T09:00:00Z',
+                      expiresAt: '2026-05-20T09:00:00Z',
+                      lastUsedAt: null,
+                    },
+                  ],
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
@@ -2349,6 +2358,14 @@ describe('app shell routes', () => {
             }),
             { status: 201, headers: { 'Content-Type': 'application/json' } },
           )
+        }
+        if (url.includes('/api/v1/admin/api-tokens/9/revoke') && init?.method === 'POST') {
+          revoked = true
+          revokeUrl = url
+          return new Response(JSON.stringify({ id: 9, revokedAt: '2026-04-29T09:10:00Z' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
         }
         if (url.endsWith('/api/v1/version')) {
           return new Response(
@@ -2394,6 +2411,14 @@ describe('app shell routes', () => {
     expect(await screen.findByText('plaintext-api-token')).toBeInTheDocument()
     expect(await screen.findByText('Existing desktop token')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy Token' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Saved Token' }))
+    await waitFor(() => expect(clipboardWriteText).toHaveBeenCalledWith('plaintext-api-token'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Delete API Token' })
+    fireEvent.click(within(deleteDialog).getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(revokeUrl).toContain('/api/v1/admin/api-tokens/9/revoke'))
+    await waitFor(() => expect(screen.queryByText('Existing desktop token')).not.toBeInTheDocument())
+    expect(await screen.findByText('You have not created any active API tokens yet.')).toBeInTheDocument()
     expect(createPayload).toEqual(
       expect.objectContaining({
         name: 'Desktop API token',

@@ -14,6 +14,10 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   MenuItem,
@@ -338,6 +342,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [createdApiToken, setCreatedApiToken] = React.useState('')
   const [apiAccessError, setApiAccessError] = React.useState('')
   const [apiTokenCreating, setApiTokenCreating] = React.useState(false)
+  const [apiTokenDeletingId, setApiTokenDeletingId] = React.useState<number | null>(null)
+  const [apiTokenDeleteTarget, setApiTokenDeleteTarget] = React.useState<APITokenSummary | null>(null)
   const [myActiveApiTokens, setMyActiveApiTokens] = React.useState<APITokenSummary[]>([])
   const [myActiveApiTokensLoading, setMyActiveApiTokensLoading] = React.useState(false)
   const [myActiveApiTokensError, setMyActiveApiTokensError] = React.useState('')
@@ -721,6 +727,25 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     }
   }, [apiClient, canManageApiTokens, isIntegrationsSection])
 
+  const loadMyActiveApiTokens = React.useCallback(async () => {
+    setMyActiveApiTokensLoading(true)
+    setMyActiveApiTokensError('')
+    try {
+      const payload = await apiClient.listMyActiveApiTokens()
+      setMyActiveApiTokens(payload.items ?? [])
+    } catch (error) {
+      setMyActiveApiTokens([])
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to load your active API tokens.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setMyActiveApiTokensError(`${normalized.message}${requestId}`)
+    } finally {
+      setMyActiveApiTokensLoading(false)
+    }
+  }, [apiClient])
+
   const brandingUrlValidationError = React.useMemo(() => {
     if (!brandingImageUrl.trim()) {
       return ''
@@ -880,8 +905,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         apiToken: token.token,
       })
       setSettings(saved)
-      const tokensPayload = await apiClient.listMyActiveApiTokens()
-      setMyActiveApiTokens(tokensPayload.items ?? [])
+      await loadMyActiveApiTokens()
       notify.success('API token created. Copy it now.')
     } catch (error) {
       const { error: normalized } = await handleAppError(error, {
@@ -904,6 +928,43 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       notify.success('API token copied.')
     } catch {
       notify.error('Unable to copy API token.')
+    }
+  }
+
+  const onCopySavedToken = async () => {
+    const value = settings?.apiToken?.trim() ?? ''
+    if (!value) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      notify.success('Saved API token copied.')
+    } catch {
+      notify.error('Unable to copy saved API token.')
+    }
+  }
+
+  const onConfirmDeleteApiToken = async () => {
+    if (!apiTokenDeleteTarget) {
+      return
+    }
+
+    setApiTokenDeletingId(apiTokenDeleteTarget.id)
+    setApiAccessError('')
+    try {
+      await apiClient.revokeApiToken(apiTokenDeleteTarget.id)
+      setApiTokenDeleteTarget(null)
+      await loadMyActiveApiTokens()
+      notify.success('API token deleted.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to delete API token.',
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setApiAccessError(`${normalized.message}${requestId}`)
+    } finally {
+      setApiTokenDeletingId(null)
     }
   }
 
@@ -1319,7 +1380,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   }
 
   return (
-    <Stack spacing={2.5}>
+    <>
+      <Stack spacing={2.5}>
       <Box>
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
           <Avatar
@@ -1655,6 +1717,9 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                   fullWidth
                 />
                 <Stack direction="row" spacing={1.25} justifyContent="flex-end">
+                  <Button variant="outlined" onClick={() => void onCopySavedToken()} disabled={!settings.apiToken?.trim()}>
+                    Copy Saved Token
+                  </Button>
                   <Button variant="contained" onClick={onSaveApiAccess} disabled={saving}>
                     {saving ? 'Saving...' : 'Save API Access'}
                   </Button>
@@ -1754,6 +1819,16 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                 <Typography variant="body2" color="text.secondary">
                                   Last used: {formatAPITokenDateTime(token.lastUsedAt, 'Not yet')}
                                 </Typography>
+                                <Stack direction="row" justifyContent="flex-end">
+                                  <Button
+                                    variant="outlined"
+                                    color="error"
+                                    onClick={() => setApiTokenDeleteTarget(token)}
+                                    disabled={apiTokenDeletingId === token.id}
+                                  >
+                                    Delete
+                                  </Button>
+                                </Stack>
                               </Stack>
                             </Box>
                           ))}
@@ -2402,8 +2477,30 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         </Card>
       ) : null}
 
-      <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
-    </Stack>
+        <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+      </Stack>
+      <Dialog
+        open={Boolean(apiTokenDeleteTarget)}
+        onClose={apiTokenDeletingId === null ? () => setApiTokenDeleteTarget(null) : undefined}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete API Token</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Delete {apiTokenDeleteTarget?.name ?? 'this token'}? This revokes the token immediately and it cannot be used again.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setApiTokenDeleteTarget(null)} disabled={apiTokenDeletingId !== null}>
+            Cancel
+          </Button>
+          <Button color="error" variant="contained" onClick={() => void onConfirmDeleteApiToken()} disabled={apiTokenDeletingId !== null}>
+            {apiTokenDeletingId !== null ? 'Deleting...' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   )
 }
 

@@ -1,5 +1,39 @@
 # Status
 
+## Update — API Token Copy and Confirmed Delete (Complete)
+
+### What changed
+- Added a `Copy Saved Token` action in both web and desktop `Settings > Integrations` so the locally saved API token can be copied without revealing or retyping it.
+- Kept the one-time plaintext token reveal after creation and preserved the existing `Copy Token` action for that value in both clients.
+- Added `Delete` actions to the `My Active Tokens` list in both web and desktop, backed by a confirmation dialog before revoking the selected token.
+- Reused the existing backend API token revoke flow and exposed it through the settings UX by calling `POST /api/v1/admin/api-tokens/:id/revoke` from both clients.
+- Added backend handler and router coverage for API token revocation and refreshed the settings route tests in both clients to cover copy and confirmed delete behavior.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-29-api-token-copy-and-confirmed-delete.md` (gitignored).
+
+### Added or updated tests
+- Backend:
+  - auth handler coverage for revoking an API token
+  - router coverage for the admin revoke route
+- Web:
+  - settings route coverage for copying the saved token
+  - settings route coverage for deleting an active token after confirmation
+- Desktop:
+  - matching settings route coverage for saved-token copy and confirmed token deletion
+
+### Verification summary
+- Backend focused auth/router suites: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/auth ./cmd/api`)
+- Backend focused revoke/list router suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./cmd/api -run 'TestAdminAPIToken(MineRouteReturnsOnlyOwnedActiveTokens|RevokeRouteRevokesToken|RoutesRejectAPITokenPrincipal)$'`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke/settings suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route smoke/settings suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this API token change.
+
 ## Update — API Token Expiry and Active Token Listing (Complete)
 
 ### What changed

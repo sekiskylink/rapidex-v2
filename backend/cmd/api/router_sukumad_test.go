@@ -139,7 +139,13 @@ func (r *apiTokenRepo) ListActiveAPITokensCreatedByUser(_ context.Context, userI
 	}
 	return items, nil
 }
-func (r *apiTokenRepo) GetAPITokenByID(context.Context, int64) (*auth.APIToken, error) {
+func (r *apiTokenRepo) GetAPITokenByID(_ context.Context, tokenID int64) (*auth.APIToken, error) {
+	for _, token := range r.tokens {
+		if token.ID == tokenID {
+			copy := *token
+			return &copy, nil
+		}
+	}
 	return nil, auth.ErrNotFound
 }
 func (r *apiTokenRepo) GetAPITokenByHash(_ context.Context, hash string) (*auth.APIToken, error) {
@@ -153,7 +159,17 @@ func (r *apiTokenRepo) GetAPITokenByHash(_ context.Context, hash string) (*auth.
 func (r *apiTokenRepo) GetAPITokenPermissions(_ context.Context, tokenID int64) ([]auth.APITokenPermission, error) {
 	return append([]auth.APITokenPermission{}, r.permissions[tokenID]...), nil
 }
-func (r *apiTokenRepo) RevokeAPIToken(context.Context, int64, time.Time) error { return nil }
+func (r *apiTokenRepo) RevokeAPIToken(_ context.Context, tokenID int64, now time.Time) error {
+	for _, token := range r.tokens {
+		if token.ID == tokenID {
+			copyNow := now
+			token.RevokedAt = &copyNow
+			token.UpdatedAt = now
+			return nil
+		}
+	}
+	return auth.ErrNotFound
+}
 func (r *apiTokenRepo) UpdateAPITokenLastUsed(_ context.Context, tokenID int64, now time.Time) error {
 	for _, token := range r.tokens {
 		if token.ID == tokenID {
@@ -728,6 +744,52 @@ func TestAdminAPITokenMineRouteReturnsOnlyOwnedActiveTokens(t *testing.T) {
 	}
 	if len(payload.Items) != 1 || payload.Items[0].Name != "owned-active" {
 		t.Fatalf("expected only owned-active token, got %+v", payload.Items)
+	}
+}
+
+func TestAdminAPITokenRevokeRouteRevokesToken(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	token, _, _ := jwt.GenerateAccessToken(111, "admin", time.Now().UTC())
+
+	tokenRepo := newAPITokenRepo()
+	ownerID := int64(111)
+	now := time.Now().UTC()
+	tokenRepo.tokens["owned"] = &auth.APIToken{
+		ID:              74,
+		Name:            "owned-active",
+		Prefix:          "bpt_ow",
+		CreatedByUserID: &ownerID,
+		CreatedAt:       now.Add(-time.Minute),
+		UpdatedAt:       now.Add(-time.Minute),
+	}
+
+	auditService := audit.NewService(&fakeAuditRepo{})
+	authService := auth.NewService(tokenRepo, auditService, jwt, nil, time.Minute, time.Hour, time.Hour, "secret", true, 4)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(map[int64][]string{
+		111: {rbac.PermissionAPITokensWrite},
+	}))
+	deps.AuthService = authService
+	deps.AuthHandler = auth.NewHandler(authService)
+
+	router := newRouter(deps)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/api-tokens/74/revoke", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	revoked := false
+	for _, item := range tokenRepo.tokens {
+		if item.ID == 74 && item.RevokedAt != nil {
+			revoked = true
+			break
+		}
+	}
+	if !revoked {
+		t.Fatal("expected token to be revoked")
 	}
 }
 

@@ -887,6 +887,12 @@ export function createApiClient(deps: ApiClientDeps) {
       })
     },
 
+    async revokeApiToken(tokenID: number) {
+      return authorizedRequest(`/api/v1/admin/api-tokens/${tokenID}/revoke`, {
+        method: 'POST',
+      })
+    },
+
     request<T>(path: string, init: RequestInit = {}) {
       return authorizedRequest<T>(path, init)
     },
