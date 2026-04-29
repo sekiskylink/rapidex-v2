@@ -136,6 +136,55 @@ func TestProcessWebhookQueuesAggregatePayload(t *testing.T) {
 	}
 }
 
+func TestProcessWebhookUsesNestedFlowUUIDFallback(t *testing.T) {
+	requestCreator := &fakeExternalRequestCreator{}
+	serverResolver := &fakeServerResolver{record: sukumadserver.Record{UID: "dhis2-uid"}}
+	service := NewIntegrationService(fakeMappingProvider{
+		ok: true,
+		binding: WebhookBinding{
+			MappingConfig: MappingConfig{
+				FlowUUID:   "flow-1",
+				FlowName:   "Weekly",
+				Dataset:    "ds-1",
+				OrgUnitVar: "facility",
+				PeriodVar:  "period",
+				Mappings: []DataValueMapping{
+					{Field: "value_a", DataElement: "de-1"},
+				},
+			},
+			RapidProServerCode: "rapidpro-main",
+			DHIS2ServerCode:    "dhis2-main",
+		},
+	}, nil, requestCreator, serverResolver)
+
+	webhook := RapidProWebhook{
+		Results: map[string]interface{}{
+			"facility": "OU_123",
+			"period":   "202604",
+			"value_a":  "17",
+		},
+	}
+	webhook.Flow.UUID = "flow-1"
+	webhook.Contact.UUID = "contact-1"
+
+	if err := service.ProcessWebhook(context.Background(), webhook); err != nil {
+		t.Fatalf("process webhook: %v", err)
+	}
+	if len(requestCreator.calls) != 1 {
+		t.Fatalf("expected 1 request create call, got %d", len(requestCreator.calls))
+	}
+	call := requestCreator.calls[0]
+	if call.CorrelationID != "rapidex:flow-1:contact-1" {
+		t.Fatalf("unexpected correlation id: %q", call.CorrelationID)
+	}
+	if got := call.Extras["flowUuid"]; got != "flow-1" {
+		t.Fatalf("expected resolved flowUuid extra, got %#v", got)
+	}
+	if serverResolver.code != "dhis2-main" {
+		t.Fatalf("expected lookup by dhis2-main, got %q", serverResolver.code)
+	}
+}
+
 func TestProcessWebhookUnwrapsNestedValueFields(t *testing.T) {
 	requestCreator := &fakeExternalRequestCreator{}
 	service := NewIntegrationService(fakeMappingProvider{
@@ -244,6 +293,30 @@ func TestProcessWebhookRejectsInvalidMappedPayload(t *testing.T) {
 	}
 	if _, ok := appErr.Details["dataValues"]; !ok {
 		t.Fatalf("expected dataValues validation error, got %+v", appErr.Details)
+	}
+}
+
+func TestProcessWebhookRejectsMissingFlowUUIDAcrossAllLocations(t *testing.T) {
+	service := NewIntegrationService(fakeMappingProvider{}, nil, &fakeExternalRequestCreator{}, &fakeServerResolver{})
+
+	err := service.ProcessWebhook(context.Background(), RapidProWebhook{
+		FlowUUID: "   ",
+		Results: map[string]interface{}{
+			"facility": "OU_123",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var appErr *apperror.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected app error, got %T", err)
+	}
+	if appErr.Code != apperror.CodeValidationFailed {
+		t.Fatalf("unexpected error code: %s", appErr.Code)
+	}
+	if got := appErr.Details["flow_uuid"]; got == nil {
+		t.Fatalf("expected flow_uuid validation details, got %+v", appErr.Details)
 	}
 }
 

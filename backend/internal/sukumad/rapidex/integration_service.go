@@ -54,7 +54,7 @@ func NewIntegrationService(provider MappingProvider, reporterSvc interface{}, re
 // configuration by flow UUID, transforms the event into an AggregatePayload,
 // validates the queueing prerequisites, and creates a Sukumad exchange request.
 func (s *IntegrationService) ProcessWebhook(ctx context.Context, webhook RapidProWebhook) error {
-	flowUUID := strings.TrimSpace(webhook.FlowUUID)
+	flowUUID := webhook.ResolvedFlowUUID()
 	if flowUUID == "" {
 		return apperror.ValidationWithDetails("validation failed", map[string]any{
 			"flow_uuid": []string{"is required"},
@@ -139,7 +139,7 @@ func validateAggregatePayload(payload AggregatePayload, binding WebhookBinding) 
 }
 
 func webhookCorrelationID(webhook RapidProWebhook) string {
-	flowUUID := strings.TrimSpace(webhook.FlowUUID)
+	flowUUID := webhook.ResolvedFlowUUID()
 	contactUUID := strings.TrimSpace(webhook.Contact.UUID)
 	if contactUUID != "" {
 		return "rapidex:" + flowUUID + ":" + contactUUID
@@ -155,7 +155,7 @@ func webhookIdempotencyKey(webhook RapidProWebhook) string {
 
 func webhookExtras(webhook RapidProWebhook, binding WebhookBinding, payload AggregatePayload) map[string]any {
 	extras := map[string]any{
-		"flowUuid":         strings.TrimSpace(webhook.FlowUUID),
+		"flowUuid":         webhook.ResolvedFlowUUID(),
 		"flowName":         strings.TrimSpace(binding.MappingConfig.FlowName),
 		"contactUuid":      strings.TrimSpace(webhook.Contact.UUID),
 		"rapidProServer":   strings.TrimSpace(binding.RapidProServerCode),

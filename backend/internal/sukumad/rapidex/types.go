@@ -1,5 +1,7 @@
 package rapidex
 
+import "strings"
+
 // MappingConfig defines the schema for mapping RapidPro flow variables to
 // DHIS2 aggregates.  The YAML keys mirror those in Rapidex v1.  Each
 // mapping configuration is tied to a specific RapidPro flow UUID.
@@ -91,14 +93,24 @@ type ExternalRequestInput struct {
 // for mapping are included here.  Additional properties (such as contact
 // fields) may be stored in the Maps.
 type RapidProWebhook struct {
-	FlowUUID string                 `json:"flow_uuid"`
-	Results  map[string]interface{} `json:"results"`
-	Fields   map[string]interface{} `json:"fields"`
-	Contact  struct {
+	FlowUUID string `json:"flow_uuid"`
+	Flow     struct {
+		UUID string `json:"uuid"`
+	} `json:"flow"`
+	Results map[string]interface{} `json:"results"`
+	Fields  map[string]interface{} `json:"fields"`
+	Contact struct {
 		UUID   string                 `json:"uuid"`
 		URN    string                 `json:"urn"`
 		URNs   []string               `json:"urns"`
 		Fields map[string]interface{} `json:"fields"`
 	} `json:"contact"`
 	Extra map[string]interface{} `json:"extra"`
+}
+
+func (w RapidProWebhook) ResolvedFlowUUID() string {
+	if flowUUID := strings.TrimSpace(w.FlowUUID); flowUUID != "" {
+		return flowUUID
+	}
+	return strings.TrimSpace(w.Flow.UUID)
 }

@@ -196,6 +196,66 @@ func TestRapidexWebhookRouteAcceptsAPITokenAndQueuesRequest(t *testing.T) {
 	}
 }
 
+func TestRapidexWebhookRouteAcceptsNestedFlowUUIDFallback(t *testing.T) {
+	jwt := auth.NewJWTManager("jwt-secret", time.Minute)
+	deps := newSukumadTestAppDeps(jwt, rbacServiceWithPermissions(nil))
+	deps.ModuleFlagsProvider = func() map[string]bool { return map[string]bool{"requests": true} }
+
+	tokenRepo := newAPITokenRepo()
+	secret := "test-secret"
+	plain := "bpt_requestswrite_nested_flow"
+	hash := auth.HashAPIToken(secret, plain)
+	tokenRepo.tokens[hash] = &auth.APIToken{
+		ID:        53,
+		Name:      "rapidex-webhook",
+		TokenHash: hash,
+		Prefix:    auth.APITokenPrefix(plain),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	tokenRepo.permissions[53] = []auth.APITokenPermission{{APITokenID: 53, Permission: rbac.PermissionRequestsWrite}}
+	deps.AuthService = auth.NewService(tokenRepo, nil, jwt, nil, time.Minute, time.Hour, time.Hour, secret, true, 4)
+	deps.APITokenHeaderName = "X-API-Token"
+
+	requestCreator := &rapidexRouteRequestCreator{}
+	deps.RapidexService = rapidex.NewIntegrationService(rapidexRouteMappingProvider{
+		binding: rapidex.WebhookBinding{
+			MappingConfig: rapidex.MappingConfig{
+				FlowUUID:   "flow-1",
+				Dataset:    "ds-1",
+				OrgUnitVar: "facility",
+				PeriodVar:  "period",
+				Mappings: []rapidex.DataValueMapping{
+					{Field: "value_a", DataElement: "de-1"},
+				},
+			},
+			DHIS2ServerCode: "dhis2-main",
+		},
+		ok: true,
+	}, nil, requestCreator, rapidexRouteServerResolver{
+		record: sukumadserver.Record{UID: "dhis2-uid"},
+	})
+
+	router := newRouter(deps)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rapidex/webhook", bytes.NewReader([]byte(`{
+		"flow":{"uuid":"flow-1"},
+		"results":{"facility":"OU_123","period":"202604","value_a":"17"},
+		"contact":{"uuid":"contact-1"}
+	}`)))
+	req.Header.Set("X-API-Token", plain)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(requestCreator.calls) != 1 {
+		t.Fatalf("expected request queue call, got %d", len(requestCreator.calls))
+	}
+}
+
 func TestRapidexWebhookRouteRequiresAuthentication(t *testing.T) {
 	router := newRouter(AppDeps{
 		ModuleFlagsProvider: func() map[string]bool { return map[string]bool{"requests": true} },
