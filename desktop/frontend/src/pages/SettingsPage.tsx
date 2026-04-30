@@ -2221,6 +2221,19 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                           </Stack>
                         )}
                       </Stack>
+                      {!rapidProValidation.isValid ? (
+                        <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
+                      ) : (
+                        <Alert severity="success">Saved RapidPro mappings are valid and ready for sync.</Alert>
+                      )}
+                      {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidPro sync settings.</Alert> : null}
+                      {canWriteBranding ? (
+                        <Stack direction="row" spacing={1.25} justifyContent="flex-end">
+                          <Button variant="outlined" onClick={() => void onSaveRapidProSync()} disabled={rapidProSyncSaving}>
+                            {rapidProSyncSaving ? 'Saving...' : 'Save RapidPro Sync Settings'}
+                          </Button>
+                        </Stack>
+                      ) : null}
                       <Divider />
                       <Stack spacing={1.5}>
                         <Typography variant="subtitle1">RapidEx Webhook Mappings</Typography>
@@ -2494,6 +2507,19 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                                 ))}
                               </Stack>
                             )}
+                            {!rapidexValidation.isValid ? (
+                              <Alert severity="warning">{(rapidexValidation.errors ?? []).join(' ')}</Alert>
+                            ) : (
+                              <Alert severity="success">Saved RapidEx webhook mappings are valid and ready for webhook processing.</Alert>
+                            )}
+                            {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidEx webhook mappings.</Alert> : null}
+                            {canWriteBranding ? (
+                              <Stack direction="row" spacing={1.25} justifyContent="flex-end">
+                                <Button variant="contained" onClick={() => void onSaveRapidexMappings()} disabled={rapidexSaving}>
+                                  {rapidexSaving ? 'Saving...' : 'Save RapidEx Webhook Mappings'}
+                                </Button>
+                              </Stack>
+                            ) : null}
                           </>
                         )}
                       </Stack>
@@ -2648,25 +2674,6 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                           </Stack>
                         </CardContent>
                       </Card>
-                      {!rapidProValidation.isValid ? (
-                        <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
-                      ) : (
-                        <Alert severity="success">Saved RapidPro mappings are valid and ready for sync.</Alert>
-                      )}
-                      {!rapidexValidation.isValid ? (
-                        <Alert severity="warning">{(rapidexValidation.errors ?? []).join(' ')}</Alert>
-                      ) : (
-                        <Alert severity="success">Saved RapidEx webhook mappings are valid and ready for webhook processing.</Alert>
-                      )}
-                      {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change RapidPro sync settings.</Alert> : null}
-                      <Stack direction="row" spacing={1.25} justifyContent="flex-end">
-                        <Button variant="outlined" onClick={() => void onSaveRapidProSync()} disabled={!canWriteBranding || rapidProSyncSaving}>
-                          {rapidProSyncSaving ? 'Saving...' : 'Save RapidPro Sync Settings'}
-                        </Button>
-                        <Button variant="contained" onClick={() => void onSaveRapidexMappings()} disabled={!canWriteBranding || rapidexSaving}>
-                          {rapidexSaving ? 'Saving...' : 'Save RapidEx Webhook Mappings'}
-                        </Button>
-                      </Stack>
                     </>
                   )
                 ) : null}

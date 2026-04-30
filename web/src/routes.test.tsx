@@ -1247,6 +1247,9 @@ describe('web settings page', () => {
     renderWithRouter('/settings/integrations')
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
     expect((await screen.findByLabelText('RapidPro Sync Preview JSON') as HTMLInputElement).value).toContain('"name": "Alice Reporter"')
+    const rapidProSaveButton = screen.getByRole('button', { name: 'Save RapidPro Sync Settings' })
+    const rapidexSectionHeading = screen.getByText('RapidEx Webhook Mappings')
+    expect(rapidProSaveButton.compareDocumentPosition(rapidexSectionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.change(await screen.findByLabelText('RapidPro Server Code'), { target: { value: 'rapidpro-custom' } })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Reporter Name' }))
@@ -1254,7 +1257,7 @@ describe('web settings page', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Do not sync' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Facility UID' }))
     fireEvent.click(await screen.findByRole('option', { name: 'FacilityCode (Custom field)' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save RapidPro Sync Settings' }))
+    fireEvent.click(rapidProSaveButton)
 
     await waitFor(() => {
       expect(rapidProPutPayload).toEqual({
@@ -1369,6 +1372,9 @@ describe('web settings page', () => {
 
     renderWithRouter('/settings/integrations')
     await screen.findByRole('heading', { name: 'Settings', level: 1 })
+    const rapidexSaveButton = screen.getByRole('button', { name: 'Save RapidEx Webhook Mappings' })
+    const partialReportParsersHeading = screen.getByText('Partial Report Parsers')
+    expect(rapidexSaveButton.compareDocumentPosition(partialReportParsersHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.change(await screen.findByLabelText('Flow Name'), { target: { value: 'Updated Weekly Report' } })
     fireEvent.change(screen.getByLabelText('Dataset'), { target: { value: 'DATASET_B' } })
@@ -1379,7 +1385,7 @@ describe('web settings page', () => {
     fireEvent.change(screen.getByLabelText('Data Element'), { target: { value: 'DE_2' } })
     fireEvent.change(screen.getByLabelText('Category Option Combo'), { target: { value: 'COC_2' } })
     fireEvent.change(screen.getByLabelText('Attribute Option Combo'), { target: { value: 'AOC_2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save RapidEx Webhook Mappings' }))
+    fireEvent.click(rapidexSaveButton)
 
     await waitFor(() => {
       expect(rapidexPutPayload).toEqual({

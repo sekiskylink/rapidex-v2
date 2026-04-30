@@ -5355,3 +5355,29 @@ Verification for this update:
 ### Known follow-ups
 - Existing frontend test output still includes non-blocking MUI/jsdom anchor warnings.
 - Existing Vite build warnings about ignored `'use client'` directives and large chunks remain unchanged.
+
+## Update — Integrations Save Action Placement (Complete)
+
+### What changed
+- Repositioned `Save RapidPro Sync Settings` so it now appears at the end of the `RapidPro Reporter Sync` section in both the web and desktop clients.
+- Repositioned `Save RapidEx Webhook Mappings` so it now appears at the end of the `RapidEx Webhook Mappings` section in both clients, before the partial-report parser editor begins.
+- Removed the old shared bottom action row that grouped both save buttons together after unrelated integrations content.
+- Kept the existing handlers, labels, permission checks, and request payload behavior unchanged while moving the controls closer to the forms they persist.
+- Updated the route tests in both clients to assert the new DOM order so each save action stays colocated with its own section.
+- Saved the prompt traceability copy in `docs/prompts/2026-04-30-integrations-save-action-placement.md` (gitignored, not committed).
+
+### How to run tests
+- `cd web && npm test -- --run src/routes.test.tsx`
+- `cd web && npm run build`
+- `cd desktop/frontend && npm test -- --run src/routes.test.tsx`
+- `cd desktop/frontend && npm run build`
+
+### Verification summary
+- Web route tests: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+
+### Known follow-ups
+- Existing frontend test output still includes non-blocking MUI/jsdom anchor warnings.
+- Existing Vite build warnings about ignored `'use client'` directives and large chunks remain unchanged.
