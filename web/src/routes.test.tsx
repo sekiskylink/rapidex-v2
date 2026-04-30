@@ -759,7 +759,36 @@ describe('web RBAC navigation', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 
-  it('opens app search with keyboard shortcut and navigates only to accessible routes', async () => {
+  it('searches accessible routes directly from the app bar', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 12,
+        username: 'settings-reader',
+        roles: ['Staff'],
+        permissions: ['settings.write'],
+      },
+    })
+
+    renderWithRouter('/dashboard')
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+
+    const searchInput = screen.getByRole('combobox', { name: 'Search apps' })
+    fireEvent.focus(searchInput)
+    fireEvent.change(searchInput, { target: { value: 'users' } })
+    expect(screen.getByText('No accessible routes match that search.')).toBeInTheDocument()
+
+    fireEvent.change(searchInput, { target: { value: 'dashboard' } })
+    const dashboardResult = await screen.findByRole('option', { name: /Dashboard/i })
+    fireEvent.click(dashboardResult)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+  })
+
+  it('opens the app launcher with keyboard shortcut and navigates only to accessible routes', async () => {
     setAuthSnapshot({
       isAuthenticated: true,
       accessToken: 'access-token',
@@ -778,17 +807,41 @@ describe('web RBAC navigation', () => {
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
 
-    const launcher = await screen.findByRole('dialog', { name: 'App Search' })
+    const launcher = await screen.findByRole('dialog', { name: 'Jump To' })
 
-    const searchInput = screen.getByRole('textbox', { name: 'Search apps' })
-    fireEvent.change(searchInput, { target: { value: 'users' } })
-    expect(screen.getByText('No accessible routes match that search.')).toBeInTheDocument()
+    const searchInput = within(launcher).getByRole('textbox', { name: 'Search apps' })
+    fireEvent.change(searchInput, { target: { value: 'general' } })
+    const settingsResult = await within(launcher).findByRole('button', { name: /General/i })
+    fireEvent.click(settingsResult)
 
-    fireEvent.change(searchInput, { target: { value: 'dashboard' } })
-    const [dashboardResult] = await within(launcher).findAllByText('Dashboard')
-    fireEvent.click(dashboardResult)
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+  })
+
+  it('keeps inaccessible routes out of the app launcher', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 12,
+        username: 'settings-reader',
+        roles: ['Staff'],
+        permissions: ['settings.write'],
+      },
+    })
+
+    renderWithRouter('/dashboard')
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const launcher = await screen.findByRole('dialog', { name: 'Jump To' })
+
+    const searchInput = within(launcher).getByRole('textbox', { name: 'Search apps' })
+    fireEvent.change(searchInput, { target: { value: 'users' } })
+    expect(within(launcher).getByText('No accessible routes match that search.')).toBeInTheDocument()
+    expect(within(launcher).queryByText('Users')).not.toBeInTheDocument()
   })
 
   it('renders sanitized runtime config on the settings page', async () => {

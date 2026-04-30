@@ -16,73 +16,56 @@ import {
 import type { NavigationSearchEntry } from '../navigation'
 
 interface AppLauncherDialogProps {
-  currentPath: string
   entries: readonly NavigationSearchEntry[]
   open: boolean
+  query: string
   onClose: () => void
+  onQueryChange: (value: string) => void
   onNavigate: (path: string) => void
   renderIcon: (entry: NavigationSearchEntry) => React.ReactNode
 }
 
 export function AppLauncherDialog({
-  currentPath,
   entries,
   open,
+  query,
   onClose,
+  onQueryChange,
   onNavigate,
   renderIcon,
 }: AppLauncherDialogProps) {
-  const [query, setQuery] = React.useState('')
   const [selectedIndex, setSelectedIndex] = React.useState(0)
 
   React.useEffect(() => {
     if (!open) {
-      setQuery('')
       setSelectedIndex(0)
     }
   }, [open])
 
-  const filteredEntries = React.useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const nextEntries = normalizedQuery
-      ? entries.filter((entry) => entry.searchText.includes(normalizedQuery))
-      : entries
-
-    return [...nextEntries].sort((left, right) => {
-      if (left.path === currentPath && right.path !== currentPath) {
-        return -1
-      }
-      if (right.path === currentPath && left.path !== currentPath) {
-        return 1
-      }
-      return left.label.localeCompare(right.label)
-    })
-  }, [currentPath, entries, query])
-
   React.useEffect(() => {
     setSelectedIndex((current) => {
-      if (filteredEntries.length === 0) {
+      if (entries.length === 0) {
         return 0
       }
-      return Math.min(current, filteredEntries.length - 1)
+      return Math.min(current, entries.length - 1)
     })
-  }, [filteredEntries])
+  }, [entries])
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setSelectedIndex((current) => (filteredEntries.length === 0 ? 0 : (current + 1) % filteredEntries.length))
+      setSelectedIndex((current) => (entries.length === 0 ? 0 : (current + 1) % entries.length))
       return
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
       setSelectedIndex((current) =>
-        filteredEntries.length === 0 ? 0 : (current - 1 + filteredEntries.length) % filteredEntries.length,
+        entries.length === 0 ? 0 : (current - 1 + entries.length) % entries.length,
       )
       return
     }
     if (event.key === 'Enter') {
-      const selectedEntry = filteredEntries[selectedIndex]
+      const selectedEntry = entries[selectedIndex]
       if (!selectedEntry) {
         return
       }
@@ -100,15 +83,16 @@ export function AppLauncherDialog({
       aria-labelledby="app-launcher-title"
       PaperProps={{ sx: { borderRadius: 3 } }}
     >
-      <DialogTitle id="app-launcher-title">App Search</DialogTitle>
+      <DialogTitle id="app-launcher-title">Jump To</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
         <TextField
           autoFocus
           fullWidth
-          label="Search apps"
+          placeholder="Search apps, pages, settings..."
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={handleKeyDown}
+          inputProps={{ 'aria-label': 'Search apps' }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -118,8 +102,8 @@ export function AppLauncherDialog({
           }}
         />
         <List sx={{ mt: 2, py: 0 }}>
-          {filteredEntries.length > 0 ? (
-            filteredEntries.map((entry, index) => {
+          {entries.length > 0 ? (
+            entries.map((entry, index) => {
               const selected = index === selectedIndex
               return (
                 <ListItemButton

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionPrincipal } from '../auth/session'
-import { getNavigationSearchEntries } from '../navigation'
+import { getNavigationSearchEntries, searchNavigationEntries } from '../navigation'
 import { applyEffectiveModuleEnablement, isPathModuleEnabled, moduleEnablementRegistry, resetEffectiveModuleEnablement } from './moduleEnablement'
 import { canAccessNavigationPath, authenticatedNavigationRegistry } from './navigation'
 import { moduleRegistry } from './modules'
@@ -118,6 +118,17 @@ describe('desktop registries', () => {
       breadcrumb: 'Sukumad',
     })
     expect(entries.some((entry) => entry.path === '/users')).toBe(false)
+  })
+
+  it('prioritizes the current route when listing search results', () => {
+    const entries = getNavigationSearchEntries(
+      principalWith(['settings.write', 'dashboard.read', 'documentation.read'], ['Staff']),
+    )
+
+    const results = searchNavigationEntries(entries, '/dashboard', '')
+
+    expect(results[0]?.path).toBe('/dashboard')
+    expect(results.length).toBeGreaterThan(1)
   })
 
   it('blocks module paths when effective config disables a module', () => {

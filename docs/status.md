@@ -1,5 +1,31 @@
 # Status
 
+## Update — Quick App Search UX Refinement (Complete)
+
+### What changed
+- Reworked the quick app launcher in both web and desktop so the AppBar search is now a real inline app search instead of a button that only opens a second search field.
+- Kept `Cmd/Ctrl+K` as the expanded launcher path, now opening a `Jump To` dialog that shares the same search query and permission-filtered navigation results.
+- Added shared search ranking helpers in both clients so inline search and the launcher dialog use the same accessible route matching, current-route prioritization, and permission-aware filtering.
+- Improved the launcher dialog copy and input behavior so the search field uses a readable placeholder instead of the low-contrast floating label reported in the prior UX.
+- Aligned desktop route coverage with the current settings/RBAC behavior while preserving parity with the web shell tests.
+
+### Added or updated tests
+- Web:
+  - route coverage for inline AppBar search
+  - route coverage for `Ctrl+K` launcher navigation
+  - route coverage proving inaccessible routes stay hidden from the launcher
+  - registry coverage for current-route search prioritization
+- Desktop:
+  - matching route coverage for inline AppBar search, launcher navigation, and inaccessible-route filtering
+  - matching registry coverage for current-route search prioritization
+
+### Verification summary
+- Web route and registry suites: PASS (`cd web && npm test -- --run src/routes.test.tsx src/registry/registry.test.ts`)
+- Desktop route and registry suites: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx src/registry/registry.test.ts`)
+
+### Known follow-ups
+- Frontend test runs still emit existing non-blocking MUI/jsdom `anchorEl` warnings when popper-based controls render under test.
+
 ## Update — RapidEx Partial Report Parser Endpoint (Complete)
 
 ### What changed

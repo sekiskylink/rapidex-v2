@@ -1,19 +1,21 @@
 import React from 'react'
 import {
+  Autocomplete,
   AppBar,
   Avatar,
   Box,
-  Button,
   Collapse,
   Divider,
   Drawer,
   IconButton,
+  InputAdornment,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
+  TextField,
   Toolbar,
   Tooltip,
   Typography,
@@ -25,7 +27,13 @@ import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { useBootstrapSnapshot } from '../bootstrap/state'
 import { appName } from '../lib/env'
-import { buildNavigation, canAccessRoute, getNavigationSearchEntries, type NavigationNode } from '../navigation'
+import {
+  buildNavigation,
+  canAccessRoute,
+  getNavigationSearchEntries,
+  searchNavigationEntries,
+  type NavigationNode,
+} from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import { AppLauncherDialog } from './AppLauncherDialog'
 import {
@@ -116,6 +124,8 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   const [launcherOpen, setLauncherOpen] = React.useState(false)
+  const [launcherQuery, setLauncherQuery] = React.useState('')
+  const [inlineSearchOpen, setInlineSearchOpen] = React.useState(false)
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
   const [adminExpanded, setAdminExpanded] = React.useState(
     pathname.startsWith('/users') ||
@@ -161,6 +171,8 @@ export function AppShell() {
       return
     }
     setLauncherOpen(false)
+    setLauncherQuery('')
+    setInlineSearchOpen(false)
   }, [pathname])
 
   React.useEffect(() => {
@@ -211,6 +223,10 @@ export function AppShell() {
   const launcherEntries = getNavigationSearchEntries(user, {
     labels: prefs.navLabels,
   })
+  const launcherResults = React.useMemo(
+    () => searchNavigationEntries(launcherEntries, pathname, launcherQuery),
+    [launcherEntries, launcherQuery, pathname],
+  )
   const canAccessSettings = canAccessRoute('/settings/general', user)
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || appName
   const navIcons = {
@@ -267,6 +283,8 @@ export function AppShell() {
 
   const handleLauncherNavigate = (path: string) => {
     setLauncherOpen(false)
+    setInlineSearchOpen(false)
+    setLauncherQuery('')
     handleNavItemClick(path)
   }
 
@@ -649,24 +667,114 @@ export function AppShell() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }} noWrap>
             {getRouteLabel(pathname)}
           </Typography>
-          <Button
-            color="inherit"
-            variant="outlined"
-            aria-label="Open app search"
-            onClick={() => setLauncherOpen(true)}
-            startIcon={<SearchRoundedIcon fontSize="small" />}
+          <Autocomplete
+            size="small"
+            disablePortal
+            options={launcherResults}
+            getOptionLabel={(option) => option.label}
+            filterOptions={(options) => options}
+            inputValue={launcherQuery}
+            open={inlineSearchOpen && !launcherOpen}
+            onInputChange={(_, value, reason) => {
+              if (reason === 'reset') {
+                return
+              }
+              setLauncherQuery(value)
+            }}
+            onOpen={() => setInlineSearchOpen(true)}
+            onClose={() => setInlineSearchOpen(false)}
+            onChange={(_, value) => {
+              if (value) {
+                handleLauncherNavigate(value.path)
+              }
+            }}
+            isOptionEqualToValue={(option, value) => option.path === value.path}
+            noOptionsText="No accessible routes match that search."
             sx={{
               mr: 1.5,
-              borderColor: 'rgba(255,255,255,0.35)',
-              color: 'inherit',
-              display: { xs: 'none', sm: 'inline-flex' },
-              '&:hover': {
-                borderColor: 'rgba(255,255,255,0.55)',
+              width: 320,
+              display: { xs: 'none', sm: 'block' },
+              '& .MuiInputBase-root': {
+                height: 40,
+                borderRadius: 999,
+                bgcolor: 'rgba(255,255,255,0.14)',
+                color: 'inherit',
+                pr: 1,
+              },
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255,255,255,0.18)',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255,255,255,0.3)',
+              },
+              '& .MuiInputBase-input::placeholder': {
+                color: 'rgba(255,255,255,0.82)',
+                opacity: 1,
+              },
+              '& .MuiAutocomplete-endAdornment': {
+                right: 10,
+              },
+              '& .MuiSvgIcon-root': {
+                color: 'inherit',
               },
             }}
-          >
-            Search
-          </Button>
+            slotProps={{
+              paper: {
+                sx: {
+                  mt: 1,
+                  borderRadius: 2.5,
+                },
+              },
+            }}
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option.path} sx={{ alignItems: 'flex-start', py: 1.1 }}>
+                <Box sx={{ mr: 1.25, mt: 0.25, color: 'text.secondary' }}>{renderLauncherIcon(option.key)}</Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {option.label}
+                  </Typography>
+                  {option.breadcrumb ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {option.breadcrumb}
+                    </Typography>
+                  ) : null}
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {option.path}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Search apps, pages, settings..."
+                onFocus={() => setInlineSearchOpen(true)}
+                inputProps={{
+                  ...params.inputProps,
+                  'aria-label': 'Search apps',
+                }}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: (
+                    <>
+                      <InputAdornment position="start">
+                        <SearchRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                      {params.InputProps.startAdornment}
+                    </>
+                  ),
+                  endAdornment: (
+                    <>
+                      <Typography variant="caption" sx={{ mr: 0.75, opacity: 0.8 }}>
+                        {navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'}
+                      </Typography>
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
           <IconButton
             color="inherit"
             aria-label="Open app search"
@@ -814,10 +922,11 @@ export function AppShell() {
       </Box>
       <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
       <AppLauncherDialog
-        currentPath={pathname}
-        entries={launcherEntries}
+        entries={launcherResults}
         open={launcherOpen}
+        query={launcherQuery}
         onClose={() => setLauncherOpen(false)}
+        onQueryChange={setLauncherQuery}
         onNavigate={handleLauncherNavigate}
         renderIcon={(entry) => renderLauncherIcon(entry.key)}
       />

@@ -32,6 +32,10 @@ export interface NavigationSearchEntry {
   searchText: string
 }
 
+interface RankedNavigationSearchEntry extends NavigationSearchEntry {
+  rank: number
+}
+
 interface NavigationOptions {
   labels?: Record<string, string>
   showAdministration?: boolean
@@ -178,4 +182,54 @@ export function getNavigationSearchEntries(
 
   collectEntries(authenticatedNavigationRegistry)
   return entries
+}
+
+export function searchNavigationEntries(
+  entries: readonly NavigationSearchEntry[],
+  currentPath: string,
+  query: string,
+) {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  const ranked = entries
+    .map((entry): RankedNavigationSearchEntry | null => {
+      let rank = 0
+
+      if (normalizedQuery) {
+        const label = entry.label.toLowerCase()
+        const breadcrumb = entry.breadcrumb.toLowerCase()
+        const path = entry.path.toLowerCase()
+
+        if (label === normalizedQuery) {
+          rank = 400
+        } else if (label.startsWith(normalizedQuery)) {
+          rank = 300
+        } else if (breadcrumb.startsWith(normalizedQuery) || path.startsWith(normalizedQuery)) {
+          rank = 220
+        } else if (entry.searchText.includes(normalizedQuery)) {
+          rank = 120
+        } else {
+          return null
+        }
+      }
+
+      if (entry.path === currentPath) {
+        rank += normalizedQuery ? 20 : 40
+      }
+
+      return {
+        ...entry,
+        rank,
+      }
+    })
+    .filter((entry): entry is RankedNavigationSearchEntry => entry !== null)
+
+  ranked.sort((left, right) => {
+    if (right.rank !== left.rank) {
+      return right.rank - left.rank
+    }
+    return left.label.localeCompare(right.label)
+  })
+
+  return ranked
 }
