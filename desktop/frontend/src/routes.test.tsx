@@ -120,9 +120,9 @@ describe('app shell routes', () => {
       }),
     )
 
-    renderWithRouter('/dashboard', store)
+    renderWithRouter('/settings/about', store)
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveClass('Mui-selected')
     expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Toggle Administration menu' }))
@@ -789,6 +789,58 @@ describe('app shell routes', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.getAllByText('Administration').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
+  })
+
+  it('opens app search with keyboard shortcut and navigates only to accessible routes', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 12,
+              username: 'settings-reader',
+              roles: ['Staff'],
+              permissions: ['settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/dashboard', store)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const launcher = await screen.findByRole('dialog', { name: 'App Search' })
+
+    const searchInput = screen.getByRole('textbox', { name: 'Search apps' })
+    fireEvent.change(searchInput, { target: { value: 'users' } })
+    expect(screen.getByText('No accessible routes match that search.')).toBeInTheDocument()
+
+    fireEvent.change(searchInput, { target: { value: 'dashboard' } })
+    const [dashboardResult] = await within(launcher).findAllByText('Dashboard')
+    fireEvent.click(dashboardResult)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
   })
 
   it('hides administration navigation and shows module-disabled state when administration module is disabled', async () => {

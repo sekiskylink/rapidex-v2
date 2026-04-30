@@ -283,9 +283,9 @@ describe('web auth routes', () => {
       },
     })
 
-    renderWithRouter('/dashboard')
+    renderWithRouter('/settings/about')
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Toggle Sukumad menu' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Toggle Administration menu' })).not.toBeInTheDocument()
@@ -757,6 +757,38 @@ describe('web RBAC navigation', () => {
     expect(screen.queryByText('Roles')).not.toBeInTheDocument()
     expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+  })
+
+  it('opens app search with keyboard shortcut and navigates only to accessible routes', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 12,
+        username: 'settings-reader',
+        roles: ['Staff'],
+        permissions: ['settings.write'],
+      },
+    })
+
+    renderWithRouter('/dashboard')
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const launcher = await screen.findByRole('dialog', { name: 'App Search' })
+
+    const searchInput = screen.getByRole('textbox', { name: 'Search apps' })
+    fireEvent.change(searchInput, { target: { value: 'users' } })
+    expect(screen.getByText('No accessible routes match that search.')).toBeInTheDocument()
+
+    fireEvent.change(searchInput, { target: { value: 'dashboard' } })
+    const [dashboardResult] = await within(launcher).findAllByText('Dashboard')
+    fireEvent.click(dashboardResult)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
   })
 
   it('renders sanitized runtime config on the settings page', async () => {

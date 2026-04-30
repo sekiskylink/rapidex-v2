@@ -23,6 +23,15 @@ export interface NavigationBranch {
 
 export type NavigationNode = NavigationLeaf | NavigationBranch
 
+export interface NavigationSearchEntry {
+  key: string
+  label: string
+  path: string
+  visible: boolean
+  breadcrumb: string
+  searchText: string
+}
+
 interface NavigationOptions {
   labels?: Record<string, string>
   showAdministration?: boolean
@@ -135,4 +144,38 @@ export function buildNavigation(
 
 export function canAccessRoute(pathname: string, user: AuthUser | null | undefined = getAuthSnapshot().user) {
   return canAccessNavigationPath(pathname, user)
+}
+
+export function getNavigationSearchEntries(
+  user: AuthUser | null | undefined = getAuthSnapshot().user,
+  options: NavigationOptions = {},
+) {
+  const entries: NavigationSearchEntry[] = []
+
+  const collectEntries = (items: readonly NavigationDefinition[], parentLabels: string[] = []) => {
+    for (const item of items) {
+      const itemLabel = resolveLabel(item.id, item.label, options.labels)
+      const nextParentLabels = item.path ? parentLabels : [...parentLabels, itemLabel]
+
+      if (item.path && canAccessNavigationPath(item.path, user)) {
+        const breadcrumb = parentLabels.join(' / ')
+        const searchParts = [itemLabel, breadcrumb, item.path, item.id]
+        entries.push({
+          key: item.id,
+          label: itemLabel,
+          path: item.path,
+          visible: true,
+          breadcrumb,
+          searchText: searchParts.filter(Boolean).join(' ').toLowerCase(),
+        })
+      }
+
+      if (item.children) {
+        collectEntries(item.children, nextParentLabels)
+      }
+    }
+  }
+
+  collectEntries(authenticatedNavigationRegistry)
+  return entries
 }

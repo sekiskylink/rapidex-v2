@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionPrincipal } from '../auth/session'
+import { getNavigationSearchEntries } from '../navigation'
 import { applyEffectiveModuleEnablement, isPathModuleEnabled, moduleEnablementRegistry, resetEffectiveModuleEnablement } from './moduleEnablement'
 import { canAccessNavigationPath, authenticatedNavigationRegistry } from './navigation'
 import { moduleRegistry } from './modules'
@@ -103,6 +104,20 @@ describe('desktop registries', () => {
     expect(canAccessNavigationPath(serversReader, '/observability')).toBe(false)
     expect(canAccessNavigationPath(serversReader, '/scheduler')).toBe(false)
     expect(canAccessNavigationPath(serversReader, '/documentation')).toBe(true)
+  })
+
+  it('builds searchable route entries from accessible navigation paths', () => {
+    const entries = getNavigationSearchEntries(principalWith(['settings.write', 'requests.read'], ['Staff']))
+
+    expect(entries.find((entry) => entry.path === '/settings/branding')).toMatchObject({
+      label: 'Branding',
+      breadcrumb: 'Administration / Settings',
+    })
+    expect(entries.find((entry) => entry.path === '/requests')).toMatchObject({
+      label: 'Requests',
+      breadcrumb: 'Sukumad',
+    })
+    expect(entries.some((entry) => entry.path === '/users')).toBe(false)
   })
 
   it('blocks module paths when effective config disables a module', () => {

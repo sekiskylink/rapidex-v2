@@ -23,6 +23,15 @@ export interface NavigationBranch {
 
 export type NavigationNode = NavigationLeaf | NavigationBranch
 
+export interface NavigationSearchEntry {
+  label: string
+  key: string
+  path: string
+  visible: boolean
+  breadcrumb: string
+  searchText: string
+}
+
 export interface NavigationGroup {
   label: string
   key: string
@@ -144,4 +153,38 @@ export function buildNavigation(principal: SessionPrincipal | null | undefined, 
 
 export function canAccessRoute(principal: SessionPrincipal | null | undefined, pathname: string) {
   return canAccessNavigationPath(principal, pathname)
+}
+
+export function getNavigationSearchEntries(
+  principal: SessionPrincipal | null | undefined,
+  options: NavigationOptions = {},
+) {
+  const entries: NavigationSearchEntry[] = []
+
+  const collectEntries = (items: readonly NavigationDefinition[], parentLabels: string[] = []) => {
+    for (const item of items) {
+      const itemLabel = resolveLabel(item.id, item.label, options.labels)
+      const nextParentLabels = item.path ? parentLabels : [...parentLabels, itemLabel]
+
+      if (item.path && canAccessNavigationPath(principal, item.path)) {
+        const breadcrumb = parentLabels.join(' / ')
+        const searchParts = [itemLabel, breadcrumb, item.path, item.id]
+        entries.push({
+          key: item.id,
+          label: itemLabel,
+          path: item.path,
+          visible: true,
+          breadcrumb,
+          searchText: searchParts.filter(Boolean).join(' ').toLowerCase(),
+        })
+      }
+
+      if (item.children) {
+        collectEntries(item.children, nextParentLabels)
+      }
+    }
+  }
+
+  collectEntries(authenticatedNavigationRegistry)
+  return entries
 }

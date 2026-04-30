@@ -3,6 +3,7 @@ import {
   AppBar,
   Avatar,
   Box,
+  Button,
   Collapse,
   Divider,
   Drawer,
@@ -24,8 +25,9 @@ import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { useBootstrapSnapshot } from '../bootstrap/state'
 import { appName } from '../lib/env'
-import { buildNavigation, canAccessRoute, type NavigationNode } from '../navigation'
+import { buildNavigation, canAccessRoute, getNavigationSearchEntries, type NavigationNode } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
+import { AppLauncherDialog } from './AppLauncherDialog'
 import {
   AdminPanelSettingsRoundedIcon,
   ChevronLeftRoundedIcon,
@@ -57,6 +59,7 @@ import {
   ArticleRoundedIcon,
   ApartmentRoundedIcon,
   PersonRoundedIcon,
+  SearchRoundedIcon,
 } from '../ui/icons'
 import { PalettePresetPicker } from '../ui/theme/PalettePresetPicker'
 import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
@@ -112,6 +115,7 @@ export function AppShell() {
   const [collapsed, setCollapsed] = React.useState(prefs.collapseNavByDefault)
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
+  const [launcherOpen, setLauncherOpen] = React.useState(false)
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
   const [adminExpanded, setAdminExpanded] = React.useState(
     pathname.startsWith('/users') ||
@@ -153,6 +157,25 @@ export function AppShell() {
   }, [isMobile, mobileOpen])
 
   React.useEffect(() => {
+    if (!launcherOpen) {
+      return
+    }
+    setLauncherOpen(false)
+  }, [pathname])
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setLauncherOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  React.useEffect(() => {
     if (
       pathname.startsWith('/users') ||
       pathname.startsWith('/roles') ||
@@ -185,6 +208,9 @@ export function AppShell() {
     showAdministration: prefs.showAdministrationMenu,
     showSukumad: prefs.showSukumadMenu,
   })
+  const launcherEntries = getNavigationSearchEntries(user, {
+    labels: prefs.navLabels,
+  })
   const canAccessSettings = canAccessRoute('/settings/general', user)
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || appName
   const navIcons = {
@@ -211,6 +237,8 @@ export function AppShell() {
     reporters: <PersonRoundedIcon fontSize="small" />,
   }
   const activeDrawerWidth = collapsed ? miniDrawerWidth : drawerWidth
+  const renderLauncherIcon = (itemKey: string) =>
+    navIcons[itemKey as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />
 
   const handleDesktopDrawerToggle = () => {
     const next = !collapsed
@@ -235,6 +263,11 @@ export function AppShell() {
 
   const closeMenus = () => {
     setMenuAnchor(null)
+  }
+
+  const handleLauncherNavigate = (path: string) => {
+    setLauncherOpen(false)
+    handleNavItemClick(path)
   }
 
   function renderAdministrationItem(item: NavigationNode) {
@@ -616,6 +649,32 @@ export function AppShell() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }} noWrap>
             {getRouteLabel(pathname)}
           </Typography>
+          <Button
+            color="inherit"
+            variant="outlined"
+            aria-label="Open app search"
+            onClick={() => setLauncherOpen(true)}
+            startIcon={<SearchRoundedIcon fontSize="small" />}
+            sx={{
+              mr: 1.5,
+              borderColor: 'rgba(255,255,255,0.35)',
+              color: 'inherit',
+              display: { xs: 'none', sm: 'inline-flex' },
+              '&:hover': {
+                borderColor: 'rgba(255,255,255,0.55)',
+              },
+            }}
+          >
+            Search
+          </Button>
+          <IconButton
+            color="inherit"
+            aria-label="Open app search"
+            onClick={() => setLauncherOpen(true)}
+            sx={{ mr: 1.5, display: { xs: 'inline-flex', sm: 'none' } }}
+          >
+            <SearchRoundedIcon />
+          </IconButton>
           <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' }, mr: 1.25, opacity: 0.95 }}>
             {user?.username ?? 'User'}
           </Typography>
@@ -754,6 +813,14 @@ export function AppShell() {
         </Box>
       </Box>
       <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+      <AppLauncherDialog
+        currentPath={pathname}
+        entries={launcherEntries}
+        open={launcherOpen}
+        onClose={() => setLauncherOpen(false)}
+        onNavigate={handleLauncherNavigate}
+        renderIcon={(entry) => renderLauncherIcon(entry.key)}
+      />
     </Box>
   )
 }

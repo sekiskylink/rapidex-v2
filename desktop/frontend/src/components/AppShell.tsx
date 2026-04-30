@@ -3,6 +3,7 @@ import {
   AppBar,
   Avatar,
   Box,
+  Button,
   Collapse,
   Divider,
   Drawer,
@@ -22,6 +23,7 @@ import {
 import { alpha, type Theme } from '@mui/material/styles'
 import MenuIcon from '@mui/icons-material/Menu'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
 import BrushRoundedIcon from '@mui/icons-material/BrushRounded'
@@ -51,11 +53,12 @@ import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import { Outlet, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useSessionPrincipal } from '../auth/hooks'
 import { useBootstrapSnapshot } from '../bootstrap/state'
-import { buildNavigation, canAccessRoute, type NavigationNode } from '../navigation'
+import { buildNavigation, canAccessRoute, getNavigationSearchEntries, type NavigationNode } from '../navigation'
 import { getRouteLabel } from '../registry/navigation'
 import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
+import { AppLauncherDialog } from './AppLauncherDialog'
 
 const DRAWER_WIDTH = 248
 const MINI_DRAWER_WIDTH = 76
@@ -115,6 +118,7 @@ export function AppShell() {
 
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
+  const [launcherOpen, setLauncherOpen] = React.useState(false)
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
   const [adminExpanded, setAdminExpanded] = React.useState(
     pathname.startsWith('/users') ||
@@ -141,6 +145,9 @@ export function AppShell() {
     labels: prefs.navLabels,
     showAdministration: prefs.showAdministrationMenu,
     showSukumad: prefs.showSukumadMenu,
+  })
+  const launcherEntries = getNavigationSearchEntries(principal, {
+    labels: prefs.navLabels,
   })
   const canAccessSettings = canAccessRoute(principal, '/settings/general')
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || 'RapidEx'
@@ -173,6 +180,25 @@ export function AppShell() {
     }
   }, [pathname])
 
+  React.useEffect(() => {
+    if (!launcherOpen) {
+      return
+    }
+    setLauncherOpen(false)
+  }, [pathname])
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setLauncherOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
     settings: <SettingsRoundedIcon fontSize="small" />,
@@ -196,9 +222,17 @@ export function AppShell() {
     orgunits: <ApartmentRoundedIcon fontSize="small" />,
     reporters: <PersonRoundedIcon fontSize="small" />,
   }
+  const renderLauncherIcon = (itemKey: string) =>
+    navIcons[itemKey as keyof typeof navIcons] ?? <SettingsRoundedIcon fontSize="small" />
 
   const closeMenus = () => {
     setMenuAnchor(null)
+  }
+
+  const handleLauncherNavigate = (path: string) => {
+    setLauncherOpen(false)
+    void navigate({ to: path })
+    setMobileOpen(false)
   }
 
   function renderAdministrationItem(item: NavigationNode) {
@@ -526,6 +560,32 @@ export function AppShell() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             {getRouteLabel(pathname)}
           </Typography>
+          <Button
+            color="inherit"
+            variant="outlined"
+            aria-label="Open app search"
+            onClick={() => setLauncherOpen(true)}
+            startIcon={<SearchRoundedIcon fontSize="small" />}
+            sx={{
+              mr: 1.5,
+              borderColor: 'rgba(255,255,255,0.35)',
+              color: 'inherit',
+              display: { xs: 'none', sm: 'inline-flex' },
+              '&:hover': {
+                borderColor: 'rgba(255,255,255,0.55)',
+              },
+            }}
+          >
+            Search
+          </Button>
+          <IconButton
+            color="inherit"
+            aria-label="Open app search"
+            onClick={() => setLauncherOpen(true)}
+            sx={{ mr: 1.5, display: { xs: 'inline-flex', sm: 'none' } }}
+          >
+            <SearchRoundedIcon />
+          </IconButton>
           <Tooltip title="Open user menu">
             <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)}>
               <Avatar sx={{ width: 32, height: 32 }}>
@@ -631,6 +691,14 @@ export function AppShell() {
       </Box>
 
       <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+      <AppLauncherDialog
+        currentPath={pathname}
+        entries={launcherEntries}
+        open={launcherOpen}
+        onClose={() => setLauncherOpen(false)}
+        onNavigate={handleLauncherNavigate}
+        renderIcon={(entry) => renderLauncherIcon(entry.key)}
+      />
     </Box>
   )
 }
