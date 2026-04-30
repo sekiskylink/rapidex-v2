@@ -1400,6 +1400,157 @@ describe('web settings page', () => {
     })
   })
 
+  it('saves partial report parser rules through backend settings API', async () => {
+    authenticateForSettings(['settings.read', 'settings.write'])
+
+    let parserPutPayload: Record<string, unknown> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ applicationDisplayName: 'RapidEx', loginImageUrl: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ modules: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ config: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ rapidProServerCode: 'rapidpro', availableFields: [], mappings: [], validation: { isValid: true, errors: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync/preview-reporters') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidex-webhook-mappings') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ rapidProServerCode: 'rapidpro', dhis2ServerCode: 'dhis2', mappings: [], validation: { isValid: true, errors: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidex-partial-report-parsers') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              parsers: [{ keyword: 'cases', indicators: ['ma', 'dy', 'tf'] }],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/rapidex-webhook-mappings/metadata') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              dhis2ServerCode: 'dhis2',
+              rapidProServers: [],
+              dhis2Servers: [],
+              snapshot: {
+                rapidProServerCode: 'rapidpro',
+                dhis2ServerCode: 'dhis2',
+                rapidProFlows: [],
+                rapidProContactFields: [],
+                dhis2Datasets: [],
+                dhis2LoadedDatasetIds: [],
+                dhis2DatasetMetadataById: {},
+              },
+              warnings: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/rapidex-partial-report-parsers') && init?.method === 'PUT') {
+          parserPutPayload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
+          return new Response(
+            JSON.stringify({
+              parsers: [{ keyword: 'cases', indicators: ['dy', 'ma', 'tf', 'xx'] }],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings/integrations')
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+
+    const parserRule = await screen.findByTestId('partial-report-parser-rule-0')
+    fireEvent.click(within(parserRule).getAllByRole('button', { name: 'Move Down' })[0])
+    fireEvent.change(within(parserRule).getByLabelText('Parser Keyword 1'), { target: { value: ' Cases ' } })
+    fireEvent.click(within(parserRule).getByRole('button', { name: 'Add Indicator' }))
+    fireEvent.change(within(parserRule).getByLabelText('Indicator 1.4'), { target: { value: ' XX ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Partial Report Parsers' }))
+
+    await waitFor(() => {
+      expect(parserPutPayload).toEqual({
+        parsers: [{ keyword: 'cases', indicators: ['dy', 'ma', 'tf', 'xx'] }],
+      })
+    })
+  })
+
+  it('shows partial report parser rules in read-only mode for settings readers', async () => {
+    authenticateForSettings(['settings.read'])
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/settings/login-branding') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ applicationDisplayName: 'RapidEx', loginImageUrl: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/module-enablement') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ modules: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ rapidProServerCode: 'rapidpro', availableFields: [], mappings: [], validation: { isValid: true, errors: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidpro-reporter-sync/preview-reporters') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidex-webhook-mappings') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ rapidProServerCode: 'rapidpro', dhis2ServerCode: 'dhis2', mappings: [], validation: { isValid: true, errors: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (url.endsWith('/settings/rapidex-partial-report-parsers') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              parsers: [{ keyword: 'cases', indicators: ['ma', 'dy', 'tf'] }],
+              validation: { isValid: true, errors: [] },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/settings/rapidex-webhook-mappings/metadata') && (!init?.method || init.method === 'GET')) {
+          return new Response(
+            JSON.stringify({
+              rapidProServerCode: 'rapidpro',
+              dhis2ServerCode: 'dhis2',
+              rapidProServers: [],
+              dhis2Servers: [],
+              snapshot: {
+                rapidProServerCode: 'rapidpro',
+                dhis2ServerCode: 'dhis2',
+                rapidProFlows: [],
+                rapidProContactFields: [],
+                dhis2Datasets: [],
+                dhis2LoadedDatasetIds: [],
+                dhis2DatasetMetadataById: {},
+              },
+              warnings: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/settings/integrations')
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+
+    expect(await screen.findByText('You need settings.write permission to change partial report parser rules.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Partial Report Parsers' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Parser Keyword 1')).toBeDisabled()
+  })
+
   it('shows module enablement list and write-permission guidance', async () => {
     setAuthSnapshot({
       isAuthenticated: true,

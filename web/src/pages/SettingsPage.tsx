@@ -137,6 +137,21 @@ interface RapidexWebhookMappingsSettingsResponse {
   validation: RapidexWebhookMappingsValidation
 }
 
+interface RapidexPartialReportParserConfig {
+  keyword: string
+  indicators: string[]
+}
+
+interface RapidexPartialReportParsersValidation {
+  isValid: boolean
+  errors?: string[]
+}
+
+interface RapidexPartialReportParsersSettingsResponse {
+  parsers: RapidexPartialReportParserConfig[]
+  validation: RapidexPartialReportParsersValidation
+}
+
 interface RapidexWebhookMappingsExportResponse {
   yaml: string
 }
@@ -350,6 +365,22 @@ function createEmptyRapidexWebhookMapping(): RapidexWebhookMappingConfig {
   }
 }
 
+function createEmptyRapidexPartialReportParser(): RapidexPartialReportParserConfig {
+  return {
+    keyword: '',
+    indicators: [''],
+  }
+}
+
+function normalizeRapidexPartialReportParsersForSubmit(
+  parsers: RapidexPartialReportParserConfig[],
+): RapidexPartialReportParserConfig[] {
+  return parsers.map((parser) => ({
+    keyword: parser.keyword.trim().toLowerCase(),
+    indicators: parser.indicators.map((indicator) => indicator.trim().toLowerCase()),
+  }))
+}
+
 function createEmptyRapidexMetadataSnapshot(): RapidexWebhookMetadataSnapshot {
   return {
     rapidProServerCode: 'rapidpro',
@@ -490,6 +521,13 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const [rapidexDhis2ServerCode, setRapidexDhis2ServerCode] = React.useState('dhis2')
   const [rapidexMetadataRefreshing, setRapidexMetadataRefreshing] = React.useState(false)
   const [rapidexDatasetMetadataLoading, setRapidexDatasetMetadataLoading] = React.useState(false)
+  const [rapidexPartialReportParsers, setRapidexPartialReportParsers] = React.useState<RapidexPartialReportParserConfig[]>([])
+  const [rapidexPartialReportParsersSaved, setRapidexPartialReportParsersSaved] = React.useState<RapidexPartialReportParserConfig[]>([])
+  const [rapidexPartialReportParsersValidation, setRapidexPartialReportParsersValidation] =
+    React.useState<RapidexPartialReportParsersValidation>({ isValid: true })
+  const [rapidexPartialReportParsersLoading, setRapidexPartialReportParsersLoading] = React.useState(true)
+  const [rapidexPartialReportParsersSaving, setRapidexPartialReportParsersSaving] = React.useState(false)
+  const [rapidexPartialReportParsersError, setRapidexPartialReportParsersError] = React.useState('')
   const [reporterGroups, setReporterGroups] = React.useState<ReporterGroupRecord[]>([])
   const [reporterGroupsLoading, setReporterGroupsLoading] = React.useState(true)
   const [reporterGroupsSavingId, setReporterGroupsSavingId] = React.useState<number | null>(null)
@@ -512,6 +550,12 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     setRapidexDhis2ServerCode((payload.dhis2ServerCode ?? '').trim() || 'dhis2')
     setRapidexMappings(payload.mappings ?? [])
     setRapidexValidation(payload.validation ?? { isValid: true })
+  }, [])
+  const applyRapidexPartialReportParsersPayload = React.useCallback((payload: RapidexPartialReportParsersSettingsResponse) => {
+    const nextParsers = payload.parsers ?? []
+    setRapidexPartialReportParsers(nextParsers)
+    setRapidexPartialReportParsersSaved(nextParsers)
+    setRapidexPartialReportParsersValidation(payload.validation ?? { isValid: true })
   }, [])
   const applyRapidexMetadataPayload = React.useCallback((payload: RapidexWebhookMetadataResponse) => {
     setRapidexRapidProServerCode((payload.rapidProServerCode ?? '').trim() || 'rapidpro')
@@ -678,6 +722,8 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   React.useEffect(() => {
     if (!isIntegrationsSection) {
       setRapidProSyncLoading(false)
+      setRapidexLoading(false)
+      setRapidexPartialReportParsersLoading(false)
       setReporterGroupsLoading(false)
       setRapidProFields([])
       setRapidProMappings([])
@@ -693,12 +739,18 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidexMetadataWarnings([])
       setRapidexRapidProServers([])
       setRapidexDhis2Servers([])
+      setRapidexPartialReportParsers([])
+      setRapidexPartialReportParsersSaved([])
+      setRapidexPartialReportParsersValidation({ isValid: true })
+      setRapidexPartialReportParsersError('')
       setReporterGroups([])
       setReporterGroupsError('')
       return
     }
     if (!canReadModuleEnablement) {
       setRapidProSyncLoading(false)
+      setRapidexLoading(false)
+      setRapidexPartialReportParsersLoading(false)
       setReporterGroupsLoading(false)
       setRapidProFields([])
       setRapidProMappings([])
@@ -714,6 +766,10 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidexMetadataWarnings([])
       setRapidexRapidProServers([])
       setRapidexDhis2Servers([])
+      setRapidexPartialReportParsers([])
+      setRapidexPartialReportParsersSaved([])
+      setRapidexPartialReportParsersValidation({ isValid: true })
+      setRapidexPartialReportParsersError('')
       setReporterGroups([])
       setReporterGroupsError('')
       return
@@ -721,20 +777,23 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
     let active = true
     setRapidProSyncLoading(true)
     setRapidexLoading(true)
+    setRapidexPartialReportParsersLoading(true)
     setReporterGroupsLoading(true)
     Promise.all([
       apiRequest<RapidProReporterSyncSettingsResponse>('/settings/rapidpro-reporter-sync', { method: 'GET' }),
       apiRequest<{ items: RapidProReporterOption[] }>('/settings/rapidpro-reporter-sync/preview-reporters', { method: 'GET' }),
       apiRequest<RapidexWebhookMappingsSettingsResponse>('/settings/rapidex-webhook-mappings', { method: 'GET' }),
+      apiRequest<RapidexPartialReportParsersSettingsResponse>('/settings/rapidex-partial-report-parsers', { method: 'GET' }),
       apiRequest<RapidexWebhookMetadataResponse>('/settings/rapidex-webhook-mappings/metadata', { method: 'GET' }),
       apiRequest<{ items: ReporterGroupRecord[] }>('/reporter-groups?page=0&pageSize=200', { method: 'GET' }),
     ])
-      .then(([payload, reporterPayload, rapidexPayload, rapidexMetadataPayload, groupPayload]) => {
+      .then(([payload, reporterPayload, rapidexPayload, parserPayload, rapidexMetadataPayload, groupPayload]) => {
         if (!active) {
           return
         }
         applyRapidProSyncPayload(payload)
         applyRapidexPayload(rapidexPayload)
+        applyRapidexPartialReportParsersPayload(parserPayload)
         applyRapidexMetadataPayload(rapidexMetadataPayload)
         const items = reporterPayload.items ?? []
         setRapidProPreviewReporters(items)
@@ -758,13 +817,14 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
         if (active) {
           setRapidProSyncLoading(false)
           setRapidexLoading(false)
+          setRapidexPartialReportParsersLoading(false)
           setReporterGroupsLoading(false)
         }
       })
     return () => {
       active = false
     }
-  }, [applyRapidProSyncPayload, applyRapidexMetadataPayload, applyRapidexPayload, canReadModuleEnablement, isIntegrationsSection, notify])
+  }, [applyRapidProSyncPayload, applyRapidexMetadataPayload, applyRapidexPartialReportParsersPayload, applyRapidexPayload, canReadModuleEnablement, isIntegrationsSection, notify])
 
   React.useEffect(() => {
     if (!isIntegrationsSection || !canReadModuleEnablement || !rapidProPreviewReporterId) {
@@ -1282,6 +1342,112 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
       setRapidexError(`${normalized.message}${requestId}`)
     } finally {
       setRapidexExporting(false)
+    }
+  }
+
+  const handlePartialReportParserKeywordChange = React.useCallback((parserIndex: number, value: string) => {
+    setRapidexPartialReportParsers((current) =>
+      current.map((parser, index) => (index === parserIndex ? { ...parser, keyword: value } : parser)),
+    )
+  }, [])
+
+  const handlePartialReportParserIndicatorChange = React.useCallback(
+    (parserIndex: number, indicatorIndex: number, value: string) => {
+      setRapidexPartialReportParsers((current) =>
+        current.map((parser, index) =>
+          index === parserIndex
+            ? {
+                ...parser,
+                indicators: parser.indicators.map((indicator, currentIndicatorIndex) =>
+                  currentIndicatorIndex === indicatorIndex ? value : indicator,
+                ),
+              }
+            : parser,
+        ),
+      )
+    },
+    [],
+  )
+
+  const addPartialReportParser = React.useCallback(() => {
+    setRapidexPartialReportParsers((current) => [...current, createEmptyRapidexPartialReportParser()])
+  }, [])
+
+  const removePartialReportParser = React.useCallback((parserIndex: number) => {
+    setRapidexPartialReportParsers((current) => current.filter((_, index) => index !== parserIndex))
+  }, [])
+
+  const addPartialReportParserIndicator = React.useCallback((parserIndex: number) => {
+    setRapidexPartialReportParsers((current) =>
+      current.map((parser, index) =>
+        index === parserIndex ? { ...parser, indicators: [...parser.indicators, ''] } : parser,
+      ),
+    )
+  }, [])
+
+  const removePartialReportParserIndicator = React.useCallback((parserIndex: number, indicatorIndex: number) => {
+    setRapidexPartialReportParsers((current) =>
+      current.map((parser, index) =>
+        index === parserIndex
+          ? {
+              ...parser,
+              indicators: parser.indicators.filter((_, currentIndicatorIndex) => currentIndicatorIndex !== indicatorIndex),
+            }
+          : parser,
+      ),
+    )
+  }, [])
+
+  const movePartialReportParserIndicator = React.useCallback((parserIndex: number, indicatorIndex: number, direction: -1 | 1) => {
+    setRapidexPartialReportParsers((current) =>
+      current.map((parser, index) => {
+        if (index !== parserIndex) {
+          return parser
+        }
+        const nextIndex = indicatorIndex + direction
+        if (nextIndex < 0 || nextIndex >= parser.indicators.length) {
+          return parser
+        }
+        const nextIndicators = [...parser.indicators]
+        ;[nextIndicators[indicatorIndex], nextIndicators[nextIndex]] = [nextIndicators[nextIndex], nextIndicators[indicatorIndex]]
+        return { ...parser, indicators: nextIndicators }
+      }),
+    )
+  }, [])
+
+  const resetPartialReportParsers = React.useCallback(() => {
+    setRapidexPartialReportParsers(rapidexPartialReportParsersSaved)
+    setRapidexPartialReportParsersError('')
+  }, [rapidexPartialReportParsersSaved])
+
+  const handleSavePartialReportParsers = async () => {
+    if (!canWriteBranding) {
+      return
+    }
+    setRapidexPartialReportParsersSaving(true)
+    setRapidexPartialReportParsersError('')
+    try {
+      const payload = await apiRequest<RapidexPartialReportParsersSettingsResponse>(
+        '/settings/rapidex-partial-report-parsers',
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            parsers: normalizeRapidexPartialReportParsersForSubmit(rapidexPartialReportParsers),
+          }),
+        },
+      )
+      applyRapidexPartialReportParsersPayload(payload)
+      notify.success('Partial report parsers saved.')
+    } catch (error) {
+      const { error: normalized } = await handleAppError(error, {
+        fallbackMessage: 'Unable to save partial report parsers.',
+        notifier: notify,
+        notifyUser: false,
+      })
+      const requestId = normalized.requestId ? ` Request ID: ${normalized.requestId}` : ''
+      setRapidexPartialReportParsersError(`${normalized.message}${requestId}`)
+    } finally {
+      setRapidexPartialReportParsersSaving(false)
     }
   }
 
@@ -2499,6 +2665,149 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                         </>
                       )}
                     </Stack>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
+                      <Stack spacing={2}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
+                          <Box>
+                            <Typography variant="subtitle1">Partial Report Parsers</Typography>
+                            <Typography color="text.secondary">
+                              Define each report keyword and the indicator order the backend should normalize to fixed positions.
+                            </Typography>
+                          </Box>
+                          {canWriteBranding ? (
+                            <Button variant="outlined" onClick={addPartialReportParser} disabled={rapidexPartialReportParsersLoading || rapidexPartialReportParsersSaving}>
+                              Add Parser Rule
+                            </Button>
+                          ) : null}
+                        </Stack>
+                        <Alert severity="info">
+                          Use the keyword from the incoming message prefix, for example <code>cases</code>. Indicator order defines output positions such as <code>ma, dy, tf</code> becoming positions <code>1, 2, 3</code>.
+                        </Alert>
+                        {rapidexPartialReportParsersError ? <Alert severity="error">{rapidexPartialReportParsersError}</Alert> : null}
+                        {!rapidexPartialReportParsersValidation.isValid ? (
+                          <Alert severity="warning">{(rapidexPartialReportParsersValidation.errors ?? []).join(' ')}</Alert>
+                        ) : (
+                          <Alert severity="success">Saved partial report parser rules are valid.</Alert>
+                        )}
+                        {rapidexPartialReportParsersLoading ? (
+                          <Typography color="text.secondary">Loading partial report parser rules...</Typography>
+                        ) : rapidexPartialReportParsers.length === 0 ? (
+                          <Alert severity="info">No partial report parser rules have been configured yet.</Alert>
+                        ) : (
+                          <Stack spacing={2}>
+                            {rapidexPartialReportParsers.map((parser, parserIndex) => (
+                              <Paper
+                                key={`rapidex-partial-parser-${parserIndex}`}
+                                variant="outlined"
+                                data-testid={`partial-report-parser-rule-${parserIndex}`}
+                                sx={{ p: 2 }}
+                              >
+                                <Stack spacing={2}>
+                                  <Stack direction="row" alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
+                                    <Typography variant="subtitle2">Parser Rule {parserIndex + 1}</Typography>
+                                    {canWriteBranding ? (
+                                      <Button
+                                        variant="text"
+                                        color="error"
+                                        onClick={() => removePartialReportParser(parserIndex)}
+                                        disabled={rapidexPartialReportParsersSaving}
+                                      >
+                                        Delete Rule
+                                      </Button>
+                                    ) : null}
+                                  </Stack>
+                                  <TextField
+                                    label={`Parser Keyword ${parserIndex + 1}`}
+                                    value={parser.keyword}
+                                    onChange={(event) => handlePartialReportParserKeywordChange(parserIndex, event.target.value)}
+                                    disabled={!canWriteBranding || rapidexPartialReportParsersSaving}
+                                    helperText="Message keyword prefix, such as cases."
+                                    sx={{ maxWidth: 320 }}
+                                  />
+                                  <Stack spacing={1.5}>
+                                    {parser.indicators.map((indicator, indicatorIndex) => (
+                                      <Stack
+                                        key={`partial-parser-${parserIndex}-indicator-${indicatorIndex}`}
+                                        direction={{ xs: 'column', md: 'row' }}
+                                        spacing={1.5}
+                                        alignItems={{ xs: 'stretch', md: 'center' }}
+                                      >
+                                        <TextField
+                                          label={`Indicator ${parserIndex + 1}.${indicatorIndex + 1}`}
+                                          value={indicator}
+                                          onChange={(event) =>
+                                            handlePartialReportParserIndicatorChange(parserIndex, indicatorIndex, event.target.value)
+                                          }
+                                          disabled={!canWriteBranding || rapidexPartialReportParsersSaving}
+                                          helperText={`Output position ${indicatorIndex + 1}`}
+                                          sx={{ flex: 1 }}
+                                        />
+                                        {canWriteBranding ? (
+                                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                                            <Button
+                                              variant="outlined"
+                                              onClick={() => movePartialReportParserIndicator(parserIndex, indicatorIndex, -1)}
+                                              disabled={rapidexPartialReportParsersSaving || indicatorIndex === 0}
+                                            >
+                                              Move Up
+                                            </Button>
+                                            <Button
+                                              variant="outlined"
+                                              onClick={() => movePartialReportParserIndicator(parserIndex, indicatorIndex, 1)}
+                                              disabled={rapidexPartialReportParsersSaving || indicatorIndex === parser.indicators.length - 1}
+                                            >
+                                              Move Down
+                                            </Button>
+                                            <Button
+                                              variant="text"
+                                              color="error"
+                                              onClick={() => removePartialReportParserIndicator(parserIndex, indicatorIndex)}
+                                              disabled={rapidexPartialReportParsersSaving || parser.indicators.length <= 1}
+                                            >
+                                              Remove Indicator
+                                            </Button>
+                                          </Stack>
+                                        ) : null}
+                                      </Stack>
+                                    ))}
+                                  </Stack>
+                                  {canWriteBranding ? (
+                                    <Stack direction="row" justifyContent="flex-end">
+                                      <Button
+                                        variant="text"
+                                        onClick={() => addPartialReportParserIndicator(parserIndex)}
+                                        disabled={rapidexPartialReportParsersSaving}
+                                      >
+                                        Add Indicator
+                                      </Button>
+                                    </Stack>
+                                  ) : null}
+                                </Stack>
+                              </Paper>
+                            ))}
+                          </Stack>
+                        )}
+                        {!canWriteBranding ? <Alert severity="info">You need settings.write permission to change partial report parser rules.</Alert> : null}
+                        {canWriteBranding ? (
+                          <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                            <Button
+                              variant="outlined"
+                              onClick={resetPartialReportParsers}
+                              disabled={rapidexPartialReportParsersLoading || rapidexPartialReportParsersSaving}
+                            >
+                              Reset Partial Report Parsers
+                            </Button>
+                            <Button
+                              variant="contained"
+                              onClick={() => void handleSavePartialReportParsers()}
+                              disabled={rapidexPartialReportParsersLoading || rapidexPartialReportParsersSaving}
+                            >
+                              {rapidexPartialReportParsersSaving ? 'Saving...' : 'Save Partial Report Parsers'}
+                            </Button>
+                          </Stack>
+                        ) : null}
+                      </Stack>
+                    </Paper>
                     {!rapidProValidation.isValid ? (
                       <Alert severity="warning">{(rapidProValidation.errors ?? []).join(' ')}</Alert>
                     ) : (

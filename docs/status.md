@@ -5317,3 +5317,41 @@ Verification for this update:
 ### Notes
 - This milestone remains skeleton-focused and intentionally avoids domain placeholders.
 - This entry documents upcoming work only; no implementation completion is claimed here.
+
+## Update — Partial Report Parser Rules UI (Complete)
+
+### What changed
+- Added partial-report parser rule management to `Settings > Integrations` in both the web client and the desktop frontend.
+- Exposed the existing backend settings endpoints through the desktop API client:
+  - `GET /api/v1/settings/rapidex-partial-report-parsers`
+  - `PUT /api/v1/settings/rapidex-partial-report-parsers`
+- Added structured rule editing in both clients:
+  - keyword input per parser rule
+  - ordered indicator inputs
+  - add/remove parser rule
+  - add/remove indicator
+  - move indicator up/down
+  - reset unsaved edits back to the last loaded server state
+- Added read-only rendering for `settings.read` users and write-enabled save/reset controls for `settings.write` users.
+- Added route tests in both clients covering parser-rule loading, saving, and read-only behavior.
+- Saved the prompt traceability copy in `docs/prompts/2026-04-30-partial-report-parser-rules-ui.md` (gitignored, not committed).
+
+### How to run tests
+- `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- `cd web && npm test -- --run src/routes.test.tsx`
+- `cd web && npm run build`
+- `cd desktop/frontend && npm test -- --run src/routes.test.tsx`
+- `cd desktop/frontend && npm run build`
+- `cd desktop && GOCACHE=/tmp/go-build go build ./...`
+
+### Verification summary
+- Backend tests: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route tests: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop route tests: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Existing frontend test output still includes non-blocking MUI/jsdom anchor warnings.
+- Existing Vite build warnings about ignored `'use client'` directives and large chunks remain unchanged.

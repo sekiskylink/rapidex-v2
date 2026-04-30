@@ -258,6 +258,21 @@ export interface RapidexWebhookMappingsSettingsResponse {
   validation: RapidexWebhookMappingsValidation
 }
 
+export interface RapidexPartialReportParserConfig {
+  keyword: string
+  indicators: string[]
+}
+
+export interface RapidexPartialReportParsersValidation {
+  isValid: boolean
+  errors?: string[]
+}
+
+export interface RapidexPartialReportParsersSettingsResponse {
+  parsers: RapidexPartialReportParserConfig[]
+  validation: RapidexPartialReportParsersValidation
+}
+
 export interface RapidexWebhookMappingsExportResponse {
   yaml: string
 }
@@ -426,6 +441,10 @@ export interface RapidexWebhookMappingsUpdateRequest {
 
 export interface RapidexWebhookMappingsImportRequest {
   yaml: string
+}
+
+export interface RapidexPartialReportParsersUpdateRequest {
+  parsers: RapidexPartialReportParserConfig[]
 }
 
 export interface RapidexWebhookMetadataRefreshRequest {
@@ -834,6 +853,12 @@ export function createApiClient(deps: ApiClientDeps) {
       })
     },
 
+    async getRapidexPartialReportParsersSettings() {
+      return authorizedRequest<RapidexPartialReportParsersSettingsResponse>('/api/v1/settings/rapidex-partial-report-parsers', {
+        method: 'GET',
+      })
+    },
+
     async getRapidexWebhookMetadata() {
       return authorizedRequest<RapidexWebhookMetadataResponse>('/api/v1/settings/rapidex-webhook-mappings/metadata', {
         method: 'GET',
@@ -849,6 +874,13 @@ export function createApiClient(deps: ApiClientDeps) {
 
     async updateRapidexWebhookMappingsSettings(payload: RapidexWebhookMappingsUpdateRequest) {
       return authorizedRequest<RapidexWebhookMappingsSettingsResponse>('/api/v1/settings/rapidex-webhook-mappings', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+    },
+
+    async updateRapidexPartialReportParsersSettings(payload: RapidexPartialReportParsersUpdateRequest) {
+      return authorizedRequest<RapidexPartialReportParsersSettingsResponse>('/api/v1/settings/rapidex-partial-report-parsers', {
         method: 'PUT',
         body: JSON.stringify(payload),
       })
