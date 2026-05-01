@@ -188,6 +188,62 @@ func TestSQLRepositoryListRequestsSearchesConfiguredMetadataColumns(t *testing.T
 	}
 }
 
+func TestSQLRepositoryListRequestsFiltersByFinderFields(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock: %v", err)
+	}
+	defer sqlDB.Close()
+
+	repo := NewSQLRepository(sqlx.NewDb(sqlDB, "sqlmock"))
+	now := time.Date(2026, 4, 30, 9, 30, 0, 0, time.UTC)
+	from := time.Date(2026, 4, 23, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 4, 30, 23, 59, 59, 0, time.UTC)
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(1)
+	dataRows := sqlmock.NewRows([]string{
+		"id", "uid", "source_system", "destination_server_id", "destination_server_uid", "destination_server_name", "destination_server_code", "batch_id", "correlation_id",
+		"idempotency_key", "payload_body", "payload_format", "submission_binding", "response_body_persistence", "url_suffix", "status", "status_reason", "deferred_until", "extras", "created_at", "updated_at", "created_by",
+		"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url",
+	}).AddRow(
+		8, "11111111-1111-1111-1111-111111111111", "rapidex-webhook", 3, "srv-1", "DHIS2 Uganda", "dhis2-ug", "batch-1", "corr-1",
+		"idem-1", `{"orgUnit":"OU_CHILD"}`, "json", "body", "", "/api/data", "completed", "", nil, []byte(`{"msisdn":"+256700000001","mappedOrgUnit":"OU_CHILD"}`), now, now, int64(7),
+		nil, "", "", nil, "", "", "", "",
+	)
+
+	mock.ExpectQuery("(?s)SELECT COUNT\\(\\*\\).*COALESCE\\(r\\.extras ->> 'msisdn', ''\\) = \\$1.*selected\\.uid = \\$2.*r\\.created_at >= \\$3.*r\\.created_at <= \\$4.*").
+		WithArgs("+256700000001", "OU_ROOT", from, to).
+		WillReturnRows(countRows)
+	mock.ExpectQuery("(?s)SELECT r\\.id, r\\.uid::text AS uid.*COALESCE\\(r\\.extras ->> 'msisdn', ''\\) = \\$1.*selected\\.uid = \\$2.*r\\.created_at >= \\$3.*r\\.created_at <= \\$4.*ORDER BY r\\.created_at DESC LIMIT \\$5 OFFSET \\$6").
+		WithArgs("+256700000001", "OU_ROOT", from, to, 25, 0).
+		WillReturnRows(dataRows)
+	mock.ExpectQuery("(?s)SELECT t.id, t.uid::text AS uid, t.request_id, t.server_id, .*WHERE t.request_id IN \\(\\?\\).*").
+		WithArgs(int64(8)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "uid", "request_id", "server_id", "server_uid", "server_name", "server_code", "target_kind", "priority", "status", "blocked_reason", "deferred_until", "last_released_at",
+			"latest_delivery_id", "latest_delivery_uid", "latest_delivery_status", "latest_async_task_id", "latest_async_task_uid", "latest_async_state", "latest_async_remote_job_id", "latest_async_poll_url", "created_at", "updated_at",
+		}))
+	mock.ExpectQuery("(?s)SELECT d.request_id, d.depends_on_request_id, .*WHERE d.request_id IN \\(\\?\\).*").
+		WithArgs(int64(8)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"request_id", "depends_on_request_id", "request_uid", "depends_on_uid", "status", "status_reason", "deferred_until", "depends_on_destination_server_name",
+		}))
+
+	result, err := repo.ListRequests(context.Background(), ListQuery{
+		Page:       1,
+		PageSize:   25,
+		MSISDN:     "+256700000001",
+		OrgUnitUID: "OU_ROOT",
+		From:       &from,
+		To:         &to,
+	})
+	if err != nil {
+		t.Fatalf("list requests: %v", err)
+	}
+	if result.Total != 1 || len(result.Items) != 1 {
+		t.Fatalf("expected one request, got total=%d items=%d", result.Total, len(result.Items))
+	}
+}
+
 func TestSQLRepositoryListRecentReporterReports(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	if err != nil {

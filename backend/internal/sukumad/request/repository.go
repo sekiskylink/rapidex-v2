@@ -93,6 +93,10 @@ func normalizeListQuery(query ListQuery) ListQuery {
 		SortOrder:       sortOrder,
 		Filter:          strings.TrimSpace(query.Filter),
 		Status:          strings.ToLower(strings.TrimSpace(query.Status)),
+		MSISDN:          strings.TrimSpace(query.MSISDN),
+		OrgUnitUID:      strings.TrimSpace(query.OrgUnitUID),
+		From:            cloneTimePtr(query.From),
+		To:              cloneTimePtr(query.To),
 		MetadataColumns: normalizeMetadataColumns(query.MetadataColumns),
 	}
 }
@@ -126,6 +130,36 @@ func (r *SQLRepository) ListRequests(ctx context.Context, query ListQuery) (List
 	if q.Status != "" {
 		args = append(args, q.Status)
 		conditions = append(conditions, fmt.Sprintf("r.status = $%d", len(args)))
+	}
+	if q.MSISDN != "" {
+		args = append(args, q.MSISDN)
+		conditions = append(conditions, fmt.Sprintf("COALESCE(r.extras ->> 'msisdn', '') = $%d", len(args)))
+	}
+	if q.OrgUnitUID != "" {
+		args = append(args, q.OrgUnitUID)
+		index := len(args)
+		conditions = append(conditions, fmt.Sprintf(`EXISTS (
+			SELECT 1
+			FROM org_units selected
+			JOIN org_units candidate ON candidate.path = selected.path OR candidate.path LIKE selected.path || '/%%'
+			WHERE selected.uid = $%d
+			  AND (
+				COALESCE(r.extras ->> 'mappedOrgUnit', '') = candidate.uid OR
+				COALESCE(r.extras ->> 'orgUnit', '') = candidate.uid OR
+				CASE
+					WHEN r.payload_format = 'json' THEN COALESCE(jsonb_extract_path_text(r.payload_body::jsonb, 'orgUnit'), '')
+					ELSE ''
+				END = candidate.uid
+			  )
+		)`, index))
+	}
+	if q.From != nil {
+		args = append(args, q.From.UTC())
+		conditions = append(conditions, fmt.Sprintf("r.created_at >= $%d", len(args)))
+	}
+	if q.To != nil {
+		args = append(args, q.To.UTC())
+		conditions = append(conditions, fmt.Sprintf("r.created_at <= $%d", len(args)))
 	}
 
 	whereClause := ""
@@ -789,6 +823,18 @@ func (r *memoryRepository) ListRequests(_ context.Context, query ListQuery) (Lis
 		if q.Status != "" && item.Status != q.Status {
 			continue
 		}
+		if q.MSISDN != "" && strings.TrimSpace(fmt.Sprint(item.Extras["msisdn"])) != q.MSISDN {
+			continue
+		}
+		if q.OrgUnitUID != "" && !matchesRequestOrgUnit(item, q.OrgUnitUID) {
+			continue
+		}
+		if q.From != nil && item.CreatedAt.UTC().Before(q.From.UTC()) {
+			continue
+		}
+		if q.To != nil && item.CreatedAt.UTC().After(q.To.UTC()) {
+			continue
+		}
 		if filter != "" {
 			searchable := strings.ToLower(strings.Join([]string{
 				item.UID,
@@ -1031,6 +1077,23 @@ func (r *memoryRepository) CreateRequest(_ context.Context, params CreateParams)
 	}
 	r.items[id] = record
 	return cloneRecord(record), nil
+}
+
+func matchesRequestOrgUnit(item Record, orgUnitUID string) bool {
+	needle := strings.TrimSpace(orgUnitUID)
+	if needle == "" {
+		return true
+	}
+	for _, key := range []string{"mappedOrgUnit", "orgUnit"} {
+		if strings.TrimSpace(fmt.Sprint(item.Extras[key])) == needle {
+			return true
+		}
+	}
+	payload, ok := item.Payload.(map[string]any)
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(fmt.Sprint(payload["orgUnit"])) == needle
 }
 
 func (r *memoryRepository) DeleteRequest(_ context.Context, id int64) error {

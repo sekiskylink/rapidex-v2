@@ -1,5 +1,51 @@
 # Status
 
+## Update — Global Request Finder Drawer (Complete)
+
+### What changed
+- Added a global right-side `Request Finder` drawer to both web and desktop authenticated shells so operators can search request exchanges from anywhere in the app.
+- Wired the finder into the AppBar with:
+  - a dedicated request-finder button
+  - `Cmd/Ctrl+K` shortcut for the finder
+  - `Cmd/Ctrl+Shift+K` preserved for the existing app launcher
+- Extended the existing `GET /api/v1/requests` backend contract with optional finder filters:
+  - `msisdn`
+  - `orgUnitUid`
+  - `from`
+  - `to`
+- Implemented descendant-aware org-unit filtering in the backend request repository using the existing `org_units` hierarchy.
+- Matched request org-unit context using stored request metadata/payload in this order:
+  - `extras.mappedOrgUnit`
+  - `extras.orgUnit`
+  - payload JSON field `orgUnit`
+- Kept request detail reuse intact so drawer results open the existing request detail dialog rather than introducing a second detail surface.
+- Saved a prompt traceability copy in `docs/prompts/2026-04-30-global-request-finder.md` (gitignored).
+- Added architecture notes in `docs/notes/global-request-finder.md`.
+
+### Added or updated tests
+- Backend:
+  - request handler coverage for finder query parsing and validation
+  - request repository coverage for `msisdn`, descendant org-unit, and time-range filters
+- Web:
+  - route coverage for `Cmd/Ctrl+Shift+K` app launcher behavior
+  - route coverage for `Cmd/Ctrl+K` request finder opening
+- Desktop:
+  - matching route coverage for launcher shortcut behavior
+  - matching route coverage for request finder opening
+
+### Verification summary
+- Backend focused request suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./internal/sukumad/request`)
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route smoke suite: PASS (`cd web && npm test -- --run src/routes.test.tsx`)
+- Desktop route smoke suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Frontend tests still emit existing non-blocking MUI/jsdom `anchorEl` warnings from popper-based controls.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this change.
+
 ## Update — Quick App Search UX Refinement (Complete)
 
 ### What changed

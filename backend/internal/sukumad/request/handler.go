@@ -92,6 +92,13 @@ func (h *Handler) List(c *gin.Context) {
 		"correlationId":         {},
 		"batchId":               {},
 	})
+	msisdn := strings.TrimSpace(c.Query("msisdn"))
+	orgUnitUID := strings.TrimSpace(c.Query("orgUnitUid"))
+	from, to, details := parseRequestListRange(c.Query("from"), c.Query("to"))
+	if len(details) > 0 {
+		apperror.Write(c, apperror.ValidationWithDetails("validation failed", details))
+		return
+	}
 
 	list, err := h.service.ListRequests(c.Request.Context(), ListQuery{
 		Page:            page,
@@ -100,6 +107,10 @@ func (h *Handler) List(c *gin.Context) {
 		SortOrder:       sortOrder,
 		Filter:          search,
 		Status:          status,
+		MSISDN:          msisdn,
+		OrgUnitUID:      orgUnitUID,
+		From:            from,
+		To:              to,
 		MetadataColumns: metadataColumns,
 	})
 	if err != nil {
@@ -344,6 +355,45 @@ func parseExternalSummaryRange(startValue, endValue string) (time.Time, time.Tim
 	}
 
 	return startDate, endDate, details
+}
+
+func parseRequestListRange(fromValue, toValue string) (*time.Time, *time.Time, map[string]any) {
+	details := map[string]any{}
+
+	from, err := parseRequestListTime(strings.TrimSpace(fromValue), false)
+	if err != nil {
+		details["from"] = []string{"must be RFC3339 or YYYY-MM-DD"}
+	}
+	to, err := parseRequestListTime(strings.TrimSpace(toValue), true)
+	if err != nil {
+		details["to"] = []string{"must be RFC3339 or YYYY-MM-DD"}
+	}
+	if len(details) > 0 {
+		return nil, nil, details
+	}
+	if from != nil && to != nil && to.Before(*from) {
+		details["to"] = []string{"must be on or after from"}
+	}
+	return from, to, details
+}
+
+func parseRequestListTime(value string, endOfDay bool) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		utc := parsed.UTC()
+		return &utc, nil
+	}
+	parsed, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		return nil, err
+	}
+	parsed = parsed.UTC()
+	if endOfDay {
+		parsed = parsed.Add(24*time.Hour - time.Nanosecond)
+	}
+	return &parsed, nil
 }
 
 func isValidStatus(value string) bool {

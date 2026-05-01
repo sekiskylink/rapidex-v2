@@ -67,6 +67,7 @@ import { clearSession } from '../auth/session'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
 import { useThemePreferences } from '../ui/theme'
 import { AppLauncherDialog } from './AppLauncherDialog'
+import { GlobalRequestFinderDrawer } from './GlobalRequestFinderDrawer'
 
 const DRAWER_WIDTH = 248
 const MINI_DRAWER_WIDTH = 76
@@ -127,6 +128,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   const [launcherOpen, setLauncherOpen] = React.useState(false)
+  const [requestFinderOpen, setRequestFinderOpen] = React.useState(false)
   const [launcherQuery, setLauncherQuery] = React.useState('')
   const [inlineSearchOpen, setInlineSearchOpen] = React.useState(false)
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null)
@@ -164,6 +166,7 @@ export function AppShell() {
     [launcherEntries, launcherQuery, pathname],
   )
   const canAccessSettings = canAccessRoute(principal, '/settings/general')
+  const canReadRequests = Boolean(principal?.permissions.includes('requests.read'))
   const displayName = bootstrap.payload?.branding?.applicationDisplayName?.trim() || 'RapidEx'
 
   React.useEffect(() => {
@@ -207,13 +210,19 @@ export function AppShell() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setLauncherOpen(true)
+        if (event.shiftKey) {
+          setLauncherOpen(true)
+          return
+        }
+        if (canReadRequests) {
+          setRequestFinderOpen(true)
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [canReadRequests])
 
   const navIcons = {
     dashboard: <DashboardRoundedIcon fontSize="small" />,
@@ -677,7 +686,7 @@ export function AppShell() {
                   endAdornment: (
                     <>
                       <Typography variant="caption" sx={{ mr: 0.75, opacity: 0.8 }}>
-                        {navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'}
+                        {navigator.platform.toLowerCase().includes('mac') ? 'Cmd+Shift+K' : 'Ctrl+Shift+K'}
                       </Typography>
                       {params.InputProps.endAdornment}
                     </>
@@ -686,6 +695,11 @@ export function AppShell() {
               />
             )}
           />
+          {canReadRequests ? (
+            <IconButton color="inherit" aria-label="Open request finder" onClick={() => setRequestFinderOpen(true)} sx={{ mr: 1.5 }}>
+              <ReceiptLongRoundedIcon />
+            </IconButton>
+          ) : null}
           <IconButton
             color="inherit"
             aria-label="Open app search"
@@ -799,6 +813,7 @@ export function AppShell() {
       </Box>
 
       <PalettePresetPicker open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+      <GlobalRequestFinderDrawer open={requestFinderOpen} canReadRequests={canReadRequests} onClose={() => setRequestFinderOpen(false)} />
       <AppLauncherDialog
         entries={launcherResults}
         open={launcherOpen}

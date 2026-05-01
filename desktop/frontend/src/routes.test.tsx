@@ -887,7 +887,7 @@ describe('app shell routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true, shiftKey: true })
 
     const launcher = await screen.findByRole('dialog', { name: 'Jump To' })
 
@@ -897,6 +897,61 @@ describe('app shell routes', () => {
     fireEvent.click(settingsResult)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+  })
+
+  it('opens the global request finder with keyboard shortcut when requests.read is allowed', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 12,
+              username: 'request-reader',
+              roles: ['Staff'],
+              permissions: ['requests.read'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/requests?')) {
+          return new Response(JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 20 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/orgunits?')) {
+          return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 20 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/dashboard', store)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(await screen.findByText('Request Finder')).toBeInTheDocument()
+    expect(screen.getByLabelText('MSISDN')).toBeInTheDocument()
   })
 
   it('keeps inaccessible routes out of the app launcher', async () => {
@@ -936,7 +991,7 @@ describe('app shell routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true, shiftKey: true })
 
     const launcher = await screen.findByRole('dialog', { name: 'Jump To' })
 

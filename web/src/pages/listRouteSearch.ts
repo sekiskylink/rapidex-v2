@@ -1,6 +1,10 @@
 export interface RequestsRouteSearch {
   q?: string
   status?: string
+  msisdn?: string
+  orgUnitUid?: string
+  from?: string
+  to?: string
 }
 
 export interface DeliveriesRouteSearch {
@@ -58,6 +62,10 @@ export function normalizeRequestsRouteSearch(search: Record<string, unknown>): R
   return {
     q: toOptional(readString(search, 'q')),
     status: toOptional(readString(search, 'status')),
+    msisdn: toOptional(readString(search, 'msisdn')),
+    orgUnitUid: toOptional(readString(search, 'orgUnitUid')),
+    from: toOptional(readString(search, 'from')),
+    to: toOptional(readString(search, 'to')),
   }
 }
 

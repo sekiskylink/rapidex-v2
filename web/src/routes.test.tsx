@@ -805,7 +805,7 @@ describe('web RBAC navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true, shiftKey: true })
 
     const launcher = await screen.findByRole('dialog', { name: 'Jump To' })
 
@@ -815,6 +815,49 @@ describe('web RBAC navigation', () => {
     fireEvent.click(settingsResult)
 
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument()
+  })
+
+  it('opens the global request finder with keyboard shortcut when requests.read is allowed', async () => {
+    setAuthSnapshot({
+      isAuthenticated: true,
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 12,
+        username: 'request-reader',
+        roles: ['Staff'],
+        permissions: ['requests.read'],
+      },
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/requests?')) {
+          return new Response(JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 20 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/orgunits?')) {
+          return new Response(JSON.stringify({ items: [], totalCount: 0, page: 0, pageSize: 20 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    renderWithRouter('/dashboard')
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(await screen.findByText('Request Finder')).toBeInTheDocument()
+    expect(screen.getByLabelText('MSISDN')).toBeInTheDocument()
   })
 
   it('keeps inaccessible routes out of the app launcher', async () => {
@@ -834,7 +877,7 @@ describe('web RBAC navigation', () => {
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true, shiftKey: true })
 
     const launcher = await screen.findByRole('dialog', { name: 'Jump To' })
 

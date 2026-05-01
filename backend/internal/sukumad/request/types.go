@@ -76,6 +76,10 @@ type ListQuery struct {
 	SortOrder       string
 	Filter          string
 	Status          string
+	MSISDN          string
+	OrgUnitUID      string
+	From            *time.Time
+	To              *time.Time
 	MetadataColumns []MetadataColumn
 }
 

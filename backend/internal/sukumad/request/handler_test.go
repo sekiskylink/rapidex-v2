@@ -234,6 +234,62 @@ func TestHandlerListRejectsInvalidStatusQueryParam(t *testing.T) {
 	}
 }
 
+func TestHandlerListPassesFinderFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	expectedFrom := time.Date(2026, 4, 23, 10, 0, 0, 0, time.UTC)
+	expectedTo := time.Date(2026, 4, 30, 23, 59, 59, 0, time.UTC)
+	handler := NewHandler(NewService(&fakeRepo{
+		listFn: func(_ context.Context, query ListQuery) (ListResult, error) {
+			if query.MSISDN != "+256700000001" {
+				t.Fatalf("expected msisdn filter, got %+v", query)
+			}
+			if query.OrgUnitUID != "OU_ROOT" {
+				t.Fatalf("expected org unit filter, got %+v", query)
+			}
+			if query.From == nil || !query.From.Equal(expectedFrom) {
+				t.Fatalf("expected from filter %s, got %+v", expectedFrom, query.From)
+			}
+			if query.To == nil || !query.To.Equal(expectedTo) {
+				t.Fatalf("expected to filter %s, got %+v", expectedTo, query.To)
+			}
+			return ListResult{Items: []Record{}, Total: 0, Page: query.Page, PageSize: query.PageSize}, nil
+		},
+	}))
+
+	router := gin.New()
+	router.GET("/requests", handler.List)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/requests?page=1&pageSize=25&msisdn=%2B256700000001&orgUnitUid=OU_ROOT&from=2026-04-23T10:00:00Z&to=2026-04-30T23:59:59Z",
+		nil,
+	)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlerListRejectsInvalidFinderRange(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := newTestHandler()
+	router := gin.New()
+	router.GET("/requests", handler.List)
+
+	req := httptest.NewRequest(http.MethodGet, "/requests?page=1&pageSize=25&from=bad-date&to=2026-04-30", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("RFC3339")) {
+		t.Fatalf("expected validation message to mention RFC3339, got %s", w.Body.String())
+	}
+}
+
 func TestHandlerCreateExternalReturnsUIDOnlyContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := NewRepository().(*memoryRepository)
