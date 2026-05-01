@@ -3,9 +3,9 @@ import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import { UiPreferencesProvider, useUiPreferences } from './UiPreferencesProvider'
 import { getPaletteOptions } from './presets'
 
-export function buildAppTheme(mode: 'light' | 'dark', preset: string) {
+export function buildAppTheme(mode: 'light' | 'dark', preset: string, customAccent?: string) {
   return createTheme({
-    palette: getPaletteOptions(preset, mode),
+    palette: getPaletteOptions(preset, mode, customAccent),
     shape: {
       borderRadius: 10,
     },
@@ -31,7 +31,10 @@ export function buildAppTheme(mode: 'light' | 'dark', preset: string) {
 function ThemedAppContent({ children }: React.PropsWithChildren) {
   const { prefs, resolvedMode } = useUiPreferences()
 
-  const theme = React.useMemo(() => buildAppTheme(resolvedMode, prefs.preset), [prefs.preset, resolvedMode])
+  const theme = React.useMemo(
+    () => buildAppTheme(resolvedMode, prefs.preset, prefs.customAccent),
+    [prefs.customAccent, prefs.preset, resolvedMode],
+  )
 
   return (
     <ThemeProvider theme={theme}>

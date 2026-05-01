@@ -117,6 +117,22 @@ function normalizeNavLabels(input: unknown): Record<string, string> {
   return result
 }
 
+function normalizeHexColor(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const normalized = trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+  const expanded =
+    normalized.length === 4
+      ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+      : normalized
+  return /^#([0-9a-f]{6})$/i.test(expanded) ? expanded.toLowerCase() : undefined
+}
+
 function normalizeTablePref(input: unknown): TablePrefsV1 {
   const record = isObjectRecord(input) ? input : {}
   const density =
@@ -162,6 +178,7 @@ function normalizeUiPrefs(input: unknown): UiPrefs {
   return {
     themeMode,
     palettePreset: palettePreset || defaultUiPrefs.palettePreset,
+    customAccent: normalizeHexColor(record.customAccent),
     navCollapsed: readBoolean(record.navCollapsed, defaultUiPrefs.navCollapsed),
     showSukumadMenu: readBoolean(record.showSukumadMenu, defaultUiPrefs.showSukumadMenu),
     showAdministrationMenu: readBoolean(record.showAdministrationMenu, defaultUiPrefs.showAdministrationMenu),

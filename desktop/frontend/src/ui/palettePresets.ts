@@ -9,6 +9,9 @@ export interface PalettePreset {
   darkPaper: string
 }
 
+export const customPresetId = 'custom'
+export const defaultCustomAccent = '#0b7285'
+
 export const palettePresets: PalettePreset[] = [
   {
     id: 'ocean',
@@ -90,8 +93,117 @@ export const palettePresets: PalettePreset[] = [
     darkBackground: '#0E1621',
     darkPaper: '#15202E',
   },
+  {
+    id: 'orchard',
+    label: 'Orchard',
+    primary: '#6C584C',
+    secondary: '#A98467',
+    lightBackground: '#F8F5F1',
+    lightPaper: '#FFFFFF',
+    darkBackground: '#1D1712',
+    darkPaper: '#2A201A',
+  },
+  {
+    id: 'lagoon',
+    label: 'Lagoon',
+    primary: '#15616D',
+    secondary: '#00A6A6',
+    lightBackground: '#EFF8F9',
+    lightPaper: '#FFFFFF',
+    darkBackground: '#0E2124',
+    darkPaper: '#173035',
+  },
+  {
+    id: 'aurora',
+    label: 'Aurora',
+    primary: '#6D28D9',
+    secondary: '#0891B2',
+    lightBackground: '#F7F4FF',
+    lightPaper: '#FFFFFF',
+    darkBackground: '#160F2B',
+    darkPaper: '#20163A',
+  },
+  {
+    id: 'mint',
+    label: 'Mint',
+    primary: '#0F766E',
+    secondary: '#14B8A6',
+    lightBackground: '#F0FDFA',
+    lightPaper: '#FFFFFF',
+    darkBackground: '#0D201F',
+    darkPaper: '#14302E',
+  },
 ]
+
+function clampRgb(value: number) {
+  return Math.min(255, Math.max(0, Math.round(value)))
+}
+
+function expandHex(input: string) {
+  if (input.length === 4) {
+    return `#${input[1]}${input[1]}${input[2]}${input[2]}${input[3]}${input[3]}`
+  }
+  return input
+}
+
+function hexToRgb(hex: string) {
+  const normalized = expandHex(hex)
+  const match = /^#([0-9a-f]{6})$/i.exec(normalized)
+  if (!match) {
+    return null
+  }
+  const value = match[1]
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  }
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  return `#${[r, g, b]
+    .map((value) => clampRgb(value).toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
+function blendHexColors(base: string, target: string, weight: number) {
+  const baseRgb = hexToRgb(base)
+  const targetRgb = hexToRgb(target)
+  if (!baseRgb || !targetRgb) {
+    return base
+  }
+  const clampedWeight = Math.min(1, Math.max(0, weight))
+  return rgbToHex(
+    baseRgb.r + (targetRgb.r - baseRgb.r) * clampedWeight,
+    baseRgb.g + (targetRgb.g - baseRgb.g) * clampedWeight,
+    baseRgb.b + (targetRgb.b - baseRgb.b) * clampedWeight,
+  )
+}
+
+export function normalizeHexColor(value: string | undefined | null) {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const normalized = trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+  const expanded = expandHex(normalized)
+  return /^#([0-9a-f]{6})$/i.test(expanded) ? expanded.toLowerCase() : undefined
+}
 
 export function getPalettePreset(id: string) {
   return palettePresets.find((preset) => preset.id === id) ?? palettePresets[0]
+}
+
+export function getCustomPalettePreset(accent: string) {
+  const normalizedAccent = normalizeHexColor(accent) ?? defaultCustomAccent
+  return {
+    id: customPresetId,
+    label: 'Custom',
+    primary: normalizedAccent,
+    secondary: blendHexColors(normalizedAccent, '#1F2937', 0.22),
+    lightBackground: blendHexColors(normalizedAccent, '#F8FAFC', 0.92),
+    lightPaper: '#FFFFFF',
+    darkBackground: blendHexColors(normalizedAccent, '#0F172A', 0.82),
+    darkPaper: blendHexColors(normalizedAccent, '#111827', 0.72),
+  }
 }

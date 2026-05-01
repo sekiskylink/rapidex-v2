@@ -2044,6 +2044,78 @@ describe('app shell routes', () => {
     })
   })
 
+  it('persists custom accent changes through the desktop settings store', async () => {
+    const store = createMockSettingsStore({
+      ...defaultSettings,
+      apiBaseUrl: 'http://127.0.0.1:8080',
+      refreshToken: 'refresh-token',
+    })
+    configureSessionStorage(store)
+    await setSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/v1/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              id: 5,
+              username: 'alice',
+              roles: ['Admin'],
+              permissions: ['settings.read', 'settings.write'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/api/v1/settings/login-branding')) {
+          return new Response(JSON.stringify({ applicationDisplayName: 'RapidEx', loginImageUrl: '' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/settings/module-enablement')) {
+          return new Response(JSON.stringify({ modules: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/api/v1/settings/runtime-config') && (!init?.method || init.method === 'GET')) {
+          return new Response(JSON.stringify({ config: {} }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    const firstRender = renderWithRouter('/settings/general', store)
+
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+    fireEvent.change(screen.getByLabelText('Custom Accent'), { target: { value: '#7c3aed' } })
+
+    await waitFor(() => {
+      expect(store.saveSettingsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uiPrefs: expect.objectContaining({
+            palettePreset: 'custom',
+            customAccent: '#7c3aed',
+          }),
+        }),
+      )
+    })
+
+    firstRender.unmount()
+    renderWithRouter('/settings/general', store)
+
+    expect(await screen.findByText('Active preset: Custom (#7c3aed)')).toBeInTheDocument()
+  })
+
   it('submits forgot-password request and shows non-enumerating success message', async () => {
     const store = createMockSettingsStore({
       ...defaultSettings,

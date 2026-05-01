@@ -10,12 +10,13 @@ import {
   MenuItem,
   Select,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { type UiThemeMode } from '../preferences'
 import { CloseIcon } from '../icons'
-import { palettePresets } from './presets'
+import { customPresetId, defaultCustomAccent, getCustomPaletteOptions, palettePresets } from './presets'
 import { useUiPreferences } from './UiPreferencesProvider'
 
 interface PalettePresetPickerProps {
@@ -23,7 +24,15 @@ interface PalettePresetPickerProps {
   onClose: () => void
 }
 
-function paletteColorMain(presetId: string, mode: 'light' | 'dark', key: 'primary' | 'secondary') {
+function paletteColorMain(presetId: string, mode: 'light' | 'dark', key: 'primary' | 'secondary', customAccent?: string) {
+  if (presetId === customPresetId) {
+    const palette = getCustomPaletteOptions(customAccent ?? defaultCustomAccent, mode)
+    const color = palette[key]
+    if (color && typeof color === 'object' && 'main' in color && typeof color.main === 'string') {
+      return color.main
+    }
+    return 'transparent'
+  }
   const preset = palettePresets.find((item) => item.id === presetId) ?? palettePresets[0]
   const palette = mode === 'dark' ? preset.palettes.dark : preset.palettes.light
   const color = palette[key]
@@ -34,7 +43,8 @@ function paletteColorMain(presetId: string, mode: 'light' | 'dark', key: 'primar
 }
 
 export function PalettePresetPicker({ open, onClose }: PalettePresetPickerProps) {
-  const { prefs, resolvedMode, setMode, setPreset } = useUiPreferences()
+  const { prefs, resolvedMode, setCustomAccent, setMode, setPreset } = useUiPreferences()
+  const customAccent = prefs.customAccent ?? defaultCustomAccent
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -66,6 +76,52 @@ export function PalettePresetPicker({ open, onClose }: PalettePresetPickerProps)
               Palette preset
             </Typography>
             <Grid container spacing={1.25}>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Tooltip title={`Custom (${customAccent})`}>
+                  <Box
+                    onClick={() => setCustomAccent(customAccent)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setCustomAccent(customAccent)
+                      }
+                    }}
+                    aria-label="Select Custom preset"
+                    sx={{
+                      p: 1,
+                      borderRadius: 2,
+                      border: '2px solid',
+                      borderColor: prefs.preset === customPresetId ? 'primary.main' : 'divider',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        bgcolor: customAccent,
+                      }}
+                    />
+                    <Box
+                      sx={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        bgcolor: paletteColorMain(customPresetId, resolvedMode, 'secondary', customAccent),
+                      }}
+                    />
+                    <Typography variant="body2" noWrap>
+                      Custom
+                    </Typography>
+                  </Box>
+                </Tooltip>
+              </Grid>
               {palettePresets.map((preset) => {
                 const selected = preset.id === prefs.preset
                 const primary = paletteColorMain(preset.id, resolvedMode, 'primary')
@@ -122,6 +178,20 @@ export function PalettePresetPicker({ open, onClose }: PalettePresetPickerProps)
               })}
             </Grid>
           </Box>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+            <TextField
+              label="Custom Accent"
+              type="color"
+              value={customAccent}
+              onChange={(event) => setCustomAccent(event.target.value)}
+              inputProps={{ 'aria-label': 'Custom Accent' }}
+              sx={{ width: { xs: '100%', sm: 160 } }}
+            />
+            <Typography variant="body2" color="text.secondary">
+              Pick any accent color. Selecting a custom color makes the Custom preset active automatically.
+            </Typography>
+          </Stack>
         </Stack>
       </DialogContent>
     </Dialog>

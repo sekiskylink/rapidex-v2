@@ -65,6 +65,7 @@ import type { ModuleEffectiveConfig } from '../registry/moduleEnablement'
 import { moduleRegistry } from '../registry/modules'
 import { THEME_MODES, type AppSettings, type ThemeMode } from '../settings/types'
 import { PalettePresetPicker } from '../ui/PalettePresetPicker'
+import { customPresetId, defaultCustomAccent } from '../ui/palettePresets'
 import { useThemePreferences } from '../ui/theme'
 
 interface ReporterGroupRecord {
@@ -116,6 +117,13 @@ function formatRapidProPreviewJSON(preview: RapidProReporterSyncPreviewResponse 
     return ''
   }
   return JSON.stringify(preview.requestBody ?? {}, null, 2)
+}
+
+function activePresetLabel(presetId: string, customAccent: string | undefined, presets: Array<{ id: string; label: string }>) {
+  if (presetId === customPresetId) {
+    return `Custom (${customAccent ?? defaultCustomAccent})`
+  }
+  return presets.find((preset) => preset.id === presetId)?.label ?? 'Custom'
 }
 
 function resolveAPITokenExpirySeconds(
@@ -263,6 +271,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const settingsStore = router.options.context.settingsStore
   const {
     prefs,
+    setCustomAccent,
     setThemeMode,
     setPalettePreset,
     setPinActionsColumnRight,
@@ -1631,9 +1640,16 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                 <Box>
                   <Typography variant="subtitle2">Palette preset</Typography>
                   <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-                    Active preset: {presets.find((preset) => preset.id === prefs.palettePreset)?.label ?? 'Custom'}
+                    Active preset: {activePresetLabel(prefs.palettePreset, prefs.customAccent, presets)}
                   </Typography>
                   <Stack direction="row" spacing={1.25} alignItems="center" useFlexGap flexWrap="wrap">
+                    <Button
+                      size="small"
+                      variant={prefs.palettePreset === customPresetId ? 'contained' : 'outlined'}
+                      onClick={() => void setCustomAccent(prefs.customAccent ?? defaultCustomAccent)}
+                    >
+                      Custom
+                    </Button>
                     {presets.slice(0, 4).map((preset) => (
                       <Button
                         key={preset.id}
@@ -1649,6 +1665,19 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                     </Button>
                   </Stack>
                 </Box>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+                  <TextField
+                    label="Custom Accent"
+                    type="color"
+                    value={prefs.customAccent ?? defaultCustomAccent}
+                    onChange={(event) => void setCustomAccent(event.target.value)}
+                    inputProps={{ 'aria-label': 'Custom Accent' }}
+                    sx={{ width: { xs: '100%', sm: 160 } }}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    Choose any accent color to create a custom palette for light and dark modes.
+                  </Typography>
+                </Stack>
                 <Divider />
                 <Typography variant="subtitle2">Navigation</Typography>
                 <FormControlLabel

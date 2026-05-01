@@ -7,6 +7,7 @@ export type ThemeMode = (typeof THEME_MODES)[number]
 export interface UiPrefs {
   themeMode: ThemeMode
   palettePreset: string
+  customAccent?: string
   navCollapsed: boolean
   showSukumadMenu: boolean
   showAdministrationMenu: boolean
@@ -60,6 +61,7 @@ export interface SettingsStore {
 export const defaultUiPrefs: UiPrefs = {
   themeMode: 'system',
   palettePreset: 'ocean',
+  customAccent: undefined,
   navCollapsed: false,
   showSukumadMenu: true,
   showAdministrationMenu: true,

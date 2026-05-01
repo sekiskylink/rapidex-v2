@@ -3,6 +3,7 @@ import { useMediaQuery } from '@mui/material'
 import {
   loadPrefs,
   savePrefs,
+  setCustomAccent as persistCustomAccent,
   setMode as persistMode,
   setPreset as persistPreset,
   setCollapseNavByDefault as persistCollapseNavByDefault,
@@ -15,13 +16,14 @@ import {
   type UiPreferences,
   type UiThemeMode,
 } from '../preferences'
-import { defaultPresetId, getPresetById } from './presets'
+import { customPresetId, defaultPresetId, getPresetById } from './presets'
 
 interface UiPreferencesContextValue {
   prefs: UiPreferences
   resolvedMode: 'light' | 'dark'
   setMode: (mode: UiThemeMode) => void
   setPreset: (preset: string) => void
+  setCustomAccent: (customAccent: string) => void
   setCollapseNavByDefault: (collapseNavByDefault: boolean) => void
   setShowFooter: (showFooter: boolean) => void
   setShowSukumadMenu: (showSukumadMenu: boolean) => void
@@ -34,6 +36,9 @@ interface UiPreferencesContextValue {
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | undefined>(undefined)
 
 function sanitizePreset(preset: string) {
+  if (preset === customPresetId) {
+    return customPresetId
+  }
   return getPresetById(preset).id || defaultPresetId
 }
 
@@ -43,6 +48,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     return {
       mode: loaded.mode,
       preset: sanitizePreset(loaded.preset),
+      customAccent: loaded.customAccent,
       collapseNavByDefault: loaded.collapseNavByDefault,
       showFooter: loaded.showFooter,
       showSukumadMenu: loaded.showSukumadMenu,
@@ -62,6 +68,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -77,6 +84,23 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
+      collapseNavByDefault: next.collapseNavByDefault,
+      showFooter: next.showFooter,
+      showSukumadMenu: next.showSukumadMenu,
+      showAdministrationMenu: next.showAdministrationMenu,
+      pinActionsColumnRight: next.pinActionsColumnRight,
+      dataGridBorderRadius: next.dataGridBorderRadius,
+      navLabels: next.navLabels,
+    })
+  }, [])
+
+  const setCustomAccent = React.useCallback((customAccent: string) => {
+    const next = persistCustomAccent(customAccent)
+    setPrefs({
+      mode: next.mode,
+      preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -92,6 +116,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -107,6 +132,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -122,6 +148,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -137,6 +164,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -152,6 +180,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -167,6 +196,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -182,6 +212,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
     setPrefs({
       mode: next.mode,
       preset: sanitizePreset(next.preset),
+      customAccent: next.customAccent,
       collapseNavByDefault: next.collapseNavByDefault,
       showFooter: next.showFooter,
       showSukumadMenu: next.showSukumadMenu,
@@ -202,6 +233,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       resolvedMode,
       setMode,
       setPreset,
+      setCustomAccent,
       setCollapseNavByDefault,
       setShowFooter,
       setShowSukumadMenu,
@@ -215,6 +247,7 @@ export function UiPreferencesProvider({ children }: React.PropsWithChildren) {
       resolvedMode,
       setMode,
       setPreset,
+      setCustomAccent,
       setCollapseNavByDefault,
       setShowFooter,
       setShowSukumadMenu,

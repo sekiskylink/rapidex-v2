@@ -44,7 +44,7 @@ import {
   WidgetsRoundedIcon,
 } from '../ui/icons'
 import { PalettePresetPicker } from '../ui/theme/PalettePresetPicker'
-import { palettePresets } from '../ui/theme/presets'
+import { customPresetId, defaultCustomAccent, palettePresets } from '../ui/theme/presets'
 import { useUiPreferences } from '../ui/theme/UiPreferencesProvider'
 
 interface HealthResponse {
@@ -295,6 +295,13 @@ function getRapidProFieldOptionLabel(field: RapidProContactField) {
   return isRapidProBuiltInField(field) ? `${field.label} (Built-in target)` : `${field.label} (Custom field)`
 }
 
+function activePresetLabel(presetId: string, customAccent?: string) {
+  if (presetId === customPresetId) {
+    return `Custom (${customAccent ?? defaultCustomAccent})`
+  }
+  return palettePresets.find((preset) => preset.id === presetId)?.name ?? 'Custom'
+}
+
 function formatRapidProPreviewJSON(preview: RapidProReporterSyncPreviewResponse | null) {
   if (!preview) {
     return ''
@@ -449,6 +456,7 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
   const {
     prefs,
     resolvedMode,
+    setCustomAccent,
     setMode,
     setPreset,
     setCollapseNavByDefault,
@@ -1747,9 +1755,16 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
               <Box>
                 <Typography variant="subtitle2">Palette preset</Typography>
                 <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-                  Active preset: {palettePresets.find((preset) => preset.id === prefs.preset)?.name ?? 'Custom'}
+                  Active preset: {activePresetLabel(prefs.preset, prefs.customAccent)}
                 </Typography>
                 <Stack direction="row" spacing={1.25} alignItems="center" useFlexGap flexWrap="wrap">
+                  <Button
+                    size="small"
+                    variant={prefs.preset === customPresetId ? 'contained' : 'outlined'}
+                    onClick={() => setCustomAccent(prefs.customAccent ?? defaultCustomAccent)}
+                  >
+                    Custom
+                  </Button>
                   {palettePresets.slice(0, 4).map((preset) => (
                     <Button
                       key={preset.id}
@@ -1765,6 +1780,20 @@ export function SettingsPage({ section = 'general' }: { section?: SettingsSectio
                   </Button>
                 </Stack>
               </Box>
+
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+                <TextField
+                  label="Custom Accent"
+                  type="color"
+                  value={prefs.customAccent ?? defaultCustomAccent}
+                  onChange={(event) => setCustomAccent(event.target.value)}
+                  inputProps={{ 'aria-label': 'Custom Accent' }}
+                  sx={{ width: { xs: '100%', sm: 160 } }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Choose any accent color to create a custom palette for light and dark modes.
+                </Typography>
+              </Stack>
 
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>

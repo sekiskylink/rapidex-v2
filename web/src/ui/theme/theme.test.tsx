@@ -6,10 +6,11 @@ import {
   UI_PREFERENCES_STORAGE_KEY,
   loadPrefs,
   savePrefs,
+  setCustomAccent,
   type UiThemeMode,
 } from '../preferences'
 import { AppThemeProvider } from './AppThemeProvider'
-import { getPaletteOptions } from './presets'
+import { customPresetId, getPaletteOptions } from './presets'
 import { useUiPreferences } from './UiPreferencesProvider'
 
 function primaryMainFor(preset: string, mode: 'light' | 'dark') {
@@ -39,7 +40,7 @@ function mockMatchMedia(prefersDark: boolean) {
 
 function ThemeProbe() {
   const theme = useTheme()
-  const { prefs, resolvedMode, setMode, setPreset } = useUiPreferences()
+  const { prefs, resolvedMode, setCustomAccent: applyCustomAccent, setMode, setPreset } = useUiPreferences()
 
   return (
     <>
@@ -48,10 +49,12 @@ function ThemeProbe() {
       <Typography data-testid="theme-primary">{theme.palette.primary.main}</Typography>
       <Typography data-testid="pref-mode">{prefs.mode}</Typography>
       <Typography data-testid="pref-preset">{prefs.preset}</Typography>
+      <Typography data-testid="pref-custom-accent">{prefs.customAccent ?? ''}</Typography>
       <Button onClick={() => setMode('light')}>Mode Light</Button>
       <Button onClick={() => setMode('dark')}>Mode Dark</Button>
       <Button onClick={() => setMode('system')}>Mode System</Button>
       <Button onClick={() => setPreset('forest')}>Preset Forest</Button>
+      <Button onClick={() => applyCustomAccent('#7c3aed')}>Accent Violet</Button>
     </>
   )
 }
@@ -146,5 +149,36 @@ describe('theme system persistence', () => {
     expect(loadPrefs().mode).toBe('system')
     expect(screen.getByTestId('resolved-mode').textContent).toBe('light')
     expect(screen.getByTestId('theme-mode').textContent).toBe('light')
+  })
+
+  it('custom accent persists and applies after reload', () => {
+    const firstRender = renderThemeProbe()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accent Violet' }))
+
+    expect(screen.getByTestId('pref-preset').textContent).toBe(customPresetId)
+    expect(screen.getByTestId('pref-custom-accent').textContent).toBe('#7c3aed')
+    expect(screen.getByTestId('theme-primary').textContent).toBe('#7c3aed')
+
+    firstRender.unmount()
+    renderThemeProbe()
+
+    expect(screen.getByTestId('pref-preset').textContent).toBe(customPresetId)
+    expect(screen.getByTestId('pref-custom-accent').textContent).toBe('#7c3aed')
+    expect(screen.getByTestId('theme-primary').textContent).toBe('#7c3aed')
+  })
+
+  it('invalid stored custom accent falls back safely', () => {
+    setCustomAccent('#7c3aed')
+    savePrefs({
+      ...loadPrefs(),
+      preset: customPresetId,
+      customAccent: '#xyz123',
+    })
+
+    renderThemeProbe()
+
+    expect(screen.getByTestId('pref-custom-accent').textContent).toBe('')
+    expect(screen.getByTestId('theme-primary').textContent).not.toBe('#xyz123')
   })
 })

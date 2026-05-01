@@ -1202,6 +1202,28 @@ describe('web settings page', () => {
     )
   })
 
+  it('changing custom accent persists after reload', async () => {
+    authenticateForSettings()
+    const firstRender = renderWithRouter('/settings/general')
+
+    await screen.findByRole('heading', { name: 'Settings', level: 1 })
+    fireEvent.change(screen.getByLabelText('Custom Accent'), { target: { value: '#7c3aed' } })
+
+    firstRender.unmount()
+    renderWithRouter('/settings/general')
+
+    expect(await screen.findByText('Active preset: Custom (#7c3aed)')).toBeInTheDocument()
+
+    const rawPrefs = window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY)
+    expect(rawPrefs).toBeTruthy()
+    expect(JSON.parse(rawPrefs ?? '{}')).toEqual(
+      expect.objectContaining({
+        preset: 'custom',
+        customAccent: '#7c3aed',
+      }),
+    )
+  })
+
   it('api base URL override persists after save', async () => {
     authenticateForSettings()
     renderWithRouter('/settings/general')

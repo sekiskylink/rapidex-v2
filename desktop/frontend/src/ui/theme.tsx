@@ -3,13 +3,21 @@ import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import { settingsStore } from '../settings/store'
 import { defaultUiPrefs, type ThemeMode, type UiPrefs } from '../settings/types'
 import type { SettingsStore } from '../settings/types'
-import { getPalettePreset, palettePresets } from './palettePresets'
+import {
+  customPresetId,
+  defaultCustomAccent,
+  getCustomPalettePreset,
+  getPalettePreset,
+  normalizeHexColor,
+  palettePresets,
+} from './palettePresets'
 
 interface ThemePreferencesContextValue {
   prefs: UiPrefs
   resolvedMode: 'light' | 'dark'
   setThemeMode: (mode: ThemeMode) => Promise<void>
   setPalettePreset: (preset: string) => Promise<void>
+  setCustomAccent: (accent: string) => Promise<void>
   setNavCollapsed: (collapsed: boolean) => Promise<void>
   setShowSukumadMenu: (enabled: boolean) => Promise<void>
   setShowAdministrationMenu: (enabled: boolean) => Promise<void>
@@ -50,7 +58,10 @@ function useSystemColorMode() {
 }
 
 function createAppTheme(mode: 'light' | 'dark', prefs: UiPrefs) {
-  const preset = getPalettePreset(prefs.palettePreset)
+  const preset =
+    prefs.palettePreset === customPresetId
+      ? getCustomPalettePreset(prefs.customAccent ?? defaultCustomAccent)
+      : getPalettePreset(prefs.palettePreset)
 
   return createTheme({
     palette: {
@@ -149,6 +160,17 @@ export function AppThemeProvider({
     [persistPrefs, prefs],
   )
 
+  const setCustomAccent = React.useCallback(
+    async (accent: string) => {
+      await persistPrefs({
+        ...prefs,
+        palettePreset: customPresetId,
+        customAccent: normalizeHexColor(accent) ?? defaultCustomAccent,
+      })
+    },
+    [persistPrefs, prefs],
+  )
+
   const setNavCollapsed = React.useCallback(
     async (collapsed: boolean) => {
       await persistPrefs({ ...prefs, navCollapsed: collapsed })
@@ -210,7 +232,8 @@ export function AppThemeProvider({
     document.documentElement.setAttribute('data-theme-mode', resolvedMode)
     document.documentElement.setAttribute('data-theme-pref', prefs.themeMode)
     document.documentElement.setAttribute('data-palette-preset', prefs.palettePreset)
-  }, [resolvedMode, prefs.palettePreset, prefs.themeMode])
+    document.documentElement.setAttribute('data-custom-accent', prefs.customAccent ?? '')
+  }, [resolvedMode, prefs.customAccent, prefs.palettePreset, prefs.themeMode])
 
   const contextValue = React.useMemo(
     () => ({
@@ -218,6 +241,7 @@ export function AppThemeProvider({
       resolvedMode,
       setThemeMode,
       setPalettePreset,
+      setCustomAccent,
       setNavCollapsed,
       setShowSukumadMenu,
       setShowAdministrationMenu,
@@ -231,6 +255,7 @@ export function AppThemeProvider({
       resolvedMode,
       setThemeMode,
       setPalettePreset,
+      setCustomAccent,
       setNavCollapsed,
       setShowSukumadMenu,
       setShowAdministrationMenu,

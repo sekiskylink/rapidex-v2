@@ -1,5 +1,38 @@
 # Status
 
+## Update — Appearance Palette Expansion and Custom Accent Picker (Complete)
+
+### What changed
+- Expanded the curated appearance preset catalog in both web and desktop settings so operators have more built-in palette choices.
+- Added a `Custom` appearance preset in both clients, driven by a locally persisted accent color picker available from:
+  - `Settings > General > Appearance`
+  - the AppShell `Appearance` dialog
+- Updated each client’s theme preference store so the active appearance state now persists:
+  - the selected preset id
+  - an optional normalized custom accent hex value
+- Extended the theme builders in both clients to derive a full light/dark MUI palette from the saved custom accent without adding backend settings or a second theming system.
+- Preserved web/desktop parity for appearance behavior and added a short architecture note in `docs/notes/theme-custom-accent.md`.
+- Saved a prompt traceability copy in `docs/prompts/2026-05-01-theme-palette-expansion.md` (gitignored).
+
+### Added or updated tests
+- Web:
+  - theme-provider coverage for custom accent persistence and invalid stored color fallback
+  - settings route coverage proving a custom accent persists after reload
+- Desktop:
+  - settings route coverage proving custom accent changes persist through the Wails settings store and remain active after reload
+
+### Verification summary
+- Backend full test suite: PASS (`cd backend && GOCACHE=/tmp/go-build go test ./...`)
+- Web route + theme suites: PASS (`cd web && npm test -- --run src/routes.test.tsx src/ui/theme/theme.test.tsx`)
+- Desktop route suite: PASS (`cd desktop/frontend && npm test -- --run src/routes.test.tsx`)
+- Web build: PASS (`cd web && npm run build`)
+- Desktop frontend build: PASS (`cd desktop/frontend && npm run build`)
+- Desktop Go build: PASS (`cd desktop && GOCACHE=/tmp/go-build go build ./...`)
+
+### Known follow-ups
+- Frontend route tests still emit existing non-blocking MUI/jsdom `anchorEl` warnings from popper-based controls.
+- Frontend builds still emit existing third-party `'use client'` and chunk-size warnings unrelated to this appearance change.
+
 ## Update — Global Request Finder Drawer (Complete)
 
 ### What changed

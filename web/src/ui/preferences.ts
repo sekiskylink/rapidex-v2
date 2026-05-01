@@ -3,6 +3,7 @@ export type UiThemeMode = 'light' | 'dark' | 'system'
 export interface UiPreferences {
   mode: UiThemeMode
   preset: string
+  customAccent?: string
   collapseNavByDefault: boolean
   showFooter: boolean
   showSukumadMenu: boolean
@@ -17,6 +18,7 @@ export const UI_PREFERENCES_STORAGE_KEY = 'basepro.web.ui_preferences'
 const DEFAULT_PREFERENCES: UiPreferences = {
   mode: 'system',
   preset: 'oceanic',
+  customAccent: undefined,
   collapseNavByDefault: false,
   showFooter: true,
   showSukumadMenu: true,
@@ -60,6 +62,22 @@ function sanitizeNavLabels(value: unknown) {
   return result
 }
 
+function normalizeHexColor(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const normalized = trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+  const expanded =
+    normalized.length === 4
+      ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+      : normalized
+  return /^#([0-9a-f]{6})$/i.test(expanded) ? expanded.toLowerCase() : undefined
+}
+
 export function getDefaultPreferences(): UiPreferences {
   return { ...DEFAULT_PREFERENCES }
 }
@@ -79,6 +97,7 @@ export function loadPrefs(): UiPreferences {
     return {
       mode: isValidMode(parsed.mode) ? parsed.mode : DEFAULT_PREFERENCES.mode,
       preset: typeof parsed.preset === 'string' && parsed.preset.trim() ? parsed.preset : DEFAULT_PREFERENCES.preset,
+      customAccent: normalizeHexColor(parsed.customAccent),
       collapseNavByDefault:
         typeof parsed.collapseNavByDefault === 'boolean'
           ? parsed.collapseNavByDefault
@@ -124,6 +143,16 @@ export function setPreset(preset: string) {
   const next = {
     ...loadPrefs(),
     preset: sanitized || DEFAULT_PREFERENCES.preset,
+  }
+  savePrefs(next)
+  return next
+}
+
+export function setCustomAccent(customAccent: string) {
+  const next = {
+    ...loadPrefs(),
+    preset: 'custom',
+    customAccent: normalizeHexColor(customAccent),
   }
   savePrefs(next)
   return next
